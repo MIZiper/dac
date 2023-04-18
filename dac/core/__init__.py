@@ -1,9 +1,10 @@
 from uuid import uuid4
 
 class NodeBase:
-    def __init__(self, uuid=None) -> None:
+    def __init__(self, name: str=None, uuid: str=None) -> None:
         self._hash = None
 
+        self.name = name
         self.uuid = uuid or str(uuid4())
 
     def calc_hash(self) -> str:
