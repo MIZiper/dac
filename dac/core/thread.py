@@ -1,0 +1,67 @@
+import traceback, sys, inspect
+from PyQt5.QtCore import QRunnable, QObject, pyqtSignal, pyqtSlot, QMutex
+
+# https://gist.github.com/ksvbka/1f26ada0c6201c2cf19f59b100d224a9
+
+class WorkerSignals(QObject):
+    '''
+    Defines the signals available from a running worker thread.
+    Supported signals are:
+    - started: No data
+    - finished: No data
+    - error:`tuple` (exctype, value, traceback.format_exc() )
+    - result: `object` data returned from processing, anything
+    - progress: `int, int` indicating progress metadata
+    '''
+
+    started = pyqtSignal()
+    finished = pyqtSignal()
+    error = pyqtSignal(tuple)
+    result = pyqtSignal(object)
+    progress = pyqtSignal(int, int)
+
+class ThreadWorker(QRunnable):
+    '''
+    Worker thread
+    Inherits from QRunnable to handler worker thread setup, signals and wrap-up.
+    '''
+
+    def __init__(self, fn, caption: str, *args, mutex: QMutex=None, **kwargs):
+        super().__init__()
+        self.caption = caption
+        self.mutex = mutex
+
+        # Store constructor arguments (re-used for processing)
+        self.fn = fn
+        self.args = args
+        self.kwargs = kwargs
+
+        self.signals = WorkerSignals()
+
+    @pyqtSlot()
+    def run(self):
+        '''
+        Initialise the runner function with passed args, kwargs.
+        '''
+        # Retrieve args/kwargs here; and fire processing using them
+        
+        # Add the callback to our kwargs
+        if 'progress_emitter' in inspect.signature(self.fn).parameters:
+            self.kwargs['progress_emitter'] = self.signals.progress.emit
+
+        try:
+            if self.mutex is not None:
+                self.mutex.lock()
+            self.signals.started.emit()
+            
+            result = self.fn(*self.args, **self.kwargs)
+        except:
+            traceback.print_exc()
+            exctype, value = sys.exc_info()[:2]
+            self.signals.error.emit((exctype, value, traceback.format_exc()))
+        else:
+            self.signals.result.emit(result)  # Return the result of the processing
+        finally:
+            if self.mutex is not None:
+                self.mutex.unlock()
+            self.signals.finished.emit()  # Done
