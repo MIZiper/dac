@@ -143,10 +143,19 @@ class ActionNode(NodeBase):
 
 
 class DataContext:
+    @property
+    def NodeIter(self) -> list[tuple[type[DataNode], str, DataNode]]:
+        ...
+
+    def add_node(self, node: NodeBase):
+        ...
+
     def get_node_of_type(self, node_name: str, node_type: type[NodeBase]) -> NodeBase:
         ...
 
 class Container:
+    _register = {}
+
     def __init__(self) -> None:
         self.actions: list[ActionNode] = []
         self.contexts: dict[NodeBase, DataContext] = defaultdict(lambda: DataContext(self))
@@ -159,6 +168,10 @@ class Container:
     @property
     def CurrentContext(self) -> DataContext:
         return self.contexts[self._current_key]
+    
+    @property
+    def CurrentActionsIter(self) -> list[ActionNode]:
+        return filter(lambda a: a._context_key is self._current_key, self.actions)
 
     def get_node_of_type(self, node_name: str, node_type: type[NodeBase]) -> NodeBase:
         ...
@@ -195,3 +208,61 @@ class Container:
             params[key] = value
             
         return params
+    
+    def get_save_config(self):
+        return {
+            "actions": [action.get_save_config() for action in self.actions],
+            # TODO: error if "_context_" was deleted before saving
+
+            "global_nodes": [n_o.get_save_config() for n_t, n_n, n_o in self.GlobalContext.NodeIter],
+        }
+
+    @staticmethod
+    def parse_save_config(config: dict) -> "Container":
+        container = Container()
+        nodes = {}
+
+        g_nodes = config.get("global_nodes") or []
+        for data_config in g_nodes:
+            cls_name = data_config['_class_']
+            del data_config['_class_']
+            uuid = data_config['_uuid_']
+            del data_config['_uuid_']
+
+            data_class: type[DataNode] = Container.GetType(cls_name)
+            data_node = data_class(name="[Default]", uuid=uuid)
+            data_node.apply_construct_config(data_config)
+
+            nodes[uuid] = data_node
+
+            container.GlobalContext.add_node(data_node)
+
+        actions = config.get("actions") or []
+        for act_config in actions:
+            cls_name = act_config['_class_']
+            del act_config['_class_']
+            uuid = act_config['_uuid_']
+            del act_config['_uuid_']
+
+            act_class: type[ActionNode] = Container.GetType(cls_name)
+            if '_context_' in act_config:
+                context_key = nodes[act_config['_context_']]
+                # TODO: error if "_context_" was deleted before saving
+                del act_config['_context_']
+            else:
+                context_key = GCK
+            
+            action_node = act_class(context_key=context_key, uuid=uuid)
+                
+            action_node.apply_construct_config(act_config)
+
+            container.actions.append(action_node)
+
+    @classmethod
+    def RegisterType(cls, node_type: type[NodeBase]):
+        # __subclass__
+        ...
+
+    @classmethod
+    def GetType(cls, type_name: str) -> type[NodeBase]:
+        ...

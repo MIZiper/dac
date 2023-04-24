@@ -1,9 +1,14 @@
 from PyQt5 import QtWidgets, QtCore
-from PyQt5.QtWidgets import QMainWindow
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QMouseEvent
+from PyQt5.QtWidgets import QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem, QStyle
 
 from matplotlib.figure import Figure
 
+from dac.core import Container, ActionNode, DataNode, GCK
 from dac.core.thread import ThreadWorker
+
+NAME, TYPE, REMARK = range(3)
 
 class MainWindowBase(QMainWindow):
     def __init__(self) -> None:
@@ -60,3 +65,111 @@ class ProgressWidget4Threads(QtWidgets.QWidget):
 
 class DacWidget(QtCore.QObject):
     ...
+
+class DataListWidget(QTreeWidget):
+    def __init__(self, parent: QWidget, container: Container) -> None:
+        super().__init__(parent)
+        self._STYLE = self.style()
+
+        self._container = container
+
+        self.setHeaderLabels(["Name", "Type", "Remark"])
+        self.setColumnWidth(NAME, 150)
+        self.setColumnWidth(TYPE, 200)
+
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.action_context_requested)
+        self.itemClicked.connect(self.action_item_clicked)
+
+    def refresh(self):
+        container = self._container
+        self.clear()
+
+        global_item = QtWidgets.QTreeWidgetItem(self)
+        global_item.setText(NAME, "N/A")
+        global_item.setText(TYPE, "Global Nodes")
+        global_item.setData(NAME, Qt.ItemDataRole.UserRole, GCK)
+        for node_type, node_name, node_object in container.GlobalContext.NodeIter:
+            itm = QtWidgets.QTreeWidgetItem(global_item)
+            itm.setText(NAME, node_name)
+            itm.setText(TYPE, node_type.__name__)
+            itm.setData(NAME, Qt.ItemDataRole.UserRole, node_object)
+            if container._current_key is node_object:
+                itm.setIcon(NAME, self._STYLE.standardIcon(QStyle.StandardPixmap.SP_CommandLink))
+        global_item.setExpanded(True)
+
+        local_item = QtWidgets.QTreeWidgetItem(self)
+        local_item.setText(NAME, "N/A")
+        local_item.setText(TYPE, "Local Nodes")
+        if container._current_key is not GCK:
+            local_item.setText(NAME, container._current_key.name)
+            for node_type, node_name, node_object in container.CurrentContext.NodeIter:
+                itm = QtWidgets.QTreeWidgetItem(local_item)
+                itm.setText(NAME, node_name)
+                itm.setText(TYPE, node_type.__name__)
+                itm.setDisabled(True)
+        local_item.setExpanded(True)
+
+    def action_context_requested(self):
+        ...
+
+    def action_item_clicked(self):
+        ...
+
+    def mousePressEvent(self, e: QMouseEvent) -> None:
+        # mid-btn-click => copy name. mid-button-click won't trigger 'itemClicked'
+        if e.button()==Qt.MouseButton.MidButton:
+            itm = self.itemAt(e.pos())
+            name = itm.text(NAME)
+            QtWidgets.QApplication.clipboard().setText(name)
+        return super().mousePressEvent(e)
+
+class ActionListWidget(QTreeWidget):
+    PIXMAP = {
+        ActionNode.ActionStatus.INIT: QStyle.StandardPixmap.SP_FileIcon,
+        ActionNode.ActionStatus.CONFIGURED: QStyle.StandardPixmap.SP_FileDialogContentsView,
+        ActionNode.ActionStatus.COMPLETE: QStyle.StandardPixmap.SP_DialogApplyButton,
+        ActionNode.ActionStatus.FAILED: QStyle.StandardPixmap.SP_DialogCancelButton,
+    }
+
+    def __init__(self, parent: QWidget, container: Container) -> None:
+        super().__init__(parent)
+        self._STYLE = self.style()
+
+        self._container = container
+
+        self.setHeaderLabels(["Name", "Output", "Remark"])
+        self.setColumnWidth(NAME, 200)
+        self.setColumnWidth(TYPE, 150)
+        self.setSelectionMode(self.SelectionMode.ExtendedSelection)
+
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.action_context_requested)
+        self.itemClicked.connect(self.action_item_clicked)
+        self.itemDoubleClicked.connect(self.action_item_dblclicked)
+
+    def refresh(self):
+        container = self._container
+        self.clear()
+
+        for action in container.CurrentActionsIter:
+            itm = QtWidgets.QTreeWidgetItem(self)
+            itm.setText(NAME, action.name)
+            itm.setData(NAME, Qt.ItemDataRole.UserRole, action)
+            if action.out_name is not None:
+                itm.setText(TYPE, action.out_name)
+
+            itm.setIcon(NAME, self._STYLE.standardIcon(ActionListWidget.PIXMAP[action.status]))
+
+    def run_action(self, action: ActionNode):
+        ...
+
+    def action_context_requested(self):
+        ...
+    
+    def action_item_clicked(self):
+        ...
+
+    def action_item_dblclicked(self, item: QTreeWidgetItem, col: int):
+        self.run_action( item.data(NAME, Qt.ItemDataRole.UserRole) )
+        
