@@ -110,8 +110,51 @@ class DataListWidget(QTreeWidget):
                 itm.setDisabled(True)
         local_item.setExpanded(True)
 
-    def action_context_requested(self):
-        ...
+    def action_context_requested(self, pos: QtCore.QPoint):
+        itm = self.itemAt(pos)
+        menu = QtWidgets.QMenu("DataMenu")
+        container = self._container
+
+        if (not itm) or not (node_object := itm.data(NAME, Qt.ItemDataRole.UserRole)):
+            return
+        
+        if node_object is GCK:
+            def cb_creation_gen(n_t: type[DataNode]):
+                def cb_creation():
+                    new_node = n_t(name="[New node]")
+                    container.GlobalContext.add_node(new_node)
+                    self.refresh()
+                return cb_creation
+            
+            for n_t in Container.TypeIter():
+                menu.addAction(n_t.__name__).triggered.connect(cb_creation_gen(n_t))
+        else:
+            def cb_activate_gen(key_object):
+                def cb_activate():
+                    container.activate_context(key_object)
+                    # TODO: notify action_list
+                    self.refresh()
+                return cb_activate
+            
+            if node_object is container._current_key:
+                menu.addAction("De-activate").triggered.connect(cb_activate_gen(GCK))
+            else:
+                menu.addAction("Activate").triggered.connect(cb_activate_gen(node_object))
+
+            def cb_del_gen(key_object):
+                def cb_del():
+                    if key_object is container._current_key:
+                        container.activate_context(GCK)
+                        # TODO: notify action_list
+
+                    container.remove_global_node(key_object)
+                    self.refresh()
+
+                return cb_del
+            
+            menu.addAction("Delete").triggered.connect(cb_del_gen(node_object))
+
+        menu.exec(self.viewport().mapToGlobal(pos))
 
     def action_item_clicked(self):
         ...
@@ -137,6 +180,7 @@ class ActionListWidget(QTreeWidget):
         self._STYLE = self.style()
 
         self._container = container
+        self._cids = []
 
         self.setHeaderLabels(["Name", "Output", "Remark"])
         self.setColumnWidth(NAME, 200)
@@ -162,10 +206,45 @@ class ActionListWidget(QTreeWidget):
             itm.setIcon(NAME, self._STYLE.standardIcon(ActionListWidget.PIXMAP[action.status]))
 
     def run_action(self, action: ActionNode):
-        ...
+        params = self._container.prepare_params_for_action(action)
 
-    def action_context_requested(self):
-        ...
+        
+
+        action.status = ActionNode.ActionStatus.COMPLETE # TODO: update accordingly
+        self.refresh()
+
+    def action_context_requested(self, pos: QtCore.QPoint):
+        itms = self.selectedItems()
+        container = self._container
+        menu = QtWidgets.QMenu("ActionMenu")
+
+        if not itms:
+            def cb_creation_gen(a_t: type[ActionNode]):
+                def cb_creation():
+                    ...
+
+                    container.actions.append(a)
+                    self.refresh()
+                return cb_creation
+            
+            for a_t in container.ActionIter():
+                if a_t is None:
+                    menu.addSeparator()
+                else:
+                    menu.addAction(a_t.CAPTION).triggered.connect(cb_creation_gen(a_t))
+        else:
+            acts = [itm.data(NAME, Qt.ItemDataRole.UserRole) for itm in itms]
+
+            def cb_del_gen(aa: list[ActionNode]):
+                def cb_del():
+                    for a in aa:
+                        container.actions.remove(a)
+                    self.refresh()
+                return cb_del
+            
+            menu.addAction("Delete").triggered.connect(cb_del_gen(acts))
+
+        menu.exec(self.viewport().mapToGlobal(pos))
     
     def action_item_clicked(self):
         ...
