@@ -125,6 +125,8 @@ class DataListWidget(QTreeWidget):
         return super().mousePressEvent(e)
 
 class ActionListWidget(QTreeWidget):
+    sig_edit_action_requested = QtCore.pyqtSignal(ActionNode)
+    
     PIXMAP = {
         ActionNode.ActionStatus.INIT: QStyle.StandardPixmap.SP_FileIcon,
         ActionNode.ActionStatus.CONFIGURED: QStyle.StandardPixmap.SP_FileDialogContentsView,
@@ -164,12 +166,49 @@ class ActionListWidget(QTreeWidget):
     def run_action(self, action: ActionNode):
         ...
 
-    def action_context_requested(self):
-        ...
+    def action_context_requested(self, pos: QtCore.QPoint):
+        itms = self.selectedItems()
+        container = self._container
+        menu = QtWidgets.QMenu("Actions")
+
+        if not itms:
+            def cb_creation_gen(a_t: type[ActionNode]):
+                def cb_creation():
+                    ...
+
+                return cb_creation
+            
+            for action_type in Container.CurrentActionTypesIter():
+                if action_type is None:
+                    menu.addSeparator()
+                else:
+                    menu.addAction(action_type.CAPTION).triggered.connect(cb_creation_gen(action_type))
+        else:
+            acts = [itm.data(NAME, Qt.ItemDataRole.UserRole) for itm in itms]
+
+            def cb_del_gen(aa: list[ActionNode]):
+                def cb_del():
+                    for a in aa:
+                        container.actions.remove(a)
+                    self.refresh()
+
+                return cb_del
+            
+            menu.addAction("Delete").triggered.connect(cb_del_gen(acts))
+
+        menu.exec(self.viewport().mapToGlobal(pos))
     
-    def action_item_clicked(self):
-        ...
+    def action_item_clicked(self, item: QTreeWidgetItem, col: int):
+        act = item.data(NAME, Qt.ItemDataRole.UserRole)
+        self.sig_edit_action_requested(act)
 
     def action_item_dblclicked(self, item: QTreeWidgetItem, col: int):
         self.run_action( item.data(NAME, Qt.ItemDataRole.UserRole) )
         
+
+if __name__=="__main__":
+    import sys
+    app = QtWidgets.QApplication(sys.argv)
+    win = MainWindowBase()
+    win.show()
+    app.exit(app.exec())

@@ -266,3 +266,11 @@ class Container:
     @classmethod
     def GetType(cls, type_name: str) -> type[NodeBase]:
         ...
+
+    @classmethod
+    def RegisterContextAction(cls, context_type: type[NodeBase], action_type: type[ActionNode]):
+        ...
+
+    @classmethod
+    def CurrentActionTypesIter(cls) -> list[type[ActionNode]]:
+        ...
