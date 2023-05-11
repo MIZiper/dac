@@ -183,6 +183,12 @@ class Container:
     def get_context(self, context_key: NodeBase) -> DataContext:
         return self.contexts[context_key]
     
+    def remove_global_node(self, node_object: NodeBase):
+        del self.GlobalContext[type[node_object]][node_object.name]
+        if node_object in self.contexts:
+            del self.contexts[node_object]
+        self.actions = [action for action in self.actions if action._context_key is not node_object]
+    
     def prepare_params_for_action(self, action: ActionNode) -> dict:
         params = {}
         construct_config = action._construct_config
