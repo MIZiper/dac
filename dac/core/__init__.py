@@ -3,7 +3,7 @@ from collections import defaultdict
 from dataclasses import dataclass, asdict
 from typing import Any
 from types import GenericAlias
-import inspect
+import inspect, importlib
 from enum import IntEnum
 
 class NodeBase:
@@ -32,9 +32,11 @@ class NodeBase:
         self.name = construct_config.get("name", None)
 
     def get_save_config(self) -> dict:
+        cls = self.__class__
+
         return {
             "_uuid_": self.uuid,
-            "_class_": self.__class__.__name__,
+            "_class_": f"{cls.__module__}.{cls.__qualname__}",
             **self.get_construct_config(),
         }
 
@@ -82,7 +84,7 @@ class ActionNode(NodeBase):
             return [f"<{t.__name__}>" for t in ann.__args__]
         return f"<{ann.__name__}>"
 
-    def __init__(self, context_key: NodeBase, name: str = None, uuid: str = None) -> None:
+    def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
         super().__init__(name=self.CAPTION, uuid=uuid)
         
         self.status = ActionNode.ActionStatus.INIT
@@ -94,6 +96,7 @@ class ActionNode(NodeBase):
 
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         # annotations have to be specified; if there is 'list', `list[...]` must be used
+        # output type also needs specified
         return super().__call__(*args, **kwds)
     
     def get_construct_config(self) -> dict:
@@ -142,24 +145,46 @@ class ActionNode(NodeBase):
 
 
 
-class DataContext:
+class DataContext(dict[type[DataNode], dict[str, DataNode]]):
+    def __init__(self, container: "Container") -> None:
+        super().__init__()
+        self._container = container
+
     @property
     def NodeIter(self) -> list[tuple[type[DataNode], str, DataNode]]:
-        ...
+        for node_type, nodes in self.items():
+            for node_name, node in nodes.items():
+                yield (node_type, node_name, node)
 
     def add_node(self, node: NodeBase):
-        ...
+        node_type = type[node]
+        if node_type in self:
+            self[node_type][node.name] = node
+        else:
+            self[node_type] = {node.name: node}
 
     def get_node_of_type(self, node_name: str, node_type: type[NodeBase]) -> NodeBase:
-        ...
+        try:
+            return self[node_type][node_name]
+        except KeyError:
+            return None
+        
+    def rename_node_to(self, node: NodeBase, new_name: str):
+        try:
+            del self[type[node]][node.name]
+        except:
+            pass
+        node.name = new_name
+        self.add_node(node)
 
 class Container:
-    _register = {}
+    _global_node_types = []
+    _context_action_types = defaultdict(list)
 
     def __init__(self) -> None:
         self.actions: list[ActionNode] = []
-        self.contexts: dict[NodeBase, DataContext] = defaultdict(lambda: DataContext(self))
-        self._current_key = GCK
+        self.contexts: dict[DataNode, DataContext] = defaultdict(lambda: DataContext(self))
+        self._current_key: DataNode = GCK
 
     @property
     def GlobalContext(self) -> DataContext:
@@ -170,17 +195,22 @@ class Container:
         return self.contexts[self._current_key]
     
     @property
-    def CurrentActionsIter(self) -> list[ActionNode]:
+    def ActionsInCurrentContext(self) -> list[ActionNode]:
         return filter(lambda a: a._context_key is self._current_key, self.actions)
 
     def get_node_of_type(self, node_name: str, node_type: type[NodeBase]) -> NodeBase:
-        ...
+        if node:=self.CurrentContext.get_node_of_type(node_name, node_type):
+            return node
+        elif self._current_key is not GCK:
+            return self.GlobalContext.get_node_of_type(node_name, node_type)
+        else:
+            return None
 
-    def activate_context(self, context_key: NodeBase) -> DataContext:
+    def activate_context(self, context_key: DataNode) -> DataContext:
         self._current_key = context_key
         return self.CurrentContext
 
-    def get_context(self, context_key: NodeBase) -> DataContext:
+    def get_context(self, context_key: DataNode) -> DataContext:
         return self.contexts[context_key]
     
     def remove_global_node(self, node_object: NodeBase):
@@ -218,24 +248,22 @@ class Container:
     def get_save_config(self):
         return {
             "actions": [action.get_save_config() for action in self.actions],
-            # TODO: error if "_context_" was deleted before saving
-
             "global_nodes": [n_o.get_save_config() for n_t, n_n, n_o in self.GlobalContext.NodeIter],
         }
 
-    @staticmethod
-    def parse_save_config(config: dict) -> "Container":
+    @classmethod
+    def parse_save_config(cls, config: dict) -> "Container":
         container = Container()
         nodes = {}
 
         g_nodes = config.get("global_nodes") or []
         for data_config in g_nodes:
-            cls_name = data_config['_class_']
+            cls_path = data_config['_class_']
             del data_config['_class_']
             uuid = data_config['_uuid_']
             del data_config['_uuid_']
 
-            data_class: type[DataNode] = Container.GetType(cls_name)
+            data_class: type[DataNode] = Container.GetClass(cls_path)
             data_node = data_class(name="[Default]", uuid=uuid)
             data_node.apply_construct_config(data_config)
 
@@ -245,12 +273,12 @@ class Container:
 
         actions = config.get("actions") or []
         for act_config in actions:
-            cls_name = act_config['_class_']
+            cls_path = act_config['_class_']
             del act_config['_class_']
             uuid = act_config['_uuid_']
             del act_config['_uuid_']
 
-            act_class: type[ActionNode] = Container.GetType(cls_name)
+            act_class: type[ActionNode] = Container.GetClass(cls_path)
             if '_context_' in act_config:
                 context_key = nodes[act_config['_context_']]
                 # TODO: error if "_context_" was deleted before saving
@@ -264,19 +292,24 @@ class Container:
 
             container.actions.append(action_node)
 
-    @classmethod
-    def RegisterType(cls, node_type: type[NodeBase]):
-        # __subclass__
-        ...
+    @staticmethod
+    def GetClass(class_path: str) -> type[NodeBase]:
+        module_name, class_name = class_path.rsplit(".", 1)
+        module = importlib.import_module(module_name)
+        return getattr(module, class_name)
 
-    @classmethod
-    def GetType(cls, type_name: str) -> type[NodeBase]:
-        ...
+    @staticmethod
+    def RegisterGlobalDataType(node_type: type[DataNode]):
+        Container._global_node_types.append(node_type)
 
-    @classmethod
-    def RegisterContextAction(cls, context_type: type[NodeBase], action_type: type[ActionNode]):
-        ...
+    @staticmethod
+    def GetGlobalDataTypes() -> list[type[DataNode]]:
+        return Container._global_node_types
 
-    @classmethod
-    def CurrentActionTypesIter(cls) -> list[type[ActionNode]]:
-        ...
+    @staticmethod
+    def RegisterContextAction(context_type: type[DataNode], action_type: type[ActionNode]):
+        Container._context_action_types[context_type].append(action_type)
+
+    @staticmethod
+    def GetContextActionTypes(context_type: type[DataNode]) -> list[type[ActionNode]]:
+        return Container._context_action_types[context_type]
