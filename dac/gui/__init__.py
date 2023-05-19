@@ -177,8 +177,9 @@ class DataListWidget(QTreeWidget):
 
         menu.exec(self.viewport().mapToGlobal(pos))
 
-    def action_item_clicked(self):
-        ...
+    def action_item_clicked(self, item: QTreeWidgetItem, col: int):
+        data = item.data(NAME, Qt.ItemDataRole.UserRole)
+        self.sig_edit_action_requested(data)
 
     def mousePressEvent(self, e: QMouseEvent) -> None:
         # mid-btn-click => copy name. mid-button-click won't trigger 'itemClicked'
