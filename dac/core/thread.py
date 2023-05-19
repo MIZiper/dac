@@ -12,6 +12,7 @@ class WorkerSignals(QObject):
     - error:`tuple` (exctype, value, traceback.format_exc() )
     - result: `object` data returned from processing, anything
     - progress: `int, int` indicating progress metadata
+    - message: `str` the message from worker
     '''
 
     started = pyqtSignal()
@@ -19,6 +20,7 @@ class WorkerSignals(QObject):
     error = pyqtSignal(tuple)
     result = pyqtSignal(object)
     progress = pyqtSignal(int, int)
+    message = pyqtSignal(str)
 
 class ThreadWorker(QRunnable):
     '''
@@ -46,8 +48,11 @@ class ThreadWorker(QRunnable):
         # Retrieve args/kwargs here; and fire processing using them
         
         # Add the callback to our kwargs
-        if 'progress_emitter' in inspect.signature(self.fn).parameters:
+        fn_params = inspect.signature(self.fn).parameters
+        if 'progress_emitter' in fn_params:
             self.kwargs['progress_emitter'] = self.signals.progress.emit
+        if 'logger' in fn_params:
+            self.kwargs['logger'] = self.signals.message.emit
 
         try:
             if self.mutex is not None:

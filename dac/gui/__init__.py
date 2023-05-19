@@ -18,8 +18,27 @@ class MainWindowBase(QMainWindow):
         self.resize(1024, 768)
 
         self._thread_pool = QtCore.QThreadPool.globalInstance()
+        self._progress_widget = ProgressWidget4Threads(self)
 
         self.figure: Figure = None
+
+    def _create_ui(self):
+        ...
+
+    def _create_menu(self):
+        ...
+
+    def _create_status(self):
+        status = self.statusBar()
+        status.addPermanentWidget(self._progress_widget)
+
+    def start_thread_worker(self, worker: ThreadWorker):
+        # TODO: worker.signals.message.connect()
+        self._progress_widget.add_worker(worker)
+        self._thread_pool.start(worker)
+
+    def message(self, msg):
+        self.statusBar().showMessage(msg, 3000)
 
 class ProgressBundle(QtWidgets.QWidget):
     def __init__(self, caption):
@@ -67,11 +86,13 @@ class DacWidget(QtCore.QObject):
     ...
 
 class DataListWidget(QTreeWidget):
-    def __init__(self, parent: QWidget, container: Container) -> None:
+    sig_edit_data_requested = QtCore.pyqtSignal(DataNode)
+    
+    def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
         self._STYLE = self.style()
 
-        self._container = container
+        self._container: Container = None
 
         self.setHeaderLabels(["Name", "Type", "Remark"])
         self.setColumnWidth(NAME, 150)
@@ -177,11 +198,11 @@ class ActionListWidget(QTreeWidget):
         ActionNode.ActionStatus.FAILED: QStyle.StandardPixmap.SP_DialogCancelButton,
     }
 
-    def __init__(self, parent: QWidget, container: Container) -> None:
+    def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
         self._STYLE = self.style()
 
-        self._container = container
+        self._container: Container = None
         self._cids = []
 
         self.setHeaderLabels(["Name", "Output", "Remark"])
@@ -218,7 +239,7 @@ class ActionListWidget(QTreeWidget):
     def action_context_requested(self, pos: QtCore.QPoint):
         itms = self.selectedItems()
         container = self._container
-        menu = QtWidgets.QMenu("Actions")
+        menu = QtWidgets.QMenu("ActionMenu")
 
         if not itms:
             def cb_creation_gen(a_t: type[ActionNode]):
