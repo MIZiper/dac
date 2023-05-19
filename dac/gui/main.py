@@ -17,15 +17,14 @@ SET_RECENTDIR = "RecentDir"
 class MainWindow(MainWindowBase):
     def __init__(self) -> None:
         super().__init__()
-
-        self.setWindowTitle(APPNAME)
+        self.resize(1366, 1024)
 
         self._create_ui()
         self._create_menu()
         self._create_status()
         self._route_signals()
 
-        self.container = None
+        self.container: Container = None
         self.project_config_fpath = None
         self.apply_config({})
         
@@ -144,7 +143,7 @@ class MainWindow(MainWindowBase):
         if self.project_config_fpath:
             self.setWindowTitle(f"{path.basename(self.project_config_fpath)} | {APPNAME}")
         else:
-            self.setWindowTitle(f"[New] | {APPNAME}")
+            self.setWindowTitle(f"[New project] | {APPNAME}")
 
         dac_config = config.get("dac", {})
         self.container = Container.parse_save_config(dac_config)
