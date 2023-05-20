@@ -126,6 +126,9 @@ class MainWindow(MainWindowBase):
         Container.RegisterGlobalContextAction(SimpleGlobalAction)
         Container.RegisterGlobalDataType(SimpleDefinition)
         Container.RegisterContextAction(SimpleDefinition, SimpleAction)
+        self.data_list_widget.sig_action_update_requested.connect(
+            self.action_list_widget.refresh
+        )
         
         def apply_node_config(node: NodeBase, config: dict, fire: bool=False):
             if not isinstance(node, NodeBase):

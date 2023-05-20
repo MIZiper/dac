@@ -87,6 +87,7 @@ class DacWidget(QtCore.QObject):
 
 class DataListWidget(QTreeWidget):
     sig_edit_data_requested = QtCore.pyqtSignal(DataNode)
+    sig_action_update_requested = QtCore.pyqtSignal()
     
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
@@ -159,7 +160,7 @@ class DataListWidget(QTreeWidget):
             def cb_activate_gen(key_object):
                 def cb_activate():
                     container.activate_context(key_object)
-                    # TODO: notify action_list
+                    self.sig_action_update_requested.emit()
                     self.refresh()
                 return cb_activate
             
@@ -172,7 +173,7 @@ class DataListWidget(QTreeWidget):
                 def cb_del():
                     if key_object is container._current_key:
                         container.activate_context(GCK)
-                        # TODO: notify action_list
+                        self.sig_action_update_requested.emit()
 
                     container.remove_global_node(key_object)
                     self.refresh()
