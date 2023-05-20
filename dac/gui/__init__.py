@@ -102,9 +102,14 @@ class DataListWidget(QTreeWidget):
         self.customContextMenuRequested.connect(self.action_context_requested)
         self.itemClicked.connect(self.action_item_clicked)
 
-    def refresh(self):
-        container = self._container
+    def refresh(self, container: Container=None):
         self.clear()
+        if container is None:
+            container = self._container
+            if container is None:
+                return
+        else:
+            self._container = container
 
         global_item = QtWidgets.QTreeWidgetItem(self)
         global_item.setText(NAME, "N/A")
@@ -132,9 +137,10 @@ class DataListWidget(QTreeWidget):
         local_item.setExpanded(True)
 
     def action_context_requested(self, pos: QtCore.QPoint):
+        if (container := self._container) is None:
+            return
         itm = self.itemAt(pos)
         menu = QtWidgets.QMenu("DataMenu")
-        container = self._container
 
         if (not itm) or not (node_object := itm.data(NAME, Qt.ItemDataRole.UserRole)):
             return
@@ -216,11 +222,16 @@ class ActionListWidget(QTreeWidget):
         self.itemClicked.connect(self.action_item_clicked)
         self.itemDoubleClicked.connect(self.action_item_dblclicked)
 
-    def refresh(self):
-        container = self._container
+    def refresh(self, container: Container=None):
         self.clear()
+        if container is None:
+            container = self._container
+            if container is None:
+                return
+        else:
+            self._container = container
 
-        for action in container.CurrentActionsIter:
+        for action in container.ActionsInCurrentContext:
             itm = QtWidgets.QTreeWidgetItem(self)
             itm.setText(NAME, action.name)
             itm.setData(NAME, Qt.ItemDataRole.UserRole, action)
@@ -230,7 +241,9 @@ class ActionListWidget(QTreeWidget):
             itm.setIcon(NAME, self._STYLE.standardIcon(ActionListWidget.PIXMAP[action.status]))
 
     def run_action(self, action: ActionNode):
-        params = self._container.prepare_params_for_action(action)
+        if (container := self._container) is None:
+            return
+        params = container.prepare_params_for_action(action)
 
         
 
@@ -238,8 +251,9 @@ class ActionListWidget(QTreeWidget):
         self.refresh()
 
     def action_context_requested(self, pos: QtCore.QPoint):
+        if (container := self._container) is None:
+            return
         itms = self.selectedItems()
-        container = self._container
         menu = QtWidgets.QMenu("ActionMenu")
 
         if not itms:

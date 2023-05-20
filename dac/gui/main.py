@@ -120,6 +120,13 @@ class MainWindow(MainWindowBase):
         return super()._create_status()
 
     def _route_signals(self):
+        from dac.core.data import SimpleDefinition
+        from dac.core.actions import SimpleAction, SimpleGlobalAction
+
+        Container.RegisterGlobalContextAction(SimpleGlobalAction)
+        Container.RegisterGlobalDataType(SimpleDefinition)
+        Container.RegisterContextAction(SimpleDefinition, SimpleAction)
+        
         def apply_node_config(node: NodeBase, config: dict, fire: bool=False):
             if not isinstance(node, NodeBase):
                 return
@@ -146,9 +153,9 @@ class MainWindow(MainWindowBase):
             self.setWindowTitle(f"[New project] | {APPNAME}")
 
         dac_config = config.get("dac", {})
-        self.container = Container.parse_save_config(dac_config)
-        # self.data_list_widget.refresh()
-        # self.action_list_widget.refresh()
+        self.container = container = Container.parse_save_config(dac_config)
+        self.data_list_widget.refresh(container)
+        self.action_list_widget.refresh(container)
 
     def get_config(self):
         return {

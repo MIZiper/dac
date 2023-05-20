@@ -14,6 +14,12 @@ class VisualizeActionBase(ActionBase):
 PAB = ProcessActionBase
 VAB = VisualizeActionBase
 
+class SimpleAction(ActionBase):
+    CAPTION = "Simple Action"
+
+class SimpleGlobalAction(ActionBase):
+    CAPTION = "Simple Global Action"
+
 class RemoteProcessActionBase(PAB):
     # distribute the calculation (and container) to remote (cloud)
     ...
