@@ -8,7 +8,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationTool
 
 from dac import __version__
 from dac.core import NodeBase, ActionNode, DataNode, Container
-from dac.gui import MainWindowBase, DataListWidget, ActionListWidget
+from dac.gui import MainWindowBase, DataListWidget, ActionListWidget, NodeEditorWidget
 
 APPNAME = "DAC"
 APPSETTING = QtCore.QSettings(APPNAME, "Main")
@@ -34,7 +34,7 @@ class MainWindow(MainWindowBase):
         self.setDockNestingEnabled(True)
         self.data_list_widget = data_list = DataListWidget(self)
         self.action_list_widget = action_list = ActionListWidget(self)
-        self.node_editor = node_editor = QtWidgets.QTextEdit(self)
+        self.node_editor = node_editor = NodeEditorWidget(self)
 
         data_list_docker = QtWidgets.QDockWidget("Data", self)
         data_list_docker.setWidget(data_list)
@@ -126,6 +126,9 @@ class MainWindow(MainWindowBase):
         Container.RegisterGlobalContextAction(SimpleGlobalAction)
         Container.RegisterGlobalDataType(SimpleDefinition)
         Container.RegisterContextAction(SimpleDefinition, SimpleAction)
+
+        self.data_list_widget.sig_edit_data_requested.connect(self.node_editor.edit_node)
+        self.action_list_widget.sig_edit_action_requested.connect(self.node_editor.edit_node)
         self.data_list_widget.sig_action_update_requested.connect(
             self.action_list_widget.refresh
         )

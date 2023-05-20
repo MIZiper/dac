@@ -2,10 +2,12 @@ from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QMouseEvent
 from PyQt5.QtWidgets import QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem, QStyle
+from PyQt5.Qsci import QsciScintilla
 
 from matplotlib.figure import Figure
+import yaml
 
-from dac.core import Container, ActionNode, DataNode, GCK
+from dac.core import Container, ActionNode, DataNode, GCK, NodeBase
 from dac.core.thread import ThreadWorker
 
 NAME, TYPE, REMARK = range(3)
@@ -130,6 +132,7 @@ class DataListWidget(QTreeWidget):
         local_item.setText(TYPE, "Local Nodes")
         if container._current_key is not GCK:
             local_item.setText(NAME, container._current_key.name)
+            local_item.setData(NAME, Qt.ItemDataRole.UserRole, container._current_key)
             for node_type, node_name, node_object in container.CurrentContext.NodeIter:
                 itm = QtWidgets.QTreeWidgetItem(local_item)
                 itm.setText(NAME, node_name)
@@ -186,6 +189,8 @@ class DataListWidget(QTreeWidget):
 
     def action_item_clicked(self, item: QTreeWidgetItem, col: int):
         data = item.data(NAME, Qt.ItemDataRole.UserRole)
+        if not isinstance(data, DataNode): # GCK
+            return
         self.sig_edit_data_requested.emit(data)
 
     def mousePressEvent(self, e: QMouseEvent) -> None:
@@ -287,11 +292,25 @@ class ActionListWidget(QTreeWidget):
     
     def action_item_clicked(self, item: QTreeWidgetItem, col: int):
         act = item.data(NAME, Qt.ItemDataRole.UserRole)
+        # if not isinstance(act, ActionNode):
+        #     return
         self.sig_edit_action_requested.emit(act)
 
     def action_item_dblclicked(self, item: QTreeWidgetItem, col: int):
         self.run_action( item.data(NAME, Qt.ItemDataRole.UserRole) )
-        
+
+class NodeEditorWidget(QWidget):
+    def __init__(self, parent: QWidget):
+        super().__init__(parent)
+
+        vlayout = QtWidgets.QVBoxLayout(self)
+        vlayout.setContentsMargins(0, 0, 0, 0)
+        self.editor = editor = QtWidgets.QTextEdit(self)
+        vlayout.addWidget(editor)
+
+    def edit_node(self, node: NodeBase):
+        s = yaml.dump(node.get_construct_config())
+        self.editor.setText(s)
 
 if __name__=="__main__":
     import sys

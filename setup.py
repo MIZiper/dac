@@ -10,5 +10,6 @@ setup(
     url="http://mizip.net/",
     download_url="https://github.com/MIZiper/dac.git",
     license="Apache-2.0",
-    packages=find_packages()
+    packages=find_packages(),
+    requires=["pyqt5", "matplotlib", "pyyaml", "qscintilla"]
 )
