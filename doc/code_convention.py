@@ -22,3 +22,6 @@ class ClassName:
     @staticmethod
     def StaticFuncCall():
         ...
+
+# [Hint string]
+# <TypeName>

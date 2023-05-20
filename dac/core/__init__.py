@@ -157,7 +157,7 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
                 yield (node_type, node_name, node)
 
     def add_node(self, node: NodeBase):
-        node_type = type[node]
+        node_type = type(node)
         if node_type in self:
             self[node_type][node.name] = node
         else:
@@ -171,7 +171,7 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
         
     def rename_node_to(self, node: NodeBase, new_name: str):
         try:
-            del self[type[node]][node.name]
+            del self[type(node)][node.name]
         except:
             pass
         node.name = new_name
@@ -292,6 +292,8 @@ class Container:
 
             container.actions.append(action_node)
 
+        return container
+
     @staticmethod
     def GetClass(class_path: str) -> type[NodeBase]:
         module_name, class_name = class_path.rsplit(".", 1)
@@ -313,3 +315,12 @@ class Container:
     @staticmethod
     def GetContextActionTypes(context_type: type[DataNode]) -> list[type[ActionNode]]:
         return Container._context_action_types[context_type]
+    
+    @staticmethod
+    def RegisterGlobalContextAction(action_type: type[ActionNode]):
+        Container.RegisterContextAction(GlobalContextKey, action_type)
+
+    @property
+    def ActionTypesInCurrentContext(self) -> list[type[ActionNode]]:
+        context_type = type(self._current_key)
+        return Container.GetContextActionTypes(context_type)

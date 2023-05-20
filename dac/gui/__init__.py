@@ -147,7 +147,7 @@ class DataListWidget(QTreeWidget):
                     self.refresh()
                 return cb_creation
             
-            for n_t in Container.TypeIter():
+            for n_t in Container.GetGlobalDataTypes():
                 menu.addAction(n_t.__name__).triggered.connect(cb_creation_gen(n_t))
         else:
             def cb_activate_gen(key_object):
@@ -179,7 +179,7 @@ class DataListWidget(QTreeWidget):
 
     def action_item_clicked(self, item: QTreeWidgetItem, col: int):
         data = item.data(NAME, Qt.ItemDataRole.UserRole)
-        self.sig_edit_action_requested(data)
+        self.sig_edit_data_requested.emit(data)
 
     def mousePressEvent(self, e: QMouseEvent) -> None:
         # mid-btn-click => copy name. mid-button-click won't trigger 'itemClicked'
@@ -245,13 +245,12 @@ class ActionListWidget(QTreeWidget):
         if not itms:
             def cb_creation_gen(a_t: type[ActionNode]):
                 def cb_creation():
-                    ...
-
+                    a = a_t(container._current_key)
                     container.actions.append(a)
                     self.refresh()
                 return cb_creation
             
-            for a_t in Container.CurrentActionTypesIter():
+            for a_t in container.ActionTypesInCurrentContext:
                 if a_t is None:
                     menu.addSeparator()
                 else:
@@ -273,7 +272,7 @@ class ActionListWidget(QTreeWidget):
     
     def action_item_clicked(self, item: QTreeWidgetItem, col: int):
         act = item.data(NAME, Qt.ItemDataRole.UserRole)
-        self.sig_edit_action_requested(act)
+        self.sig_edit_action_requested.emit(act)
 
     def action_item_dblclicked(self, item: QTreeWidgetItem, col: int):
         self.run_action( item.data(NAME, Qt.ItemDataRole.UserRole) )
