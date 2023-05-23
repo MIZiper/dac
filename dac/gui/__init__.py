@@ -1,11 +1,13 @@
-from PyQt5 import QtWidgets, QtCore
+from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QMouseEvent
 from PyQt5.QtWidgets import QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem, QStyle
-from PyQt5.Qsci import QsciScintilla
+from PyQt5.Qsci import QsciScintilla, QsciLexerYAML
 
 from matplotlib.figure import Figure
 import yaml
+from io import StringIO
+from functools import partial
 
 from dac.core import Container, ActionNode, DataNode, GCK, NodeBase
 from dac.core.thread import ThreadWorker
@@ -199,6 +201,16 @@ class DataListWidget(QTreeWidget):
             name = itm.text(NAME)
             QtWidgets.QApplication.clipboard().setText(name)
         return super().mousePressEvent(e)
+    
+    def action_apply_node_config(self, node: DataNode, config: dict, fire: bool=False):
+        if not isinstance(node, DataNode):
+            return
+        
+        # if node from previous container, seems works too
+        if (new_name:=config.get("name")) and new_name!=node.name:
+            self._container.GlobalContext.rename_node_to(node, new_name)
+        node.apply_construct_config(config)
+        self.refresh()
 
 class ActionListWidget(QTreeWidget):
     sig_edit_action_requested = QtCore.pyqtSignal(ActionNode)
@@ -356,18 +368,69 @@ class ActionListWidget(QTreeWidget):
     def action_item_dblclicked(self, item: QTreeWidgetItem, col: int):
         self.run_action( item.data(NAME, Qt.ItemDataRole.UserRole) )
 
+    def action_apply_node_config(self, node: ActionNode, config: dict, fire: bool=False):
+        if not isinstance(node, ActionNode):
+            return
+        
+        # if node from previous container, seems works too
+        node.apply_construct_config(config)
+
+        node.status = ActionNode.ActionStatus.CONFIGURED
+        if fire:
+            self.run_action(node)
+            # refresh included in `run_action`
+        else:
+            self.refresh()
+
 class NodeEditorWidget(QWidget):
+    sig_return_node = QtCore.pyqtSignal(NodeBase, dict, bool)
+
     def __init__(self, parent: QWidget):
         super().__init__(parent)
 
         vlayout = QtWidgets.QVBoxLayout(self)
         vlayout.setContentsMargins(0, 0, 0, 0)
-        self.editor = editor = QtWidgets.QTextEdit(self)
+
+        self.editor = editor = QsciScintilla(self)
+        lexer = QsciLexerYAML(editor)
+        lexer.setFont(QtGui.QFont("Consolas"))
+        editor.setLexer(lexer)
+        editor.setUtf8(True)
+        editor.setAutoIndent(True)
+        # editor.setEolVisibility(True)
+        editor.setIndentationGuides(True)
+        editor.setTabWidth(4)
+        editor.setIndentationsUseTabs(False)
+        editor.setMarginType(1, QsciScintilla.NumberMargin)
+
+        btn_layout = QtWidgets.QHBoxLayout()
+        apply_btn = QtWidgets.QToolButton(self)
+        apply_btn.setText("✔")
+        apply_btn.setToolTip("Apply config")
+        fire_btn = QtWidgets.QToolButton(self)
+        fire_btn.setText("🔥")
+        fire_btn.setToolTip("Fire = apply + run")
+        apply_btn.clicked.connect(self.action_apply)
+        fire_btn.clicked.connect(partial(self.action_apply, fire=True))
+
         vlayout.addWidget(editor)
+        btn_layout.addStretch(1)
+        btn_layout.addWidget(apply_btn)
+        btn_layout.addWidget(fire_btn)
+        vlayout.addLayout(btn_layout)
+
+        self._current_node = None
 
     def edit_node(self, node: NodeBase):
         s = yaml.dump(node.get_construct_config())
         self.editor.setText(s)
+        self._current_node = node
+
+    def action_apply(self, fire=True):
+        if self._current_node is None:
+            return
+        config = yaml.load(StringIO(self.editor.text()), Loader=yaml.FullLoader)
+        self.sig_return_node.emit(self._current_node, config, fire)
 
 if __name__=="__main__":
     import sys

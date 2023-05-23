@@ -132,25 +132,11 @@ class MainWindow(MainWindowBase):
         self.data_list_widget.sig_action_update_requested.connect(
             self.action_list_widget.refresh
         )
-        
-        def apply_node_config(node: NodeBase, config: dict, fire: bool=False):
-            if not isinstance(node, NodeBase):
-                return
-            
-            old_name = node.name
-            node.apply_construct_config(config)
-
-            if isinstance(node, ActionNode):
-                node.status = ActionNode.ActionStatus.CONFIGURED
-                if fire:
-                    action_list.run_action(node)
-                    # refresh included in `run_action`
-                else:
-                    action_list.refresh()
-            else:
-                if old_name!=node.name:
-                    container.GlobalContext.migrate(oldname)
-                data_list.refresh()
+        self.action_list_widget.sig_data_update_requested.connect(
+            self.data_list_widget.refresh
+        )
+        self.node_editor.sig_return_node.connect(self.data_list_widget.action_apply_node_config)
+        self.node_editor.sig_return_node.connect(self.action_list_widget.action_apply_node_config)
 
     def apply_config(self, config: dict):
         if self.project_config_fpath:
