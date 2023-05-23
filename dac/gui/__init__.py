@@ -292,6 +292,33 @@ class ActionListWidget(QTreeWidget):
         else:
             acts = [itm.data(NAME, Qt.ItemDataRole.UserRole) for itm in itms]
 
+            def cb_cp2_gen(aa: list[ActionNode], context_key: DataNode):
+                def cb_cp2():
+                    for oa in aa:
+                        oac = oa.get_construct_config()
+
+                        a_t = oa.__class__
+                        a = a_t(context_key=context_key)
+
+                        a.apply_construct_config(oac)
+
+                        container.actions.append(a)
+                    self.refresh()
+
+                return cb_cp2
+            
+            def cb_mvaft_gen(aa: list[ActionNode], a: ActionNode):
+                def cb_mvaft():
+                    for oa in aa:
+                        container.actions.remove(oa)
+                    idx = container.actions.index(a)
+                    
+                    container.actions[idx+1:idx+1] = aa
+
+                    self.refresh()
+
+                return cb_mvaft
+
             def cb_del_gen(aa: list[ActionNode]):
                 def cb_del():
                     for a in aa:
@@ -299,6 +326,22 @@ class ActionListWidget(QTreeWidget):
                     self.refresh()
                     
                 return cb_del
+            
+            if container._current_key is not GCK:
+                cp2menu = menu.addMenu("Copy to")
+                for node_type, node_name, node in container.GlobalContext.NodeIter:
+                    if isinstance(node_type, node_type):
+                        # only allow copying to context of same type
+                        cp2menu.addAction(node_name).triggered.connect(
+                            cb_cp2_gen(acts, node)
+                        )
+
+            mvb4menu = menu.addMenu("Move after")
+            for oa in container.actions:
+                if oa._context_key is container._current_key and oa not in acts:
+                    mvb4menu.addAction(oa.name).triggered.connect(cb_mvaft_gen(acts, oa))
+
+            # TODO: change to drag&drop, mime data using indexes
             
             menu.addAction("Delete").triggered.connect(cb_del_gen(acts))
 
