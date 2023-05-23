@@ -132,7 +132,6 @@ class DataListWidget(QTreeWidget):
         local_item.setText(TYPE, "Local Nodes")
         if container._current_key is not GCK:
             local_item.setText(NAME, container._current_key.name)
-            local_item.setData(NAME, Qt.ItemDataRole.UserRole, container._current_key)
             for node_type, node_name, node_object in container.CurrentContext.NodeIter:
                 itm = QtWidgets.QTreeWidgetItem(local_item)
                 itm.setText(NAME, node_name)
@@ -189,7 +188,7 @@ class DataListWidget(QTreeWidget):
 
     def action_item_clicked(self, item: QTreeWidgetItem, col: int):
         data = item.data(NAME, Qt.ItemDataRole.UserRole)
-        if not isinstance(data, DataNode): # GCK
+        if not isinstance(data, DataNode) or data is GCK: # GCK not edit-able
             return
         self.sig_edit_data_requested.emit(data)
 
@@ -203,6 +202,7 @@ class DataListWidget(QTreeWidget):
 
 class ActionListWidget(QTreeWidget):
     sig_edit_action_requested = QtCore.pyqtSignal(ActionNode)
+    sig_data_update_requested = QtCore.pyqtSignal()
     
     PIXMAP = {
         ActionNode.ActionStatus.INIT: QStyle.StandardPixmap.SP_FileIcon,
@@ -251,7 +251,21 @@ class ActionListWidget(QTreeWidget):
             return
         params = container.prepare_params_for_action(action)
 
-        
+        action.pre_run()
+        rst = action(**params)
+        action.post_run()
+
+        current_context = container.CurrentContext
+        if isinstance(rst, DataNode):
+            rst.name = action.out_name # what if out_name is None?
+            current_context.add_node(rst)
+            self.sig_data_update_requested.emit()
+        elif isinstance(rst, list):
+            for e_rst in rst:
+                e_rst: DataNode
+                current_context.add_node(e_rst)
+        else:
+            pass # no output
 
         action.status = ActionNode.ActionStatus.COMPLETE # TODO: update accordingly
         self.refresh()

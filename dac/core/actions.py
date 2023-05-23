@@ -9,7 +9,16 @@ class ProcessActionBase(ActionBase):
     ...
 
 class VisualizeActionBase(ActionBase):
-    ...
+    def pre_run(self, *args, **kwargs):
+        # canvas=self.parent_win.figure.canvas
+        # for cid in self._cids:
+        #     canvas.mpl_disconnect(cid)
+        # self._cids.clear()
+        return super().pre_run(*args, **kwargs)
+    
+    def post_run(self, *args, **kwargs):
+        # self._cids = action._cids
+        return super().post_run(*args, **kwargs)
 
 PAB = ProcessActionBase
 VAB = VisualizeActionBase
@@ -20,6 +29,9 @@ class SimpleAction(ActionBase):
 class SimpleGlobalAction(ActionBase):
     CAPTION = "Simple Global Action"
 
+class Separator(ActionBase):
+    CAPTION = "--- [Separator] ---"
+    
 class RemoteProcessActionBase(PAB):
     # distribute the calculation (and container) to remote (cloud)
     ...

@@ -97,7 +97,7 @@ class ActionNode(NodeBase):
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         # annotations have to be specified; if there is 'list', `list[...]` must be used
         # output type also needs specified
-        return super().__call__(*args, **kwds)
+        print(f"'{self.name}' called with {args} and {kwds}.")
     
     def get_construct_config(self) -> dict:
         if not self._construct_config: # init
@@ -142,6 +142,12 @@ class ActionNode(NodeBase):
             cfg["_context_"] = self._context_key.uuid
 
         return cfg
+    
+    def pre_run(self, *args, **kwargs):
+        ...
+
+    def post_run(self, *args, **kwargs):
+        ...
 
 
 

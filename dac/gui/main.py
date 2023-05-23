@@ -17,7 +17,7 @@ SET_RECENTDIR = "RecentDir"
 class MainWindow(MainWindowBase):
     def __init__(self) -> None:
         super().__init__()
-        self.resize(1366, 1024)
+        self.resize(1200, 800)
 
         self._create_ui()
         self._create_menu()
