@@ -80,8 +80,11 @@ class ActionNode(NodeBase):
 
     @staticmethod
     def Annotation2Config(ann: type | GenericAlias):
-        if ann.__name__=="list":
-            return [f"<{t.__name__}>" for t in ann.__args__]
+        if ann.__name__=="list" and ann is not list: # type(list[...]) is GenericAlias
+            return [
+                f"<{t.__name__}>" if not hasattr(t, '_fields') else [f"[{f}]" for f in t._fields] # namedtuple
+                for t in ann.__args__
+            ]
         return f"<{ann.__name__}>"
 
     def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:

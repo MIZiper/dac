@@ -127,6 +127,10 @@ class MainWindow(MainWindowBase):
         Container.RegisterGlobalDataType(SimpleDefinition)
         Container.RegisterContextAction(SimpleDefinition, SimpleAction)
 
+        from dac.modules.timedata.construct import SignalConstructAction
+
+        Container.RegisterGlobalContextAction(SignalConstructAction)
+
         self.data_list_widget.sig_edit_data_requested.connect(self.node_editor.edit_node)
         self.action_list_widget.sig_edit_action_requested.connect(self.node_editor.edit_node)
         self.data_list_widget.sig_action_update_requested.connect(
