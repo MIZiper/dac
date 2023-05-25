@@ -20,7 +20,7 @@ class SignalConstructAction(ActionBase):
 
             amplitude: float
             frequency: float, [Hz]
-            phase: float, [rad]
+            phase: float, [°]
         fs: int, [Hz]
             sample rate
         duration: float, [s]
@@ -31,6 +31,6 @@ class SignalConstructAction(ActionBase):
         y = np.zeros_like(t)
         
         for amp, freq, phase in components:
-            y += amp*np.sin(2*np.pi*freq*t + phase)
+            y += amp*np.sin(2*np.pi*freq*t + np.deg2rad(phase))
 
-        return TimeData(name, y, fs=fs, x_unit="s", comment="Constructed time data")
+        return TimeData("Generated signal", y, dt=1/fs, y_unit="-", comment="Constructed time data")

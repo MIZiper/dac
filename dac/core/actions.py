@@ -1,3 +1,6 @@
+from matplotlib.figure import Figure
+
+from dac.core import DataNode
 from . import ActionNode
 
 class ActionBase(ActionNode): # needs thread
@@ -9,16 +12,34 @@ class ProcessActionBase(ActionBase):
     ...
 
 class VisualizeActionBase(ActionBase):
+    def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
+        super().__init__(context_key, name, uuid)
+        self._figure: Figure = None
+        self._cids = [] # never overwrite in __call__
+
+    @property
+    def canvas(self):
+        return self._figure.canvas
+    
+    @property
+    def figure(self):
+        return self._figure
+    
+    @figure.setter
+    def figure(self, fig: Figure):
+        canvas = fig.canvas
+        self._figure = fig
+        fig.clf()
+        if hasattr(canvas, "_cids"):
+            for cid in canvas._cids:
+                canvas.mpl_disconnect(cid)
+        canvas._cids = self._cids = []
+
     def pre_run(self, *args, **kwargs):
-        # canvas=self.parent_win.figure.canvas
-        # for cid in self._cids:
-        #     canvas.mpl_disconnect(cid)
-        # self._cids.clear()
         return super().pre_run(*args, **kwargs)
     
     def post_run(self, *args, **kwargs):
-        # self._cids = action._cids
-        return super().post_run(*args, **kwargs)
+        self.canvas.draw_idle()
 
 PAB = ProcessActionBase
 VAB = VisualizeActionBase
