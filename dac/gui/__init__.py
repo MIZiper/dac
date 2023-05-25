@@ -10,6 +10,7 @@ from io import StringIO
 from functools import partial
 
 from dac.core import Container, ActionNode, DataNode, GCK, NodeBase
+from dac.core.actions import VAB
 from dac.core.thread import ThreadWorker
 
 NAME, TYPE, REMARK = range(3)
@@ -93,10 +94,10 @@ class DataListWidget(QTreeWidget):
     sig_edit_data_requested = QtCore.pyqtSignal(DataNode)
     sig_action_update_requested = QtCore.pyqtSignal()
     
-    def __init__(self, parent: QWidget) -> None:
+    def __init__(self, parent: MainWindowBase) -> None:
         super().__init__(parent)
         self._STYLE = self.style()
-
+        self._parent_win = parent
         self._container: Container = None
 
         self.setHeaderLabels(["Name", "Type", "Remark"])
@@ -223,10 +224,10 @@ class ActionListWidget(QTreeWidget):
         ActionNode.ActionStatus.FAILED: QStyle.StandardPixmap.SP_DialogCancelButton,
     }
 
-    def __init__(self, parent: QWidget) -> None:
+    def __init__(self, parent: MainWindowBase) -> None:
         super().__init__(parent)
         self._STYLE = self.style()
-
+        self._parent_win = parent
         self._container: Container = None
         self._cids = []
 
@@ -262,6 +263,9 @@ class ActionListWidget(QTreeWidget):
         if (container := self._container) is None:
             return
         params = container.prepare_params_for_action(action)
+
+        if isinstance(action, VAB):
+            action.figure = self._parent_win.figure
 
         action.pre_run()
         rst = action(**params)
@@ -385,7 +389,7 @@ class ActionListWidget(QTreeWidget):
 class NodeEditorWidget(QWidget):
     sig_return_node = QtCore.pyqtSignal(NodeBase, dict, bool)
 
-    def __init__(self, parent: QWidget):
+    def __init__(self, parent: MainWindowBase):
         super().__init__(parent)
 
         vlayout = QtWidgets.QVBoxLayout(self)

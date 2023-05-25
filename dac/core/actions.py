@@ -24,10 +24,10 @@ PAB = ProcessActionBase
 VAB = VisualizeActionBase
 
 class SimpleAction(ActionBase):
-    CAPTION = "Simple Action"
+    CAPTION = "Simple action"
 
 class SimpleGlobalAction(ActionBase):
-    CAPTION = "Simple Global Action"
+    CAPTION = "Simple global action"
 
 class Separator(ActionBase):
     CAPTION = "--- [Separator] ---"

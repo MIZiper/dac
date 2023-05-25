@@ -112,7 +112,7 @@ class ActionNode(NodeBase):
                     cfg[key] = ActionNode.Annotation2Config(param.annotation)
                 else:
                     cfg[key] = "<Any>"
-            if (ret_ann:=self._SIGNATURE.return_annotation) is not inspect._empty or ret_ann.__name__!="list":
+            if (ret_ann:=self._SIGNATURE.return_annotation) is not inspect._empty and ret_ann.__name__!="list":
                 self.out_name = f"<{ret_ann.__name__}>"
                 
         com_config = {
