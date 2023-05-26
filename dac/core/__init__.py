@@ -80,12 +80,15 @@ class ActionNode(NodeBase):
 
     @staticmethod
     def Annotation2Config(ann: type | GenericAlias):
-        if ann.__name__=="list" and ann is not list: # type(list[...]) is GenericAlias
+        if hasattr(ann, '_fields'): # namedtuple
+            return [f"[{f}]" for f in ann._fields]
+        elif isinstance(ann, GenericAlias): # ok: list[], tuple[]; nok: dict[], type[]
             return [
-                f"<{t.__name__}>" if not hasattr(t, '_fields') else [f"[{f}]" for f in t._fields] # namedtuple
+                ActionNode.Annotation2Config(t)
                 for t in ann.__args__
             ]
-        return f"<{ann.__name__}>"
+        else:
+            return f"<{ann.__name__}>"
 
     def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
         super().__init__(name=self.CAPTION, uuid=uuid)
@@ -249,6 +252,7 @@ class Container:
                 node_names = value
                 value = [self.get_node_of_type(node_name, node_type) for node_name in node_names]
                 # TODO: remove the potential `None`s
+            # TODO: use recursive like `Annotation2Config`, for the list-of-tuple-of-sth or tuple-of-list-of-sth
 
             params[key] = value
             
