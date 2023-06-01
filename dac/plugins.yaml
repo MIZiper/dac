@@ -1,0 +1,18 @@
+alias:
+  dd: dac.core.data
+  da: dac.core.actions
+  mt: dac.modules.timedata
+
+data:
+  _: # for now only add data to global context
+  - /dd/SimpleDefinition
+
+actions:
+  _: # the actions for global context
+  - /da/SimpleGlobalAction
+  
+  /dd/SimpleDefinition:
+  - /da/SimpleAction
+  - "[Time data]" # section hint
+  - dac.modules.timedata.construct.SignalConstructAction # same as /mt/construct.SignalConstructAction
+  - /mt/actions.ShowTimeDataAction

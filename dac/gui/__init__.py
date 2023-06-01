@@ -160,7 +160,10 @@ class DataListWidget(QTreeWidget):
                 return cb_creation
             
             for n_t in Container.GetGlobalDataTypes():
-                menu.addAction(n_t.__name__).triggered.connect(cb_creation_gen(n_t))
+                if isinstance(n_t, str):
+                    menu.addAction(n_t).setEnabled(False)
+                else:
+                    menu.addAction(n_t.__name__).triggered.connect(cb_creation_gen(n_t))
         else:
             def cb_activate_gen(key_object):
                 def cb_activate():
@@ -185,6 +188,7 @@ class DataListWidget(QTreeWidget):
 
                 return cb_del
             
+            menu.addSeparator()
             menu.addAction("Delete").triggered.connect(cb_del_gen(node_object))
 
         menu.exec(self.viewport().mapToGlobal(pos))
@@ -301,8 +305,8 @@ class ActionListWidget(QTreeWidget):
                 return cb_creation
             
             for a_t in container.ActionTypesInCurrentContext:
-                if a_t is None:
-                    menu.addSeparator()
+                if isinstance(a_t, str):
+                    menu.addAction(a_t).setEnabled(False)
                 else:
                     menu.addAction(a_t.CAPTION).triggered.connect(cb_creation_gen(a_t))
         else:
@@ -359,6 +363,7 @@ class ActionListWidget(QTreeWidget):
 
             # TODO: change to drag&drop, mime data using indexes
             
+            menu.addSeparator()
             menu.addAction("Delete").triggered.connect(cb_del_gen(acts))
 
         menu.exec(self.viewport().mapToGlobal(pos))

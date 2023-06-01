@@ -1,5 +1,5 @@
 from os import path
-import json
+import json, yaml, re
 
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtCore import Qt
@@ -120,19 +120,6 @@ class MainWindow(MainWindowBase):
         return super()._create_status()
 
     def _route_signals(self):
-        from dac.core.data import SimpleDefinition
-        from dac.core.actions import SimpleAction, SimpleGlobalAction
-
-        Container.RegisterGlobalContextAction(SimpleGlobalAction)
-        Container.RegisterGlobalDataType(SimpleDefinition)
-        Container.RegisterContextAction(SimpleDefinition, SimpleAction)
-
-        from dac.modules.timedata.construct import SignalConstructAction
-        from dac.modules.timedata.actions import ShowTimeDataAction
-
-        Container.RegisterContextAction(SimpleDefinition, SignalConstructAction)
-        Container.RegisterContextAction(SimpleDefinition, ShowTimeDataAction)
-
         self.data_list_widget.sig_edit_data_requested.connect(self.node_editor.edit_node)
         self.action_list_widget.sig_edit_action_requested.connect(self.node_editor.edit_node)
         self.data_list_widget.sig_action_update_requested.connect(
@@ -143,6 +130,36 @@ class MainWindow(MainWindowBase):
         )
         self.node_editor.sig_return_node.connect(self.data_list_widget.action_apply_node_config)
         self.node_editor.sig_return_node.connect(self.action_list_widget.action_apply_node_config)
+
+    def use_plugins(self, setting_fpath: str):
+        alias_pattern = re.compile("^/(?P<alias_name>.+)/(?P<rest>.+)")
+        def get_node_type(cls_path: str) -> str | type[NodeBase]:
+            if cls_path[0]=="[" and cls_path[-1]=="]":
+                return cls_path # just str as section string
+            
+            if (rst:=alias_pattern.search(cls_path)):
+                cls_path = alias[rst['alias_name']]+"."+rst['rest']
+            return Container.GetClass(cls_path)
+
+        with open(setting_fpath, mode="r", encoding="utf8") as fp:
+            setting = yaml.load(fp, Loader=yaml.BaseLoader)
+
+            alias = setting['alias']
+
+            for gdts in setting['data']["_"]: # global_data_type_string
+                node_type = get_node_type(gdts)
+                Container.RegisterGlobalDataType(node_type)
+
+            for dts, catss in setting['actions'].items(): # context_action_type_string_s, data_type_string
+                if dts=="_": # global_context
+                    for cats in catss:
+                        node_type = get_node_type(cats)
+                        Container.RegisterGlobalContextAction(node_type)
+                else:
+                    data_type = get_node_type(dts)
+                    for cats in catss:
+                        action_type = get_node_type(cats)
+                        Container.RegisterContextAction(data_type, action_type)
 
     def apply_config(self, config: dict):
         if self.project_config_fpath:
@@ -166,5 +183,10 @@ if __name__=="__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
     win = MainWindow()
+
+    # add splash progress for module loading
+    setting_fpath = path.join(path.dirname(__file__), "..", "plugins.yaml")
+    win.use_plugins(setting_fpath)
+
     win.show()
     app.exit(app.exec())

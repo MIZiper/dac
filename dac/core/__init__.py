@@ -314,26 +314,26 @@ class Container:
         return getattr(module, class_name)
 
     @staticmethod
-    def RegisterGlobalDataType(node_type: type[DataNode]):
+    def RegisterGlobalDataType(node_type: type[DataNode] | str):
         Container._global_node_types.append(node_type)
 
     @staticmethod
-    def GetGlobalDataTypes() -> list[type[DataNode]]:
+    def GetGlobalDataTypes() -> list[type[DataNode] | str]:
         return Container._global_node_types
 
     @staticmethod
-    def RegisterContextAction(context_type: type[DataNode], action_type: type[ActionNode]):
+    def RegisterContextAction(context_type: type[DataNode], action_type: type[ActionNode] | str):
         Container._context_action_types[context_type].append(action_type)
 
     @staticmethod
-    def GetContextActionTypes(context_type: type[DataNode]) -> list[type[ActionNode]]:
+    def GetContextActionTypes(context_type: type[DataNode]) -> list[type[ActionNode] | str]:
         return Container._context_action_types[context_type]
     
     @staticmethod
-    def RegisterGlobalContextAction(action_type: type[ActionNode]):
+    def RegisterGlobalContextAction(action_type: type[ActionNode] | str):
         Container.RegisterContextAction(GlobalContextKey, action_type)
 
     @property
-    def ActionTypesInCurrentContext(self) -> list[type[ActionNode]]:
+    def ActionTypesInCurrentContext(self) -> list[type[ActionNode] | str]:
         context_type = type(self._current_key)
         return Container.GetContextActionTypes(context_type)
