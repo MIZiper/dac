@@ -107,6 +107,7 @@ class DataListWidget(QTreeWidget):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.action_context_requested)
         self.itemClicked.connect(self.action_item_clicked)
+        self.itemDoubleClicked.connect(self.action_item_dblclicked)
 
     def refresh(self, container: Container=None):
         self.clear()
@@ -201,6 +202,20 @@ class DataListWidget(QTreeWidget):
             return
         self.sig_edit_data_requested.emit(data)
 
+    def action_item_dblclicked(self, item: QTreeWidgetItem, col: int):
+        if (container := self._container) is None or not (node_object := item.data(NAME, Qt.ItemDataRole.UserRole)):
+            return
+        
+        def cb_activate(key_object):
+            container.activate_context(key_object)
+            self.sig_action_update_requested.emit()
+            self.refresh()
+
+        if node_object is container.current_key:
+            cb_activate(GCK)
+        else:
+            cb_activate(node_object)
+
     def mousePressEvent(self, e: QMouseEvent) -> None:
         # mid-btn-click => copy name. mid-button-click won't trigger 'itemClicked'
         if e.button()==Qt.MouseButton.MidButton:
@@ -288,6 +303,7 @@ class ActionListWidget(QTreeWidget):
             for e_rst in rst:
                 e_rst: DataNode
                 current_context.add_node(e_rst)
+            self.sig_data_update_requested.emit()
         else:
             pass # no output
 
@@ -328,7 +344,9 @@ class ActionListWidget(QTreeWidget):
                         a.apply_construct_config(oac)
 
                         container.actions.append(a)
-                    self.refresh()
+
+                    if context_key is container.current_key:
+                        self.refresh() # if not copy to self, no need to refresh
 
                 return cb_cp2
             
@@ -354,8 +372,9 @@ class ActionListWidget(QTreeWidget):
             
             if container.current_key is not GCK:
                 cp2menu = menu.addMenu("Copy to")
+                current_type = type(container.current_key)
                 for node_type, node_name, node in container.GlobalContext.NodeIter:
-                    if isinstance(node_type, node_type):
+                    if isinstance(node, current_type):
                         # only allow copying to context of same type
                         cp2menu.addAction(node_name).triggered.connect(
                             cb_cp2_gen(acts, node)
@@ -437,7 +456,7 @@ class NodeEditorWidget(QWidget):
 
     def edit_node(self, node: NodeBase):
         s = yaml.dump(node.get_construct_config())
-        self.editor.setText(s)
+        self.editor.setText(s + "\n# " + type(node).__name__)
         self._current_node = node
 
     def action_apply(self, fire=True):
