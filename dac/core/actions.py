@@ -52,6 +52,8 @@ class SimpleGlobalAction(ActionBase):
 
 class Separator(ActionBase):
     CAPTION = "--- [Separator] ---"
+    def __call__(self):
+        pass
     
 class RemoteProcessActionBase(PAB):
     # distribute the calculation (and container) to remote (cloud)

@@ -1,6 +1,5 @@
 from uuid import uuid4
 from collections import defaultdict
-from dataclasses import dataclass, asdict
 from typing import Any
 from types import GenericAlias
 import inspect, importlib
@@ -23,13 +22,10 @@ class NodeBase:
         return self._hash
     
     def get_construct_config(self) -> dict:
-        return {
-            "name": self.name,
-            **self._construct_config,
-        }
+        raise NotImplementedError
 
     def apply_construct_config(self, construct_config: dict):
-        self.name = construct_config.get("name", None)
+        raise NotImplementedError
 
     def get_save_config(self) -> dict:
         cls = self.__class__
@@ -40,30 +36,20 @@ class NodeBase:
             **self.get_construct_config(),
         }
 
-    @classmethod
-    def parse_save_config(cls, save_config: dict):
-        ...
-
 
 
 class DataNode(NodeBase):
-    ...
-
-class DataClassNode(DataNode):
-    def __post_init__(self):
-        super().__init__(name=self.name)
-
     def get_construct_config(self) -> dict:
-        return asdict(self)
+        return {
+            "name": self.name,
+            **self._construct_config,
+        }
     
     def apply_construct_config(self, construct_config: dict):
-        for key, value in construct_config.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
+        self.name = construct_config.get("name")
 
-@dataclass(eq=False)
-class GlobalContextKey(DataClassNode):
-    name: str
+class GlobalContextKey(DataNode):
+    pass
 
 GCK = GlobalContextKey("Global Context Key")
 
@@ -171,7 +157,7 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
     def add_node(self, node: NodeBase):
         node_type = type(node)
         if node_type in self:
-            self[node_type][node.name] = node
+            self[node_type][node.name] = node # in global context, should delete original node related actions (potential error)
         else:
             self[node_type] = {node.name: node}
 
@@ -192,6 +178,7 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
 class Container:
     _global_node_types = []
     _context_action_types = defaultdict(list)
+    # _node_agencies # when specific type not found
 
     def __init__(self) -> None:
         self.actions: list[ActionNode] = []
@@ -216,6 +203,7 @@ class Container:
         elif self.current_key is not GCK:
             return self.GlobalContext.get_node_of_type(node_name, node_type)
         else:
+            # search in agency (?)
             return None
 
     def activate_context(self, context_key: DataNode) -> DataContext:
@@ -246,6 +234,7 @@ class Container:
                 node_name = value
                 if (value:=self.get_node_of_type(node_name, node_type)) is None:
                     raise Exception(f"Node '{node_name}' of '{node_type.__name__}' not found.")
+            # elif ann in node_agencies: # or list[agency_type]
             elif ann.__name__=="list" and (
                 issubclass((node_type:=ann.__args__[0]), DataNode)
             ): # assert type(ann) is GenericAlias # list[...]
@@ -296,8 +285,9 @@ class Container:
 
             act_class: type[ActionNode] = Container.GetClass(cls_path)
             if '_context_' in act_config:
+                if act_config['_context_'] not in nodes:
+                    continue
                 context_key = nodes[act_config['_context_']]
-                # TODO: error if "_context_" was deleted before saving
                 del act_config['_context_']
             else:
                 context_key = GCK

@@ -10,12 +10,14 @@ data:
 actions:
   _: # the actions for global context
   - /da/SimpleGlobalAction
+  - /da/Separator
   
   /dd/SimpleDefinition:
   - /da/SimpleAction
   - "[Time data]" # section hint
   - dac.modules.timedata.construct.SignalConstructAction # same as /mt/construct.SignalConstructAction
   - /mt/actions.ShowTimeDataAction
+  - /da/Separator
 
 quick_actions: # temporary action creation for immediate run (action take only one parameter)
   /dd/SimpleDefinition:
