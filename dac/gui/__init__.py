@@ -126,20 +126,20 @@ class DataListWidget(QTreeWidget):
             itm.setText(NAME, node_name)
             itm.setText(TYPE, node_type.__name__)
             itm.setData(NAME, Qt.ItemDataRole.UserRole, node_object)
-            if container._current_key is node_object:
+            if container.current_key is node_object:
                 itm.setIcon(NAME, self._STYLE.standardIcon(QStyle.StandardPixmap.SP_CommandLink))
         global_item.setExpanded(True)
 
         local_item = QtWidgets.QTreeWidgetItem(self)
         local_item.setText(NAME, "N/A")
         local_item.setText(TYPE, "Local Nodes")
-        if container._current_key is not GCK:
-            local_item.setText(NAME, container._current_key.name)
+        if container.current_key is not GCK:
+            local_item.setText(NAME, container.current_key.name)
             for node_type, node_name, node_object in container.CurrentContext.NodeIter:
                 itm = QtWidgets.QTreeWidgetItem(local_item)
                 itm.setText(NAME, node_name)
                 itm.setText(TYPE, node_type.__name__)
-                itm.setDisabled(True)
+                itm.setDisabled(True) # TODO: enable for editing, and quick_actions context menu
         local_item.setExpanded(True)
 
     def action_context_requested(self, pos: QtCore.QPoint):
@@ -172,14 +172,16 @@ class DataListWidget(QTreeWidget):
                     self.refresh()
                 return cb_activate
             
-            if node_object is container._current_key:
+            if node_object is container.current_key:
                 menu.addAction("De-activate").triggered.connect(cb_activate_gen(GCK))
             else:
                 menu.addAction("Activate").triggered.connect(cb_activate_gen(node_object))
 
+            # TODO: add quick actions here
+
             def cb_del_gen(key_object):
                 def cb_del():
-                    if key_object is container._current_key:
+                    if key_object is container.current_key:
                         container.activate_context(GCK)
                         self.sig_action_update_requested.emit()
 
@@ -271,6 +273,8 @@ class ActionListWidget(QTreeWidget):
         if isinstance(action, VAB):
             action.figure = self._parent_win.figure
 
+        # TODO: thread handler?
+
         action.pre_run()
         rst = action(**params)
         action.post_run()
@@ -297,9 +301,10 @@ class ActionListWidget(QTreeWidget):
         menu = QtWidgets.QMenu("ActionMenu")
 
         if not itms:
+            # NOTE: when tree is full (and with scrollbar), it's not easy to trigger
             def cb_creation_gen(a_t: type[ActionNode]):
                 def cb_creation():
-                    a = a_t(container._current_key)
+                    a = a_t(container.current_key)
                     container.actions.append(a)
                     self.refresh()
                 return cb_creation
@@ -347,7 +352,7 @@ class ActionListWidget(QTreeWidget):
                     
                 return cb_del
             
-            if container._current_key is not GCK:
+            if container.current_key is not GCK:
                 cp2menu = menu.addMenu("Copy to")
                 for node_type, node_name, node in container.GlobalContext.NodeIter:
                     if isinstance(node_type, node_type):
@@ -358,7 +363,7 @@ class ActionListWidget(QTreeWidget):
 
             mvb4menu = menu.addMenu("Move after")
             for oa in container.actions:
-                if oa._context_key is container._current_key and oa not in acts:
+                if oa.context_key is container.current_key and oa not in acts:
                     mvb4menu.addAction(oa.name).triggered.connect(cb_mvaft_gen(acts, oa))
 
             # TODO: change to drag&drop, mime data using indexes

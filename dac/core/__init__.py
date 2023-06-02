@@ -96,7 +96,7 @@ class ActionNode(NodeBase):
         self.status = ActionNode.ActionStatus.INIT
         self.out_name = None
 
-        self._context_key = context_key
+        self.context_key = context_key
         self._SIGNATURE = inspect.signature(self.__call__)
         # `self._construct_config` has same parameters for `__call__`
 
@@ -144,8 +144,8 @@ class ActionNode(NodeBase):
     def get_save_config(self) -> dict:
         cfg = super().get_save_config()
 
-        if self._context_key is not GCK:
-            cfg["_context_"] = self._context_key.uuid
+        if self.context_key is not GCK:
+            cfg["_context_"] = self.context_key.uuid
 
         return cfg
     
@@ -196,7 +196,7 @@ class Container:
     def __init__(self) -> None:
         self.actions: list[ActionNode] = []
         self.contexts: dict[DataNode, DataContext] = defaultdict(lambda: DataContext(self))
-        self._current_key: DataNode = GCK
+        self.current_key: DataNode = GCK
 
     @property
     def GlobalContext(self) -> DataContext:
@@ -204,22 +204,22 @@ class Container:
 
     @property
     def CurrentContext(self) -> DataContext:
-        return self.contexts[self._current_key]
+        return self.contexts[self.current_key]
     
     @property
     def ActionsInCurrentContext(self) -> list[ActionNode]:
-        return filter(lambda a: a._context_key is self._current_key, self.actions)
+        return filter(lambda a: a.context_key is self.current_key, self.actions)
 
     def get_node_of_type(self, node_name: str, node_type: type[NodeBase]) -> NodeBase:
         if node:=self.CurrentContext.get_node_of_type(node_name, node_type):
             return node
-        elif self._current_key is not GCK:
+        elif self.current_key is not GCK:
             return self.GlobalContext.get_node_of_type(node_name, node_type)
         else:
             return None
 
     def activate_context(self, context_key: DataNode) -> DataContext:
-        self._current_key = context_key
+        self.current_key = context_key
         return self.CurrentContext
 
     def get_context(self, context_key: DataNode) -> DataContext:
@@ -229,7 +229,7 @@ class Container:
         del self.GlobalContext[type(node_object)][node_object.name]
         if node_object in self.contexts:
             del self.contexts[node_object]
-        self.actions = [action for action in self.actions if action._context_key is not node_object]
+        self.actions = [action for action in self.actions if action.context_key is not node_object]
     
     def prepare_params_for_action(self, action: ActionNode) -> dict:
         params = {}
@@ -262,6 +262,9 @@ class Container:
         return {
             "actions": [action.get_save_config() for action in self.actions],
             "global_nodes": [n_o.get_save_config() for n_t, n_n, n_o in self.GlobalContext.NodeIter],
+            # add combo_action definitions, combo_action = action1 + action2 + action3 ...
+            # able to define pre-defined parameters and user-input parameters
+            # only available in current project, but can be saved as a template
         }
 
     @classmethod
@@ -335,5 +338,5 @@ class Container:
 
     @property
     def ActionTypesInCurrentContext(self) -> list[type[ActionNode] | str]:
-        context_type = type(self._current_key)
+        context_type = type(self.current_key)
         return Container.GetContextActionTypes(context_type)

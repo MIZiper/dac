@@ -16,3 +16,7 @@ actions:
   - "[Time data]" # section hint
   - dac.modules.timedata.construct.SignalConstructAction # same as /mt/construct.SignalConstructAction
   - /mt/actions.ShowTimeDataAction
+
+quick_actions: # temporary action creation for immediate run (action take only one parameter)
+  /dd/SimpleDefinition:
+  - /da/SimpleAction
