@@ -53,6 +53,9 @@ class GlobalContextKey(DataNode):
 
 GCK = GlobalContextKey("Global Context Key")
 
+class NodeNotFoundError(Exception):
+    pass
+
 
 
 class ActionNode(NodeBase):
@@ -178,7 +181,7 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
 class Container:
     _global_node_types = []
     _context_action_types = defaultdict(list)
-    # _node_agencies # when specific type not found
+    _type_agencies = {}
 
     def __init__(self) -> None:
         self.actions: list[ActionNode] = []
@@ -218,6 +221,31 @@ class Container:
         if node_object in self.contexts:
             del self.contexts[node_object]
         self.actions = [action for action in self.actions if action.context_key is not node_object]
+
+    def _get_value_of_annotation(self, ann: type | GenericAlias, config: Any):
+        if issubclass(ann, DataNode):
+            if (value:=self.get_node_of_type(node_name=config, node_type=ann)) is None:
+                raise NodeNotFoundError(f"Node '{config}' of '{ann.__name__}' not found.")
+            return value
+        elif isinstance(ann, GenericAlias):
+            if ann.__name__=="list" and len(ann.__args__)==1:
+                value = []
+                for c in config:
+                    try:
+                        v = self._get_value_of_annotation(ann.__args__[0], c)
+                    except NodeNotFoundError:
+                        continue
+                    value.append(v)
+            elif ann.__name__=="tuple":
+                value = [self._get_value_of_annotation(a, c) for a, c in zip(ann.__args__, config)]
+            else:
+                raise NotImplementedError
+            
+            return value
+        elif ann in Container._type_agencies:
+            return Container._type_agencies[ann](config)
+        else:
+            return config
     
     def prepare_params_for_action(self, action: ActionNode) -> dict:
         params = {}
@@ -227,23 +255,8 @@ class Container:
             if value is inspect._empty:
                 # not provided and no default
                 raise Exception(f"Parameter '{key}' not provided.")
-            
-            ann = param.annotation
-            if issubclass(ann, DataNode):
-                node_type = ann
-                node_name = value
-                if (value:=self.get_node_of_type(node_name, node_type)) is None:
-                    raise Exception(f"Node '{node_name}' of '{node_type.__name__}' not found.")
-            # elif ann in node_agencies: # or list[agency_type]
-            elif ann.__name__=="list" and (
-                issubclass((node_type:=ann.__args__[0]), DataNode)
-            ): # assert type(ann) is GenericAlias # list[...]
-                node_names = value
-                value = [self.get_node_of_type(node_name, node_type) for node_name in node_names]
-                # TODO: remove the potential `None`s
-            # TODO: use recursive like `Annotation2Config`, for the list-of-tuple-of-sth or tuple-of-list-of-sth
 
-            params[key] = value
+            params[key] = self._get_value_of_annotation(param.annotation, value)
             
         return params
     
@@ -330,3 +343,12 @@ class Container:
     def ActionTypesInCurrentContext(self) -> list[type[ActionNode] | str]:
         context_type = type(self.current_key)
         return Container.GetContextActionTypes(context_type)
+    
+    @staticmethod
+    def RegisterNodeTypeAgency(node_type: type, agent_func: callable):
+        # # `agent_func` can take any input,
+        # # normally take one var-representative string
+        # # and output an object
+        # def agent_func(arg: Any) -> Any:
+        #     ...
+        Container._type_agencies[node_type] = agent_func
