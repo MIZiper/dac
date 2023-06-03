@@ -158,6 +158,7 @@ class DataListWidget(QTreeWidget):
                     new_node = n_t(name="[New node]")
                     container.GlobalContext.add_node(new_node)
                     self.refresh()
+                    self.sig_edit_data_requested.emit(new_node)
                 return cb_creation
             
             for n_t in Container.GetGlobalDataTypes():
@@ -335,6 +336,7 @@ class ActionListWidget(QTreeWidget):
                     a = a_t(container.current_key)
                     container.actions.append(a)
                     self.refresh()
+                    self.sig_edit_action_requested.emit(a)
                 return cb_creation
             
             for a_t in container.ActionTypesInCurrentContext:
