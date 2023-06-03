@@ -10,7 +10,7 @@ from io import StringIO
 from functools import partial
 
 from dac.core import Container, ActionNode, DataNode, GCK, NodeBase
-from dac.core.actions import VAB
+from dac.core.actions import VAB, PAB
 from dac.core.thread import ThreadWorker
 
 NAME, TYPE, REMARK = range(3)
@@ -38,7 +38,7 @@ class MainWindowBase(QMainWindow):
         status.addPermanentWidget(self._progress_widget)
 
     def start_thread_worker(self, worker: ThreadWorker):
-        # TODO: worker.signals.message.connect()
+        worker.signals.message.connect(self.message) # TODO: direct to log widget
         self._progress_widget.add_worker(worker)
         self._thread_pool.start(worker)
 
@@ -285,30 +285,42 @@ class ActionListWidget(QTreeWidget):
             return
         params = container.prepare_params_for_action(action)
 
+        def completed(rst):
+            current_context = container.CurrentContext
+            if isinstance(rst, DataNode):
+                rst.name = action.out_name # what if out_name is None?
+                current_context.add_node(rst)
+                self.sig_data_update_requested.emit()
+            elif isinstance(rst, list):
+                for e_rst in rst:
+                    e_rst: DataNode # cautious if e_rst is not DataNode
+                    current_context.add_node(e_rst)
+                self.sig_data_update_requested.emit()
+            else:
+                pass # no output or other type_of_data
+
+            action.status = ActionNode.ActionStatus.COMPLETE # TODO: update accordingly
+            self.refresh()
+
         if isinstance(action, VAB):
             action.figure = self._parent_win.figure
 
-        # TODO: thread handler?
-
-        action.pre_run()
-        rst = action(**params)
-        action.post_run()
-
-        current_context = container.CurrentContext
-        if isinstance(rst, DataNode):
-            rst.name = action.out_name # what if out_name is None?
-            current_context.add_node(rst)
-            self.sig_data_update_requested.emit()
-        elif isinstance(rst, list):
-            for e_rst in rst:
-                e_rst: DataNode
-                current_context.add_node(e_rst)
-            self.sig_data_update_requested.emit()
+        if isinstance(action, PAB):
+            def fn(p, progress_emitter, logger):
+                action._progress = progress_emitter
+                action._message = logger
+                action.pre_run()
+                rst = action(**p)
+                action.post_run()
+                return rst
+            worker = ThreadWorker(fn=fn, caption=action.name, p=params)
+            worker.signals.result.connect(completed)
+            self._parent_win.start_thread_worker(worker)
         else:
-            pass # no output
-
-        action.status = ActionNode.ActionStatus.COMPLETE # TODO: update accordingly
-        self.refresh()
+            action.pre_run()
+            rst = action(**params)
+            action.post_run()
+            completed(rst)
 
     def action_context_requested(self, pos: QtCore.QPoint):
         if (container := self._container) is None:

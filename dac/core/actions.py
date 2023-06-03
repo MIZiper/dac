@@ -3,13 +3,23 @@ from matplotlib.figure import Figure
 from dac.core import DataNode
 from . import ActionNode
 
+from time import sleep
+
 class ActionBase(ActionNode): # needs thread
     QUICK_TASKS = []
     # the tasks to assist config input (e.g. browse files instead of filling manually)
     # NOTE: no thread for running the tasks, keep them simple
 
 class ProcessActionBase(ActionBase):
-    ...
+    def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
+        super().__init__(context_key, name, uuid)
+        self._progress = print
+        self._message = print
+
+    def progress(self, i, n):
+        self._progress(i, n)
+    def message(self, s):
+        self._message(s)
 
 class VisualizeActionBase(ActionBase):
     def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
@@ -47,8 +57,17 @@ VAB = VisualizeActionBase
 class SimpleAction(ActionBase):
     CAPTION = "Simple action"
 
-class SimpleGlobalAction(ActionBase):
+class SimpleGlobalAction(PAB):
     CAPTION = "Simple global action"
+    def __call__(self, sec: int=5, total: int=None):
+        if total:
+            for i in range(total):
+                self.message(f"Starting ... {i+1}/{total}")
+                sleep(sec)
+                self.progress(i+1, total)
+        else:
+            self.message(f"Starting unknown.")
+            sleep(sec)
 
 class Separator(ActionBase):
     CAPTION = "--- [Separator] ---"
