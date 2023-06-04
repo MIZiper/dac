@@ -2,6 +2,7 @@ from matplotlib.figure import Figure
 import inspect
 from dac.core import DataNode
 from . import ActionNode
+from .data import SimpleDefinition
 
 from time import sleep
 
@@ -59,7 +60,7 @@ class SimpleAction(ActionBase):
 
 class SimpleGlobalAction(PAB):
     CAPTION = "Simple global action"
-    def __call__(self, sec: int=5, total: int=None):
+    def __call__(self, sim: SimpleDefinition, sec: int=5, total: int=None):
         if total:
             for i in range(total):
                 self.message(f"Starting ... {i+1}/{total}")
@@ -77,44 +78,53 @@ class Separator(ActionBase):
 class SequenceActionBase(PAB, VAB):
     CAPTION = "Not implemented sequence"
     _SEQUENCE = []
+    _PRE_PARAMS = {}
     def __init_subclass__(cls, seq: list[tuple[type[ActionNode], dict]]) -> None:
         cls._SEQUENCE = seq
 
+        
         signatures = {}
+        all_pre_params = {}
         for act_type, pre_params in seq:
             signatures[act_type.__name__] = act_type._SIGNATURE
+            all_pre_params[act_type.__name__] = pre_params
 
+        cls._PRE_PARAMS = all_pre_params
         cls._SIGNATURE = signatures
     
     def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
         super().__init__(context_key, name, uuid)
-        self._construct_config = SequenceActionBase._GetCCFromSS(self._SIGNATURE)
+        self._construct_config = SequenceActionBase._GetCCFromSS(self._SIGNATURE, self._PRE_PARAMS)
 
     @staticmethod
-    def _GetCCFromSS(sig: inspect.Signature | dict, seq: list[tuple[type[ActionNode], dict]]=None):
-        # get construct config from signature & sequence
+    def _GetCCFromSS(sig: inspect.Signature | dict, pre_params: dict):
+        # get construct config from signature & pre_params
         cfg = {}
+        
         if isinstance(sig, inspect.Signature):
             for key, param in sig.parameters.items():
                 if key=="self":
                     continue
+                elif key in pre_params:
+                    cfg[key] = pre_params[key]
+                    # originally to remove params, but won't pass the prepare_params
                 elif param.default is not inspect._empty:
                     cfg[key] = param.default
                 elif param.annotation is not inspect._empty:
                     cfg[key] = ActionNode.Annotation2Config(param.annotation)
                 else:
                     cfg[key] = "<Any>"
-                # remove keys already in `pre_params`
             if (ret_ann:=sig.return_annotation) is not inspect._empty and ret_ann.__name__!="list":
                 ... # how to pass the return result?
         else:
             for subact_name, subact_sig in sig.items():
-                cfg[subact_name] = SequenceActionBase._GetCCFromSS(subact_sig)
+                cfg[subact_name] = SequenceActionBase._GetCCFromSS(subact_sig, pre_params.get(subact_name, {}))
 
         return cfg
     
-    def __call__(self, action_params: dict[str, dict]):
+    def __call__(self, **kwargs):
         # using dict => each action type can be used only once
+        print(kwargs)
         for act_type, pre_params in self._SEQUENCE:
             ...
 
@@ -124,10 +134,10 @@ class A1(PAB):
     pass
 class A2(VAB):
     pass
-class A1A2(SAB, seq=[(A1, {}), (A2, {})]):
+class A1A2(SAB, seq=[(SimpleGlobalAction, {}), (A2, {'kwds': 3})]):
     pass
-class A1A2Simple(SAB, seq=[(A1A2, {}), (SimpleGlobalAction, {})]):
-    pass
+class A1A2Simple(SAB, seq=[(A1A2, {}), (SimpleGlobalAction, {'total': 3})]):
+    CAPTION = "Multiple actions"
     
 class RemoteProcessActionBase(PAB):
     # distribute the calculation (and container) to remote (cloud)
