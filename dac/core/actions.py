@@ -115,11 +115,21 @@ class SequenceActionBase(PAB, VAB):
 
         return cfg
     
-    def __call__(self, **kwargs):
+    def __call__(self, **params):
         # using dict => each action type can be used only once
-        print(kwargs)
-        for act_type in self._SEQUENCE:
+
+        def embed_progross():
             ...
+        
+        n = len(self._SEQUENCE)
+        for i, subact_type in enumerate(self._SEQUENCE):
+            subact_params = params.get(subact_type.__name__)
+            self.message()
+            if issubclass(subact_type, VAB):
+                ...
+            elif issubclass(subact_type, PAB):
+                ...
+            self.progress(i+1, n)
 
 SAB = SequenceActionBase
     

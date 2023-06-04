@@ -255,6 +255,8 @@ class Container:
         params = {}
         if isinstance(signature, inspect.Signature):
             for key, param in signature.parameters.items():
+                if key=="self":
+                    continue
                 value = construct_config.get(key, param.default)
                 if value is inspect._empty:
                     # not provided and no default
