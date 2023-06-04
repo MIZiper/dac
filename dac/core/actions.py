@@ -78,36 +78,29 @@ class Separator(ActionBase):
 class SequenceActionBase(PAB, VAB):
     CAPTION = "Not implemented sequence"
     _SEQUENCE = []
-    _PRE_PARAMS = {}
-    def __init_subclass__(cls, seq: list[tuple[type[ActionNode], dict]]) -> None:
-        cls._SEQUENCE = seq
 
+    def __init_subclass__(cls, seq: list[type[ActionNode]]) -> None:
+        cls._SEQUENCE = seq
         
         signatures = {}
-        all_pre_params = {}
-        for act_type, pre_params in seq:
+        for act_type in seq:
             signatures[act_type.__name__] = act_type._SIGNATURE
-            all_pre_params[act_type.__name__] = pre_params
 
-        cls._PRE_PARAMS = all_pre_params
         cls._SIGNATURE = signatures
     
     def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
         super().__init__(context_key, name, uuid)
-        self._construct_config = SequenceActionBase._GetCCFromSS(self._SIGNATURE, self._PRE_PARAMS)
+        self._construct_config = SequenceActionBase._GetCCFromS(self._SIGNATURE)
 
     @staticmethod
-    def _GetCCFromSS(sig: inspect.Signature | dict, pre_params: dict):
-        # get construct config from signature & pre_params
+    def _GetCCFromS(sig: inspect.Signature | dict):
+        # get construct config from signature
         cfg = {}
         
         if isinstance(sig, inspect.Signature):
             for key, param in sig.parameters.items():
                 if key=="self":
                     continue
-                elif key in pre_params:
-                    cfg[key] = pre_params[key]
-                    # originally to remove params, but won't pass the prepare_params
                 elif param.default is not inspect._empty:
                     cfg[key] = param.default
                 elif param.annotation is not inspect._empty:
@@ -118,14 +111,14 @@ class SequenceActionBase(PAB, VAB):
                 ... # how to pass the return result?
         else:
             for subact_name, subact_sig in sig.items():
-                cfg[subact_name] = SequenceActionBase._GetCCFromSS(subact_sig, pre_params.get(subact_name, {}))
+                cfg[subact_name] = SequenceActionBase._GetCCFromS(subact_sig)
 
         return cfg
     
     def __call__(self, **kwargs):
         # using dict => each action type can be used only once
         print(kwargs)
-        for act_type, pre_params in self._SEQUENCE:
+        for act_type in self._SEQUENCE:
             ...
 
 SAB = SequenceActionBase
@@ -134,9 +127,9 @@ class A1(PAB):
     pass
 class A2(VAB):
     pass
-class A1A2(SAB, seq=[(SimpleGlobalAction, {}), (A2, {'kwds': 3})]):
+class A1A2(SAB, seq=[SimpleGlobalAction, A2]):
     pass
-class A1A2Simple(SAB, seq=[(A1A2, {}), (SimpleGlobalAction, {'total': 3})]):
+class A1A2Simple(SAB, seq=[A1A2, SimpleGlobalAction]):
     CAPTION = "Multiple actions"
     
 class RemoteProcessActionBase(PAB):
