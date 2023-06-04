@@ -284,7 +284,7 @@ class ActionListWidget(QTreeWidget):
     def run_action(self, action: ActionNode):
         if (container := self._container) is None:
             return
-        params = container.prepare_params_for_action(action)
+        params = container.prepare_params_for_action(action._SIGNATURE, action._construct_config)
 
         def completed(rst):
             current_context = container.CurrentContext

@@ -60,6 +60,10 @@ class NodeNotFoundError(Exception):
 
 class ActionNode(NodeBase):
     CAPTION = "Not implemented action"
+    _SIGNATURE = None
+
+    def __init_subclass__(cls) -> None:
+        cls._SIGNATURE = inspect.signature(cls.__call__)
 
     class ActionStatus(IntEnum):
         INIT = 0
@@ -86,8 +90,6 @@ class ActionNode(NodeBase):
         self.out_name = None
 
         self.context_key = context_key
-        self._SIGNATURE = inspect.signature(self.__call__)
-        # `self._construct_config` has same parameters for `__call__`
 
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         # annotations have to be specified; if there is 'list', `list[...]` must be used
@@ -98,7 +100,9 @@ class ActionNode(NodeBase):
         if not self._construct_config: # init
             cfg = self._construct_config
             for key, param in self._SIGNATURE.parameters.items():
-                if param.default is not inspect._empty:
+                if key=="self":
+                    continue
+                elif param.default is not inspect._empty:
                     cfg[key] = param.default
                 elif param.annotation is not inspect._empty:
                     cfg[key] = ActionNode.Annotation2Config(param.annotation)
@@ -247,17 +251,20 @@ class Container:
         else:
             return config
     
-    def prepare_params_for_action(self, action: ActionNode) -> dict:
+    def prepare_params_for_action(self, signature: inspect.Signature | dict, construct_config: dict) -> dict:
         params = {}
-        construct_config = action._construct_config
-        for key, param in action._SIGNATURE.parameters.items():
-            value = construct_config.get(key, param.default)
-            if value is inspect._empty:
-                # not provided and no default
-                raise Exception(f"Parameter '{key}' not provided.")
+        if isinstance(signature, inspect.Signature):
+            for key, param in signature.parameters.items():
+                value = construct_config.get(key, param.default)
+                if value is inspect._empty:
+                    # not provided and no default
+                    raise Exception(f"Parameter '{key}' not provided.")
 
-            params[key] = self._get_value_of_annotation(param.annotation, value)
-            
+                params[key] = self._get_value_of_annotation(param.annotation, value)
+        else: # signature is a dict, SAB
+            for subact_name, subact_signature in signature.items():
+                subact_config = construct_config.get(subact_name, {})
+                params[subact_name] = self.prepare_params_for_action(subact_signature, subact_config)
         return params
     
     def get_save_config(self):

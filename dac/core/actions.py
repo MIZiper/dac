@@ -1,5 +1,5 @@
 from matplotlib.figure import Figure
-
+import inspect
 from dac.core import DataNode
 from . import ActionNode
 
@@ -73,6 +73,61 @@ class Separator(ActionBase):
     CAPTION = "--- [Separator] ---"
     def __call__(self):
         pass
+
+class SequenceActionBase(PAB, VAB):
+    CAPTION = "Not implemented sequence"
+    _SEQUENCE = []
+    def __init_subclass__(cls, seq: list[tuple[type[ActionNode], dict]]) -> None:
+        cls._SEQUENCE = seq
+
+        signatures = {}
+        for act_type, pre_params in seq:
+            signatures[act_type.__name__] = act_type._SIGNATURE
+
+        cls._SIGNATURE = signatures
+    
+    def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
+        super().__init__(context_key, name, uuid)
+        self._construct_config = SequenceActionBase._GetCCFromSS(self._SIGNATURE)
+
+    @staticmethod
+    def _GetCCFromSS(sig: inspect.Signature | dict, seq: list[tuple[type[ActionNode], dict]]=None):
+        # get construct config from signature & sequence
+        cfg = {}
+        if isinstance(sig, inspect.Signature):
+            for key, param in sig.parameters.items():
+                if key=="self":
+                    continue
+                elif param.default is not inspect._empty:
+                    cfg[key] = param.default
+                elif param.annotation is not inspect._empty:
+                    cfg[key] = ActionNode.Annotation2Config(param.annotation)
+                else:
+                    cfg[key] = "<Any>"
+                # remove keys already in `pre_params`
+            if (ret_ann:=sig.return_annotation) is not inspect._empty and ret_ann.__name__!="list":
+                ... # how to pass the return result?
+        else:
+            for subact_name, subact_sig in sig.items():
+                cfg[subact_name] = SequenceActionBase._GetCCFromSS(subact_sig)
+
+        return cfg
+    
+    def __call__(self, action_params: dict[str, dict]):
+        # using dict => each action type can be used only once
+        for act_type, pre_params in self._SEQUENCE:
+            ...
+
+SAB = SequenceActionBase
+    
+class A1(PAB):
+    pass
+class A2(VAB):
+    pass
+class A1A2(SAB, seq=[(A1, {}), (A2, {})]):
+    pass
+class A1A2Simple(SAB, seq=[(A1A2, {}), (SimpleGlobalAction, {})]):
+    pass
     
 class RemoteProcessActionBase(PAB):
     # distribute the calculation (and container) to remote (cloud)
