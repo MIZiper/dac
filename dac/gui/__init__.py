@@ -43,6 +43,7 @@ class MainWindowBase(QMainWindow):
         self._thread_pool.start(worker)
 
     def message(self, msg):
+        print(msg)
         self.statusBar().showMessage(msg, 3000)
 
 class ProgressBundle(QtWidgets.QWidget):

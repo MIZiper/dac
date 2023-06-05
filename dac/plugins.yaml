@@ -11,7 +11,9 @@ actions:
   _: # the actions for global context
   - /da/SimpleGlobalAction
   - /da/Separator
-  # - /da/A1A2Simple # SAB action
+  - "[Test]"
+  - /da/A1A2 # SAB action
+  - /da/A1A2_2 # SAB of SAB
   
   /dd/SimpleDefinition:
   - /da/SimpleAction

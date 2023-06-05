@@ -4,6 +4,7 @@ from dac.core import DataNode
 from . import ActionNode
 from .data import SimpleDefinition
 
+import numpy as np
 from time import sleep
 
 class ActionBase(ActionNode): # needs thread
@@ -14,13 +15,13 @@ class ActionBase(ActionNode): # needs thread
 class ProcessActionBase(ActionBase):
     def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
         super().__init__(context_key, name, uuid)
-        self._progress = print
+        self._progress = lambda i, n: self._message(f"Progress: {i}/{n}")
         self._message = print
 
     def progress(self, i, n):
         self._progress(i, n)
     def message(self, s):
-        self._message(s)
+        self._message(f"[{self.name}]>{s}")
 
 class VisualizeActionBase(ActionBase):
     def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
@@ -46,11 +47,10 @@ class VisualizeActionBase(ActionBase):
                 canvas.mpl_disconnect(cid)
         canvas._cids = self._cids = []
 
-    def pre_run(self, *args, **kwargs):
-        return super().pre_run(*args, **kwargs)
-    
     def post_run(self, *args, **kwargs):
         self.canvas.draw_idle()
+        # I have a doubt here, this is not called for SAB.
+        # But canvas redrawed, widgets redrawed because of thread ends?
 
 PAB = ProcessActionBase
 VAB = VisualizeActionBase
@@ -60,15 +60,6 @@ class SimpleAction(ActionBase):
 
 class SimpleGlobalAction(PAB):
     CAPTION = "Simple global action"
-    def __call__(self, sim: SimpleDefinition, sec: int=5, total: int=None):
-        if total:
-            for i in range(total):
-                self.message(f"Starting ... {i+1}/{total}")
-                sleep(sec)
-                self.progress(i+1, total)
-        else:
-            self.message(f"Starting unknown.")
-            sleep(sec)
 
 class Separator(ActionBase):
     CAPTION = "--- [Separator] ---"
@@ -117,30 +108,72 @@ class SequenceActionBase(PAB, VAB):
     
     def __call__(self, **params):
         # using dict => each action type can be used only once
-
-        def embed_progross():
-            ...
         
         n = len(self._SEQUENCE)
+        rsts = []
+
         for i, subact_type in enumerate(self._SEQUENCE):
-            subact_params = params.get(subact_type.__name__)
-            self.message()
-            if issubclass(subact_type, VAB):
+            name = subact_type.__name__
+
+            def embed_progross(j, m):
+                self.progress(i*m+j, n*m)
+            def embed_message(s):
+                self.message(s)
+
+            subact_params = params.get(name)
+            self.message(f"Processing [{name}]")
+
+            action = subact_type(self.context_key)
+            action.name = name
+            if isinstance(action, VAB):
+                action._figure = self.figure # avoid figure.setter
+            if isinstance(action, PAB):
+                action._progress = embed_progross
+                action._message = embed_message
+
+            # action.pre_run()
+            rst = action(**subact_params)
+            if isinstance(rst, DataNode):
+                rsts.append(rst)
+            elif isinstance(rst, list):
+                rsts.extend(rst)
+            else:
                 ...
-            elif issubclass(subact_type, PAB):
-                ...
+            if isinstance(action, VAB):
+                self._cids.extend(action._cids)
+            # action.post_run()
+
             self.progress(i+1, n)
+
+        # if len(rsts)==1:
+        #     return rsts[0] # error, out_name is not defined
+        # else:
+        #     return rsts
+
+        return rsts
 
 SAB = SequenceActionBase
     
 class A1(PAB):
-    pass
+    def __call__(self, sec: int=5, total: int=None):
+        if total:
+            for i in range(total):
+                self.message(f"Starting ... {i+1}/{total}")
+                sleep(sec)
+                self.progress(i+1, total)
+        else:
+            self.message(f"Starting unknown.")
+            sleep(sec)
 class A2(VAB):
-    pass
-class A1A2(SAB, seq=[SimpleGlobalAction, A2]):
-    pass
-class A1A2Simple(SAB, seq=[A1A2, SimpleGlobalAction]):
-    CAPTION = "Multiple actions"
+    def __call__(self, amp: float):
+        ax = self.figure.gca()
+        x = np.linspace(0, 4*np.pi, 400)
+        ax.plot(x, amp*np.sin(x))
+        sleep(amp)
+class A1A2(SAB, seq=[A1, A2]):
+    CAPTION = "Sequence action example"
+class A1A2_2(SAB, seq=[A1A2, A1, A2]):
+    CAPTION = "SAB x SAB"
     
 class RemoteProcessActionBase(PAB):
     # distribute the calculation (and container) to remote (cloud)
