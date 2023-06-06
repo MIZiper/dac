@@ -11,7 +11,11 @@ class NodeBase:
         self._construct_config = {}
 
         self.name = name
-        self.uuid = uuid or str(uuid4())
+        self._uuid = uuid or str(uuid4()) # _ to avoid shown in construct_config
+
+    @property
+    def uuid(self):
+        return self._uuid
 
     def calc_hash(self) -> str:
         ...
@@ -40,13 +44,15 @@ class NodeBase:
 
 class DataNode(NodeBase):
     def get_construct_config(self) -> dict:
+        # _construct_config is same as __dict__
         return {
-            "name": self.name,
-            **self._construct_config,
+            k: v for k, v in self.__dict__.items() if not k.startswith("_")
         }
     
     def apply_construct_config(self, construct_config: dict):
-        self.name = construct_config.get("name")
+        for k, v in construct_config.items():
+            if k in self.__dict__:
+                self.__dict__[k] = v
 
 class GlobalContextKey(DataNode):
     pass
