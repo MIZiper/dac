@@ -28,6 +28,7 @@ class VisualizeActionBase(ActionBase):
         super().__init__(context_key, name, uuid)
         self._figure: Figure = None
         self._cids = [] # never overwrite in __call__
+        self._patches = [] # to host evented patches
 
     @property
     def canvas(self):
@@ -141,6 +142,7 @@ class SequenceActionBase(PAB, VAB):
                 ...
             if isinstance(action, VAB):
                 self._cids.extend(action._cids)
+                self._patches.append(action._patches)
             # action.post_run()
 
             self.progress(i+1, n)

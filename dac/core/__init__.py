@@ -96,6 +96,7 @@ class ActionNode(NodeBase):
         self.out_name = None
 
         self.context_key = context_key
+        self.container: Container = None # for the actions require external resources, normally when context_key is GCK
 
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         # annotations have to be specified; if there is 'list', `list[...]` must be used

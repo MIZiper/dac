@@ -304,6 +304,8 @@ class ActionListWidget(QTreeWidget):
             action.status = ActionNode.ActionStatus.COMPLETE # TODO: update accordingly
             self.refresh()
 
+        action.container = container
+
         if isinstance(action, VAB):
             action.figure = self._parent_win.figure
 
