@@ -234,7 +234,9 @@ class Container:
         self.actions = [action for action in self.actions if action.context_key is not node_object]
 
     def _get_value_of_annotation(self, ann: type | GenericAlias, config: Any):
-        if issubclass(ann, DataNode):
+        if config is None:
+            return None
+        elif issubclass(ann, DataNode):
             if (value:=self.get_node_of_type(node_name=config, node_type=ann)) is None:
                 raise NodeNotFoundError(f"Node '{config}' of '{ann.__name__}' not found.")
             return value
@@ -322,7 +324,7 @@ class Container:
                 context_key = GCK
             
             action_node = act_class(context_key=context_key, uuid=uuid)
-                
+
             action_node.apply_construct_config(act_config)
 
             container.actions.append(action_node)

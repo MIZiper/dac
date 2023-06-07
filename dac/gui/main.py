@@ -15,6 +15,7 @@ APPSETTING = QtCore.QSettings(APPNAME, "Main")
 SET_RECENTDIR = "RecentDir"
 
 class MainWindow(MainWindowBase):
+    APPTITLE = APPNAME
     def __init__(self) -> None:
         super().__init__()
         self.resize(1200, 800)
@@ -95,7 +96,7 @@ class MainWindow(MainWindowBase):
             APPSETTING.setValue(SET_RECENTDIR, path.dirname(fpath))
             self.project_config_fpath = fpath
             action_save()
-            self.setWindowTitle(f"{path.basename(fpath)} | {APPNAME}")
+            self.setWindowTitle(f"{path.basename(fpath)} | {self.APPTITLE}")
         def action_load_project():
             fpath, fext = QtWidgets.QFileDialog.getOpenFileName(
                 parent=self, caption="Open project configuration", filter="DAC config (*.json);;All (*.*)",
@@ -163,9 +164,9 @@ class MainWindow(MainWindowBase):
 
     def apply_config(self, config: dict):
         if self.project_config_fpath:
-            self.setWindowTitle(f"{path.basename(self.project_config_fpath)} | {APPNAME}")
+            self.setWindowTitle(f"{path.basename(self.project_config_fpath)} | {self.APPTITLE}")
         else:
-            self.setWindowTitle(f"[New project] | {APPNAME}")
+            self.setWindowTitle(f"[New project] | {self.APPTITLE}")
 
         dac_config = config.get("dac", {})
         self.container = container = Container.parse_save_config(dac_config)

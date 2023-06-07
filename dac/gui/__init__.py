@@ -181,6 +181,7 @@ class DataListWidget(QTreeWidget):
                 menu.addAction("Activate").triggered.connect(cb_activate_gen(node_object))
 
             # TODO: add quick actions here
+            # TODO: run actions of this context in sequence
 
             def cb_del_gen(key_object):
                 def cb_del():
@@ -252,7 +253,6 @@ class ActionListWidget(QTreeWidget):
         self._STYLE = self.style()
         self._parent_win = parent
         self._container: Container = None
-        self._cids = []
 
         self.setHeaderLabels(["Name", "Output", "Remark"])
         self.setColumnWidth(NAME, 200)
@@ -336,7 +336,7 @@ class ActionListWidget(QTreeWidget):
             # NOTE: when tree is full (and with scrollbar), it's not easy to trigger
             def cb_creation_gen(a_t: type[ActionNode]):
                 def cb_creation():
-                    a = a_t(container.current_key)
+                    a = a_t(context_key=container.current_key)
                     container.actions.append(a)
                     self.refresh()
                     self.sig_edit_action_requested.emit(a)
