@@ -8,7 +8,7 @@ class WindowType(Enum):
     KaiserBessel = (2.49, 1.86)
     FlatTop = (4.18, 2.26)
     Blackman = (2.80, 1.97)
-    Unknown = (1.0, 1.0)
+    Unknown = (1.0, 1.0) # (BandCorrection.NarrowBand, BandCorrection.BroadBand)
 
 class BandCorrection(Enum):
     NarrowBand = 0 # amplitude correction
