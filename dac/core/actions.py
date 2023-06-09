@@ -12,6 +12,8 @@ class ActionBase(ActionNode): # needs thread
     # the tasks to assist config input (e.g. browse files instead of filling manually)
     # NOTE: no thread for running the tasks, keep them simple
 
+# TODO: add batch processing: read data, process with predefined parameters, process, save or export, clean and free memory
+
 class ProcessActionBase(ActionBase):
     def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
         super().__init__(context_key, name, uuid)
@@ -29,6 +31,8 @@ class VisualizeActionBase(ActionBase):
         self._figure: Figure = None
         self._cids = [] # never overwrite in __call__
         self._patches = [] # to host evented patches
+
+        # on_callback to change the node params itself
 
     @property
     def canvas(self):
