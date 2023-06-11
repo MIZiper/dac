@@ -3,7 +3,7 @@ from collections import defaultdict
 from typing import Any
 from types import GenericAlias
 import inspect, importlib
-from enum import IntEnum
+from enum import IntEnum, Enum
 
 class NodeBase:
     def __init__(self, name: str=None, uuid: str=None) -> None:
@@ -110,7 +110,10 @@ class ActionNode(NodeBase):
                 if key=="self":
                     continue
                 elif param.default is not inspect._empty:
-                    cfg[key] = param.default
+                    if isinstance(param.default, Enum):
+                        cfg[key] = param.default.name
+                    else:
+                        cfg[key] = param.default
                 elif param.annotation is not inspect._empty:
                     cfg[key] = ActionNode.Annotation2Config(param.annotation)
                 else:
@@ -236,6 +239,8 @@ class Container:
     def _get_value_of_annotation(self, ann: type | GenericAlias, config: Any):
         if config is None:
             return None
+        elif issubclass(ann, Enum):
+            return ann[config]
         elif issubclass(ann, DataNode):
             if (value:=self.get_node_of_type(node_name=config, node_type=ann)) is None:
                 raise NodeNotFoundError(f"Node '{config}' of '{ann.__name__}' not found.")
