@@ -1,15 +1,26 @@
 import numpy as np
 
-from dac.core.actions import ActionBase
+from dac.core.actions import ActionBase, VAB, PAB, SAB
 from dac.modules.timedata import TimeData
-from . import WindowType, FreqAlongData
+from . import WindowType, BandCorrection
+from .data import FreqIntermediateData
 
 class ToFreqDomainAction(ActionBase):
     CAPTION = "FFT to frequency domain"
 
-    def __call__(self, channels: list[TimeData], window: WindowType, resolution: float=0.5, overlap: float=0.75):
+    def __call__(self, channels: list[TimeData],
+                 window: WindowType=WindowType.Hanning, corr: BandCorrection=BandCorrection.NarrowBand,
+                 resolution: float=0.5, overlap: float=0.75,
+                 ref_channel: TimeData=None,
+                 ) -> list[FreqIntermediateData]:
+        
         df = resolution
         freqs = []
+
+        window_funcs = {
+            WindowType.Hanning: np.hanning,
+            WindowType.Hamming: np.hamming,
+        }
 
         for channel in channels:
             y = channel.y
@@ -29,7 +40,16 @@ class ToFreqDomainAction(ActionBase):
             double_spec = batches_fft[:, :np.int(np.ceil(batch_N/2))]
             double_spec[:, 1:] *= 2
 
-            freq = FreqAlongData(double_spec)
+            freq = FreqIntermediateData(name=channel.name, z=double_spec, z_unit=channel.y_unit)
+            freqs.append(freq)
+
+        return freqs
+    
+class ViewFreqDomainAction(VAB):
+    ...
+
+class ViewFreqIntermediateAction(VAB):
+    ...
 
 # extract specific frequencies
 # calc rms

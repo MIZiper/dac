@@ -30,20 +30,3 @@ class FilterType(Enum):
     HighPass = "highpass"
     BandPass = "bandpass"
     BandStop = "bandstop"
-
-
-
-class FreqDomainData:
-    x: list
-    y: list
-    y_unit: str
-
-    phase: list
-    amplitude: list
-
-class OrderSliceData:
-    ...
-
-class FreqAlongData:
-    z: list
-    freq_data: list[FreqDomainData]

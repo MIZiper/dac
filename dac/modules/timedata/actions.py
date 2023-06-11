@@ -1,11 +1,11 @@
 import numpy as np
 
-from dac.core.actions import ActionBase, VAB
+from dac.core.actions import ActionBase, VAB, SAB
 from . import TimeData
 
 class LoadAction(ActionBase):
     CAPTION = "Load measurement data"
-    def __call__(self, fpath: str, ftype: str=None) -> list[TimeData]:
+    def __call__(self, fpath: str, ftype: str=None) -> list[TimeData]: # fpath->fpaths?
         ...
 
 class TruncAction(ActionBase):
@@ -19,7 +19,7 @@ class FilterAction(ActionBase):
 class ResampleAction(ActionBase):
     ...
 
-class PrepDataAction(SAB, seq=[]):
+class PrepDataAction(SAB, seq=[TruncAction, ResampleAction, FilterAction]): # example sequences
     ...
 
 class ShowTimeDataAction(VAB):

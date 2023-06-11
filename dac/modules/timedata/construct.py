@@ -31,4 +31,4 @@ class SignalConstructAction(ActionBase):
         for amp, freq, phase in components:
             y += amp*np.sin(2*np.pi*freq*t + np.deg2rad(phase))
 
-        return TimeData("Generated signal", y, dt=1/fs, y_unit="-", comment="Constructed time data")
+        return TimeData(name="Generated signal", y=y, dt=1/fs, y_unit="-", comment="Constructed time data")
