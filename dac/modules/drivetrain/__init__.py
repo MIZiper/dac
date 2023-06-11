@@ -9,3 +9,6 @@ class GearStage:
 class GearboxDefinition:
     def __init__(self, stages):
         ...
+
+class Bearing:
+    ...

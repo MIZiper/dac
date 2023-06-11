@@ -1,8 +1,17 @@
 import numpy as np
 from dac.core.data import DataBase
+from . import BinMethod
 
 class ProcessPackage: # bundle channels and ref_channel
     ...
+
+class DataBins(DataBase):
+    def __init__(self, name: str = None, uuid: str = None, y: np.ndarray=None, y_unit: str = "-") -> None:
+        super().__init__(name, uuid)
+
+        self.y = y if y is not None else np.array([])
+        self.y_unit = y_unit
+        self._method = BinMethod.Mean
 
 class FreqDomainData(DataBase):
     def __init__(self, name: str = None, uuid: str = None, y: np.ndarray=None, df: float=1, y_unit: str="-") -> None:
@@ -33,12 +42,13 @@ class FreqDomainData(DataBase):
         return np.abs(self.y)
 
 class FreqIntermediateData(DataBase):
-    def __init__(self, name: str = None, uuid: str = None, z: np.ndarray=None, df: float=1, z_unit: str="-") -> None:
+    def __init__(self, name: str = None, uuid: str = None, z: np.ndarray=None, df: float=1, z_unit: str="-", ref_bins: DataBins=None) -> None:
         super().__init__(name, uuid)
 
         self.z = z if z is not None else np.array([]) # batches x window_size
         self.z_unit = z_unit
         self.df = df
+        self.ref_bins = ref_bins
 
     @property
     def x(self):

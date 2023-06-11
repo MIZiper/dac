@@ -30,3 +30,7 @@ class FilterType(Enum):
     HighPass = "highpass"
     BandPass = "bandpass"
     BandStop = "bandstop"
+
+class BinMethod(Enum):
+    Mean = 0
+    Min = 1

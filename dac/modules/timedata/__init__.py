@@ -26,3 +26,18 @@ class TimeData(DataBase):
     @property
     def t(self):
         return self.x
+    
+    def to_bins(self, df: float, overlap: float) -> np.ndarray:
+        y = self.y
+        batch_N = int( 1/df * self.fs )
+        stride_N = int( batch_N * (1-overlap) )
+        N_batches = (self.length-batch_N) // stride_N + 1
+        stride, = y.strides
+        assert N_batches > 0
+
+        batches = np.lib.stride_tricks.as_strided(y, shape=(N_batches, batch_N), strides=(stride*stride_N, stride))
+        # batches -= batches_mean
+        # # the code above will cause problem, it's a `as_strided` mapping
+        # # corresponding values are connected
+
+        return batches
