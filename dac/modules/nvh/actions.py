@@ -2,11 +2,14 @@ import numpy as np
 
 from dac.core.actions import ActionBase, VAB, PAB, SAB
 from dac.modules.timedata import TimeData
-from . import WindowType, BandCorrection
-from .data import FreqIntermediateData
+from . import WindowType, BandCorrection, BinMethod
+from .data import FreqIntermediateData, DataBins
 
 class ToFreqDomainAction(ActionBase):
-    CAPTION = "FFT to frequency domain"
+    CAPTION = "Simple FFT to frequency domain"
+
+class ToFreqIntermediateAction(PAB):
+    CAPTION = "FFT to frequency domain with window and reference"
 
     def __call__(self, channels: list[TimeData],
                  window: WindowType=WindowType.Hanning, corr: BandCorrection=BandCorrection.NarrowBand,
@@ -14,7 +17,6 @@ class ToFreqDomainAction(ActionBase):
                  ref_channel: TimeData=None,
                  ) -> list[FreqIntermediateData]:
         
-        df = resolution
         freqs = []
 
         window_funcs = {
@@ -22,25 +24,29 @@ class ToFreqDomainAction(ActionBase):
             WindowType.Hamming: np.hamming,
         }
 
-        for channel in channels:
-            y = channel.y
-            batch_N = np.int( 1/df * channel.fs )
-            stride_N = np.int( batch_N * (1-overlap) )
-            N_batches = (channel.length-batch_N) // stride_N + 1
-            stride, = y.strides
-            assert N_batches > 0
+        if ref_channel is not None:
+            ref_batches = ref_channel.to_bins(df=resolution, overlap=overlap)
+            ref_bins_y = np.mean(ref_batches, axis=1)
+            ref_bins = DataBins(name=ref_channel.name, y=ref_bins_y, y_unit=ref_channel.y_unit)
+        # else:
+        #     create a TimeData channel, but don't know the length
 
-            batches = np.lib.stride_tricks.as_strided(y, shape=(N_batches, batch_N), strides=(stride*stride_N, stride))
-            # batches -= batches_mean
-            # # the code above will cause problem, it's a `as_strided` mapping
-            # # corresponding values are connected
+        for channel in channels:
+            batches = channel.to_bins(df=resolution, overlap=overlap)
+            N_batches, batch_N = batches.shape
+
+            if ref_channel is None:
+                ref_bins_y = np.arange(N_batches) * 1/resolution * (1-overlap)
+                ref_bins = DataBins(name="Time", y=ref_bins_y, y_unit="s")
+                ref_bins._method = BinMethod.Min
+
             batches = batches * window_funcs[window](batch_N)
             batches_fft = np.fft.fft(batches) / batch_N * window.value[corr.value]
 
-            double_spec = batches_fft[:, :np.int(np.ceil(batch_N/2))]
+            double_spec = batches_fft[:, :int(np.ceil(batch_N/2))]
             double_spec[:, 1:] *= 2
 
-            freq = FreqIntermediateData(name=channel.name, z=double_spec, z_unit=channel.y_unit)
+            freq = FreqIntermediateData(name=channel.name, z=double_spec, df=resolution, z_unit=channel.y_unit, ref_bins=ref_bins)
             freqs.append(freq)
 
         return freqs
@@ -49,7 +55,23 @@ class ViewFreqDomainAction(VAB):
     ...
 
 class ViewFreqIntermediateAction(VAB):
-    ...
+    CAPTION = "Show FFT color plot"
+
+    def __call__(self, channel: FreqIntermediateData, range: tuple[float, float]=None):
+        fig = self.figure
+        ax = fig.gca()
+
+        fig.suptitle(f"Color map: {channel.name}")
+        xs = channel.x
+        ax.set_xlabel("Frequency [Hz]")
+        if (ref_bins:=channel.ref_bins) is not None:
+            ys = channel.ref_bins.y
+            ax.set_ylabel(f"{ref_bins.name} [{ref_bins.y_unit}]")
+        m = ax.pcolormesh(xs, ys, np.abs(channel.z), cmap='jet')
+        cb = fig.colorbar(m)
+        cb.set_label(f"Amplitude [{channel.z_unit}]")
+        if range is not None:
+            ax.set_xlim(range)
 
 # extract specific frequencies
 # calc rms

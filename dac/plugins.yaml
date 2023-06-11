@@ -2,6 +2,7 @@ alias:
   dd: dac.core.data
   da: dac.core.actions
   mt: dac.modules.timedata
+  mv: dac.modules.nvh
 
 data:
   _: # for now only add data to global context
@@ -17,10 +18,13 @@ actions:
   
   /dd/SimpleDefinition:
   - /da/SimpleAction
+  - /da/Separator
   - "[Time data]" # section hint
   - dac.modules.timedata.construct.SignalConstructAction # same as /mt/construct.SignalConstructAction
   - /mt/actions.ShowTimeDataAction
-  - /da/Separator
+  - "[Freq domain]"
+  - /mv/actions.ToFreqIntermediateAction
+  - /mv/actions.ViewFreqIntermediateAction
 
 quick_actions: # temporary action creation for immediate run (action take only one parameter)
   /dd/SimpleDefinition:
