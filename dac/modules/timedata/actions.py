@@ -1,12 +1,21 @@
 import numpy as np
 
-from dac.core.actions import ActionBase, VAB, SAB
+from dac.core.actions import ActionBase, VAB, PAB, SAB
 from . import TimeData
+from .data_loader import load_tdms
 
-class LoadAction(ActionBase):
+class LoadAction(PAB):
     CAPTION = "Load measurement data"
-    def __call__(self, fpath: str, ftype: str=None) -> list[TimeData]: # fpath->fpaths?
-        ...
+    def __call__(self, fpaths: list[str], ftype: str=None) -> list[TimeData]: # fpath->fpaths?
+        n = len(fpaths)
+        rst = []
+        for i, fpath in enumerate(fpaths):
+            if not fpath.upper().endswith("TDMS"):
+                continue
+            r = load_tdms(fpath=fpath)
+            rst.extend(r)
+            self.progress(i+1, n)
+        return rst
 
 class TruncAction(ActionBase):
     CAPTION = "Truncate TimeData"

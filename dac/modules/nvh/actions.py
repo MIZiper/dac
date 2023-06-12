@@ -31,7 +31,8 @@ class ToFreqIntermediateAction(PAB):
         # else:
         #     create a TimeData channel, but don't know the length
 
-        for channel in channels:
+        n = len(channels)
+        for i, channel in enumerate(channels):
             batches = channel.to_bins(df=resolution, overlap=overlap)
             N_batches, batch_N = batches.shape
 
@@ -48,6 +49,7 @@ class ToFreqIntermediateAction(PAB):
 
             freq = FreqIntermediateData(name=channel.name, z=double_spec, df=resolution, z_unit=channel.y_unit, ref_bins=ref_bins)
             freqs.append(freq)
+            self.progress(i+1, n)
 
         return freqs
     
