@@ -1,6 +1,7 @@
 import numpy as np
 from dac.core.data import DataBase
 from . import BinMethod
+from ..timedata import TimeData
 
 class ProcessPackage: # bundle channels and ref_channel
     ...
@@ -40,6 +41,27 @@ class FreqDomainData(DataBase):
     @property
     def amplitude(self):
         return np.abs(self.y)
+    
+    def integral(self, order: int=1):
+        a = self.x * 1j * 2 * np.pi
+        b = np.zeros(self.lines, dtype="complex")
+        b[1:] = a[1:]**(-order)
+        y = self.y * b
+
+        return FreqDomainData(name=self.name, y=y, df=self.df, y_unit=self.y_unit+f"*{'s'*order}")    
+    
+    def effective_value(self, fmin=0, fmax=0):
+        # index = (freq > fmin) & (freq <= fmax)
+        # effvalue = sqrt(sum(abs(value(index)*new_factor/orig_factor).^2));
+
+        return np.sqrt(np.sum(np.abs(self.y)**2))
+    
+    def to_timedomain(self):
+        single_spec = self.y
+        double_spec = np.concatenate(single_spec, np.conjugate(single_spec[self.lines:0:-1]))
+        y = np.real(np.fft.ifft(double_spec))
+
+        return TimeData(name=self.name, y=y, dt=1/(self.lines*self.df*2), y_unit=self.y_unit)
 
 class FreqIntermediateData(DataBase):
     def __init__(self, name: str = None, uuid: str = None, z: np.ndarray=None, df: float=1, z_unit: str="-", ref_bins: DataBins=None) -> None:

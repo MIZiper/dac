@@ -41,3 +41,6 @@ class TimeData(DataBase):
         # # corresponding values are connected
 
         return batches
+    
+    def effective_value(self):
+        return np.sqrt(np.mean(self.y**2))
