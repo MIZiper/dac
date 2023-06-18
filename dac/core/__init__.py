@@ -240,7 +240,10 @@ class Container:
         if config is None:
             return None
         elif issubclass(ann, Enum):
-            return ann[config]
+            if isinstance(config, Enum): # from default
+                return config
+            else: # str
+                return ann[config]
         elif issubclass(ann, DataNode):
             if (value:=self.get_node_of_type(node_name=config, node_type=ann)) is None:
                 raise NodeNotFoundError(f"Node '{config}' of '{ann.__name__}' not found.")
