@@ -1,9 +1,10 @@
 import numpy as np
+from matplotlib.gridspec import GridSpec
 
 from dac.core.actions import ActionBase, VAB, PAB, SAB
 from dac.modules.timedata import TimeData
-from . import WindowType, BandCorrection, BinMethod
-from .data import FreqIntermediateData, DataBins
+from . import WindowType, BandCorrection, BinMethod, AverageType
+from .data import FreqIntermediateData, DataBins, FreqDomainData
 
 class ToFreqDomainAction(ActionBase):
     CAPTION = "Simple FFT to frequency domain"
@@ -52,9 +53,41 @@ class ToFreqIntermediateAction(PAB):
             self.progress(i+1, n)
 
         return freqs
+
+class AverageIntermediateAction(ActionBase):
+    CAPTION = "Average (static) FreqIntermediate to spectrum"
+    def __call__(self, channels: list[FreqIntermediateData], average_by: AverageType=AverageType.Energy) -> list[FreqDomainData]:
+        rst = []
+        for channel in channels:
+            rst.append(channel.to_powerspectrum(average_by=average_by))
+        return rst
     
 class ViewFreqDomainAction(VAB):
-    ...
+    CAPTION = "Show FFT spectrum"
+
+    def __call__(self, channels: list[FreqDomainData], range: tuple[float, float]=None, with_phase: bool=False):
+        fig = self.figure
+        gs = GridSpec(2, 1, height_ratios=[2, 1])
+
+        if with_phase:
+            ax = fig.add_subplot(gs[0])
+            ax_p = fig.add_subplot(gs[1], sharex=ax)
+            ax_p.set_ylabel("Phase [°]")
+        else:
+            ax = fig.gca()
+
+        ax.set_xlabel("Frequency [Hz]")
+        ax.set_ylabel("Amplitude")
+
+        for channel in channels:
+            ax.plot(channel.x, channel.amplitude, label=f"{channel.name} [{channel.y_unit}]")
+            if with_phase:
+                ax_p.plot(channel.x, channel.phase)
+
+        ax.legend(loc="upper right")
+
+        if range is not None:
+            ax.set_xlim(range)
 
 class ViewFreqIntermediateAction(VAB):
     CAPTION = "Show FFT color plot"

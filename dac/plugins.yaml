@@ -15,6 +15,7 @@ actions:
   - "[Test]"
   - /da/A1A2 # SAB action
   - /da/A1A2_2 # SAB of SAB
+  - dac.modules.drivetrain.actions.ShowFreqLinesTime
   
   /dd/SimpleDefinition:
   - /da/SimpleAction
@@ -26,6 +27,8 @@ actions:
   - "[Freq domain]"
   - /mv/actions.ToFreqIntermediateAction
   - /mv/actions.ViewFreqIntermediateAction
+  - /mv/actions.AverageIntermediateAction
+  - /mv/actions.ViewFreqDomainAction
 
 quick_actions: # temporary action creation for immediate run (action take only one parameter)
   /dd/SimpleDefinition:

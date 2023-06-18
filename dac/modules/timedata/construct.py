@@ -4,7 +4,7 @@ from collections import namedtuple
 from dac.core.actions import ActionBase
 from . import TimeData
 
-SineComponent = namedtuple("SineComponent", ['amp', 'freq', 'phase'])
+SineComponent = namedtuple("SineComponent", ['freq', 'amp', 'phase'])
 
 class SignalConstructAction(ActionBase):
     CAPTION = "Construct signal with sines"
@@ -13,11 +13,11 @@ class SignalConstructAction(ActionBase):
 
         Parameters
         ----------
-        components: [(amplitude, frequency, phase)]
+        components: [(frequency, amplitude, phase)]
             list of tuples, each tuple contains basic info of the sine wave
 
-            amplitude: float
             frequency: float, [Hz]
+            amplitude: float
             phase: float, [°]
         fs: int, [Hz]
             sample rate
@@ -28,7 +28,7 @@ class SignalConstructAction(ActionBase):
         t = np.arange(int(duration * fs)) / fs
         y = np.zeros_like(t)
         
-        for amp, freq, phase in components:
+        for freq, amp, phase in components:
             y += amp*np.sin(2*np.pi*freq*t + np.deg2rad(phase))
 
         return TimeData(name="Generated signal", y=y, dt=1/fs, y_unit="-", comment="Constructed time data")

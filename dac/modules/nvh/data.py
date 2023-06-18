@@ -1,6 +1,6 @@
 import numpy as np
 from dac.core.data import DataBase
-from . import BinMethod
+from . import BinMethod, AverageType
 from ..timedata import TimeData
 
 class ProcessPackage: # bundle channels and ref_channel
@@ -100,6 +100,60 @@ class FreqIntermediateData(DataBase):
     def batches(self):
         batches, _ = self._bl()
         return batches
+    
+    def to_powerspectrum(self, average_by: AverageType=AverageType.Energy):
+        if average_by==AverageType.Energy:
+            y = np.sqrt(np.mean(np.abs(self.z)**2, axis=0))
+        elif average_by==AverageType.Linear:
+            y = np.mean(np.abs(self.z), axis=0)
+        return FreqDomainData(name=self.name, y=y, df=self.df, y_unit=self.z_unit)
+
+    def reference_to(self, reference: "FreqIntermediateData"):
+        data = np.conj(reference.z) * self.z / np.abs(reference.z)
+        # it's actually rotate self with reference angle
+        
+        # data = np.mean(data, axis=0)
+        # # no linear here, 'cause we can do that later
+        # # new object . to_powerspectrum(AverageType.Linear)
+
+        # # calc_phrefspectrum2
+        # # I don't know the meaning / scene
+        # # it's kind of a different average type
+        # data = (
+        #         np.mean(np.conj(reference.data) * self.data, axis=0) /
+        #         np.sqrt(np.mean(np.abs(reference.data)**2, axis=0))
+        #     )
+
+        return FreqIntermediateData(z=data)
+    
+    def cross_spectrum_with(self, reference: "FreqIntermediateData"):
+        
+        # assert shape equals, and df, and etc.
+        cross = np.conj(reference.z) * self.z
+        data = np.mean(cross, axis=0)
+        coh = np.sqrt(
+                np.abs(data) /
+                (self.to_powerspectrum().y * reference.to_powerspectrum().y)
+            )
+        return FreqDomainData(y=data) # what about coh?
+    
+    def frf(self, reference: "FreqIntermediateData"):
+        cross12 = np.conj(reference.z) * self.z
+        cross21 = np.conj(self.z) * reference.z
+
+        spectr1 = np.abs(self.z)**2
+        spectr2 = np.abs(reference.z)**2
+
+        frfH1 = np.mean(cross12, axis=0) / np.mean(spectr2, axis=0) # XY/X^2 ???
+        frfH2 = np.mean(spectr1, axis=0) / np.mean(cross21, axis=0) # Y^2/XY ???
+        # need some theory about: XY v.s. YX
+        # and why spectr2 as X^2, spectr1 as Y^2
+
+        return (
+            FreqDomainData(y=frfH1),
+            FreqDomainData(y=frfH2)
+        )
+
 
 class OrderSliceData:
     ...
