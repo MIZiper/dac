@@ -7,12 +7,45 @@ class GearStage:
         Unknown = 0
         Planetary = 1
         Parallel = 2
+    
+    def __init__(self, config: dict):
+        self.config = config
+        match config:
+            case {"RG": rg, "PG": pg, "SU": su, "NoP": nop}:
+                ratio = 1 + rg/su
+                t = GearStage.StageType.Planetary
+            case {"Wheel": wheel, "Pinion": pinion}:
+                ratio = wheel / pinion
+                t = GearStage.StageType.Parallel
+            case _:
+                ratio = 1
+                t = GearStage.StageType.Unknown
+
+        self.ratio = ratio
+        self.stage_type = t
 
 class GearboxDefinition(DataBase):
-    def __init__(self, name: str = None, uuid: str = None, stages: dict=None) -> None:
+    def __init__(self, name: str = None, uuid: str = None, stages: list[GearStage]=None) -> None:
         super().__init__(name, uuid)
 
-        self.stages = stages or [{}, {}]
+        self.stages = stages or []
+
+    def get_construct_config(self) -> dict:
+        if self.stages:
+            stgs = [stg.config for stg in self.stages]
+        else:
+            stgs = [
+                {},
+                {},
+            ]
+
+        return {
+            "name": self.name,
+            "stages": stgs
+        }
+    
+    def apply_construct_config(self, construct_config: dict):
+        return super().apply_construct_config(construct_config)
 
 class BallBearing(DataBase):
     def __init__(self, name: str = None, uuid: str = None, N_balls: int=8, D_ball: float=2, D_pitch: float=12, beta: float=15) -> None:
