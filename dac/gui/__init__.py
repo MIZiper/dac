@@ -10,7 +10,7 @@ from io import StringIO
 from functools import partial
 
 from dac.core import Container, ActionNode, DataNode, GCK, NodeBase
-from dac.core.actions import VAB, PAB
+from dac.core.actions import ActionBase, VAB, PAB
 from dac.core.thread import ThreadWorker
 
 NAME, TYPE, REMARK = range(3)
@@ -45,6 +45,14 @@ class MainWindowBase(QMainWindow):
     def message(self, msg):
         print(msg)
         self.statusBar().showMessage(msg, 3000)
+
+class TaskBase:
+    def __init__(self, dac_win: MainWindowBase, name: str, *args):
+        self.dac_win = dac_win
+        self.name = name
+
+    def __call__(self, action: ActionBase):
+        pass
 
 class ProgressBundle(QtWidgets.QWidget):
     def __init__(self, caption):
@@ -349,6 +357,18 @@ class ActionListWidget(QTreeWidget):
                     menu.addAction(a_t.CAPTION).triggered.connect(cb_creation_gen(a_t))
         else:
             acts = [itm.data(NAME, Qt.ItemDataRole.UserRole) for itm in itms]
+
+            if len(acts)==1:
+                def cb_task_gen(task, act):
+                    def cb_task():
+                        task(act)
+                        self.sig_edit_action_requested.emit(act)
+                    return cb_task
+                act: ActionBase = acts[0]
+                for task in act.QUICK_TASKS:
+                    task: TaskBase
+                    menu.addAction(task.name).triggered.connect(cb_task_gen(task, act))
+                menu.addSeparator()
 
             def cb_cp2_gen(aa: list[ActionNode], context_key: DataNode):
                 def cb_cp2():

@@ -161,6 +161,14 @@ class MainWindow(MainWindowBase):
                         action_type = get_node_type(cats)
                         Container.RegisterContextAction(data_type, action_type)
 
+            for ats, tss in setting.get("quick_tasks", {}).items(): # action_type_string, task_string_s
+                action_type = get_node_type(ats)
+                action_type.QUICK_TASKS = [] # make superclass.QUICK_TASKS hidden
+                for tts, name, *rest in tss: # task_type_string, name, *rest
+                    task_type = get_node_type(tts)
+                    task = task_type(dac_win=self, name=name, *rest)
+                    action_type.QUICK_TASKS.append(task)
+
     def apply_config(self, config: dict):
         if self.project_config_fpath:
             self.setWindowTitle(f"{path.basename(self.project_config_fpath)} | {self.APPTITLE}")

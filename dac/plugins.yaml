@@ -33,3 +33,7 @@ actions:
 quick_actions: # temporary action creation for immediate run (action take only one parameter)
   /dd/SimpleDefinition:
   - /da/SimpleAction
+
+quick_tasks:
+  /mt/actions.LoadAction:
+  - [/mt/tasks.FillFpathsTask, "Select measurement files"]
