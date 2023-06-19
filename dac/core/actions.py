@@ -181,6 +181,13 @@ class A1A2(SAB, seq=[A1, A2]):
 class A1A2_2(SAB, seq=[A1A2, A1, A2]):
     CAPTION = "SAB x SAB"
     
+class LoopActionBase(PAB):
+    # for the case we want to run action multiple times with different parameters
+    # original action output streamed/saved to outside
+    def __init_subclass__(cls, action_type: type[ActionBase]) -> None:
+        return super().__init_subclass__()
+LAB = LoopActionBase
+
 class RemoteProcessActionBase(PAB):
     # distribute the calculation (and container) to remote (cloud)
     ...

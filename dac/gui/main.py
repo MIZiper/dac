@@ -6,11 +6,10 @@ from PyQt5.QtCore import Qt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 
-from dac import __version__
+from dac import __version__, APPNAME
 from dac.core import NodeBase, ActionNode, DataNode, Container
 from dac.gui import MainWindowBase, DataListWidget, ActionListWidget, NodeEditorWidget
 
-APPNAME = "DAC"
 APPSETTING = QtCore.QSettings(APPNAME, "Main")
 SET_RECENTDIR = "RecentDir"
 
@@ -143,7 +142,7 @@ class MainWindow(MainWindowBase):
             return Container.GetClass(cls_path)
 
         with open(setting_fpath, mode="r", encoding="utf8") as fp:
-            setting = yaml.load(fp, Loader=yaml.BaseLoader)
+            setting: dict = yaml.load(fp, Loader=yaml.BaseLoader)
 
             alias = setting['alias']
 
@@ -151,7 +150,7 @@ class MainWindow(MainWindowBase):
                 node_type = get_node_type(gdts)
                 Container.RegisterGlobalDataType(node_type)
 
-            for dts, catss in setting['actions'].items(): # context_action_type_string_s, data_type_string
+            for dts, catss in setting['actions'].items(): #  data_type_string, context_action_type_string_s
                 if dts=="_": # global_context
                     for cats in catss:
                         node_type = get_node_type(cats)

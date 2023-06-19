@@ -75,13 +75,21 @@ class PrepDataAction(SAB, seq=[TruncAction, ResampleAction, FilterAction]): # ex
 class ShowTimeDataAction(VAB):
     CAPTION = "Show measurement data"
     def __call__(self, channels: list[TimeData], plot_dt: float=None):
-        ax = self.figure.gca()
+        fig = self.figure
+        fig.suptitle("Time data visualization")
+
+        ax = fig.gca()
+        ax.set_xlabel("Time [s]")
         
         for channel in channels:
+            x, y = channel.x, channel.y
             if plot_dt is not None:
-                ...
-            else:
-                ax.plot(channel.x, channel.y, label=f"{channel.name} [{channel.y_unit}]")
+                interval = plot_dt // channel.dt
+                if interval > 1:
+                    x = x[::interval]
+                    y = y[::interval]
+            
+            ax.plot(x, y, label=f"{channel.name} [{channel.y_unit}]")
         
         ax.legend(loc="upper right")
 
