@@ -24,6 +24,10 @@ actions:
   - /mt/actions.LoadAction
   - dac.modules.timedata.construct.SignalConstructAction # same as /mt/construct.SignalConstructAction
   - /mt/actions.ShowTimeDataAction
+  - "[Time data>]"
+  - /mt/actions.CounterToTachoAction
+  - /mt/actions.PulseToAzimuthAction
+  - "[<]"
   - "[Freq domain]"
   - /mv/actions.ToFreqIntermediateAction
   - /mv/actions.ViewFreqIntermediateAction

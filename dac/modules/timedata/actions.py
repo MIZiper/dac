@@ -8,7 +8,7 @@ from ..nvh import FilterType
 
 class LoadAction(PAB):
     CAPTION = "Load measurement data"
-    def __call__(self, fpaths: list[str], ftype: str=None) -> list[TimeData]: # fpath->fpaths?
+    def __call__(self, fpaths: list[str], ftype: str=None) -> list[TimeData]:
         n = len(fpaths)
         rst = []
         for i, fpath in enumerate(fpaths):
@@ -62,7 +62,7 @@ class ResampleAction(ActionBase):
     def __call__(self, channels: list[TimeData], dt: float=1):
         rst = []
         for i, channel in enumerate(channels):
-            interval = dt // channel.dt 
+            interval = int(dt // channel.dt)
             if interval > 1:
                 rst.append(TimeData(name=channel.name, y=channel.y[::interval], dt=channel.dt*interval, y_unit=channel.y_unit, comment=channel.comment))
             else:
@@ -84,7 +84,7 @@ class ShowTimeDataAction(VAB):
         for channel in channels:
             x, y = channel.x, channel.y
             if plot_dt is not None:
-                interval = plot_dt // channel.dt
+                interval = int(plot_dt // channel.dt)
                 if interval > 1:
                     x = x[::interval]
                     y = y[::interval]

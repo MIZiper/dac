@@ -339,6 +339,7 @@ class ActionListWidget(QTreeWidget):
             return
         itms = self.selectedItems()
         menu = QtWidgets.QMenu("ActionMenu")
+        menu_stack = []
 
         if not itms:
             # NOTE: when tree is full (and with scrollbar), it's not easy to trigger
@@ -352,7 +353,13 @@ class ActionListWidget(QTreeWidget):
             
             for a_t in container.ActionTypesInCurrentContext:
                 if isinstance(a_t, str):
-                    menu.addAction(a_t).setEnabled(False)
+                    if a_t.endswith(">]"):
+                        menu_stack.append(menu)
+                        menu = menu.addMenu(a_t)
+                    elif a_t.endswith("<]"):
+                        menu = menu_stack.pop()
+                    else:
+                        menu.addAction(a_t).setEnabled(False)
                 else:
                     menu.addAction(a_t.CAPTION).triggered.connect(cb_creation_gen(a_t))
         else:
