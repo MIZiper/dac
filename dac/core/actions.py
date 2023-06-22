@@ -2,7 +2,6 @@ from matplotlib.figure import Figure
 import inspect
 from dac.core import DataNode
 from . import ActionNode
-from .data import SimpleDefinition
 
 import numpy as np
 from time import sleep
