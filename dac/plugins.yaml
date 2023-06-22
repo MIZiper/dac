@@ -34,7 +34,7 @@ actions:
 
 quick_actions: # temporary action creation for immediate run (action take only one parameter)
   /mt/TimeData:
-  - [/mt/actions.ShowTimeDataAction, channels, {plot_dt: 1}]
+  - [/mt/actions.ShowTimeDataAction, channels, {}]
 
 quick_tasks:
   /mt/actions.LoadAction:

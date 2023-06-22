@@ -142,7 +142,7 @@ class MainWindow(MainWindowBase):
             return Container.GetClass(cls_path)
 
         with open(setting_fpath, mode="r", encoding="utf8") as fp:
-            setting: dict = yaml.load(fp, Loader=yaml.BaseLoader)
+            setting: dict = yaml.load(fp, Loader=yaml.FullLoader)
 
             alias = setting['alias']
 
@@ -168,6 +168,13 @@ class MainWindow(MainWindowBase):
                     task_type = get_node_type(tts)
                     task = task_type(dac_win=self, name=name, *rest)
                     action_type.QUICK_TASKS.append(task)
+
+            for dts, ass in setting.get("quick_actions", {}).items(): # data_type_string, action_string_s
+                data_type = get_node_type(dts)
+                data_type.QUICK_ACTIONS = []
+                for ats, dpn, opd in ass: # action_type_string, data_param_name, other_params_dict
+                    action_type = get_node_type(ats)
+                    data_type.QUICK_ACTIONS.append((action_type, dpn, opd))
 
     def apply_config(self, config: dict):
         if self.project_config_fpath:

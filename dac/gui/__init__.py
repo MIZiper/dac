@@ -113,6 +113,7 @@ class DataListWidget(QTreeWidget):
         self.setColumnWidth(NAME, 150)
         self.setColumnWidth(TYPE, 200)
 
+        self.setSelectionMode(self.SelectionMode.ExtendedSelection)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.action_context_requested)
         self.itemClicked.connect(self.action_item_clicked)
@@ -149,7 +150,9 @@ class DataListWidget(QTreeWidget):
                 itm = QtWidgets.QTreeWidgetItem(local_item)
                 itm.setText(NAME, node_name)
                 itm.setText(TYPE, node_type.__name__)
-                itm.setDisabled(True) # TODO: enable for editing, and quick_actions context menu
+                itm.setData(NAME, Qt.ItemDataRole.UserRole, node_object)
+                itm.setData(TYPE, Qt.ItemDataRole.UserRole, True) # mark as un-editable
+                # itm.setDisabled(True) # TODO: enable for editing, and quick_actions context menu
         local_item.setExpanded(True)
 
     def action_context_requested(self, pos: QtCore.QPoint):
@@ -160,6 +163,37 @@ class DataListWidget(QTreeWidget):
 
         if (not itm) or not (node_object := itm.data(NAME, Qt.ItemDataRole.UserRole)):
             return
+        
+        if getattr(node_object, "QUICK_ACTIONS", []):
+            nodes = []
+            for i in self.selectedItems():
+                node = i.data(NAME, Qt.ItemDataRole.UserRole)
+                if type(node) is type(node_object): # or subclass?
+                    nodes.append(node)
+
+            def cb_quickaction_gen(qat: tuple[type[ActionBase], str, dict], data_nodes: list[DataNode]):
+                act_type, data_param_name, other_params = qat
+                def cb_quickaction():
+                    params = {data_param_name: data_nodes, **other_params}
+                    act = act_type(context_key=container.current_key)
+                    act.container = container
+                    if isinstance(act, VAB):
+                        act.figure = self._parent_win.figure
+                    act.pre_run()
+                    act(**params)
+                    act.post_run()
+                return cb_quickaction
+            
+            for qat  in node_object.QUICK_ACTIONS:
+                qat: tuple[type[ActionBase], str, dict]
+                act_type, data_param_name, other_params = qat
+                menu.addAction(act_type.CAPTION).triggered.connect(cb_quickaction_gen(qat, nodes))
+            menu.addSeparator()
+        
+        if (uneditable:=itm.data(TYPE, Qt.ItemDataRole.UserRole)): # data nodes in local context
+            if len(menu.actions()):
+                menu.exec(self.viewport().mapToGlobal(pos))
+            return # stop here, no activate / delete
         
         if node_object is GCK:
             def cb_creation_gen(n_t: type[DataNode]):
@@ -209,12 +243,16 @@ class DataListWidget(QTreeWidget):
 
     def action_item_clicked(self, item: QTreeWidgetItem, col: int):
         data = item.data(NAME, Qt.ItemDataRole.UserRole)
-        if not isinstance(data, DataNode) or data is GCK: # GCK not edit-able
+        uneditable = item.data(TYPE, Qt.ItemDataRole.UserRole)
+
+        if uneditable or not isinstance(data, DataNode) or data is GCK: # GCK not edit-able
             return
         self.sig_edit_data_requested.emit(data)
 
     def action_item_dblclicked(self, item: QTreeWidgetItem, col: int):
-        if (container := self._container) is None or not (node_object := item.data(NAME, Qt.ItemDataRole.UserRole)):
+        uneditable = item.data(TYPE, Qt.ItemDataRole.UserRole)
+
+        if uneditable or (container := self._container) is None or not (node_object := item.data(NAME, Qt.ItemDataRole.UserRole)):
             return
         
         def cb_activate(key_object):
