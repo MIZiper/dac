@@ -243,7 +243,7 @@ class DataListWidget(QTreeWidget):
 
     def action_item_clicked(self, item: QTreeWidgetItem, col: int):
         data = item.data(NAME, Qt.ItemDataRole.UserRole)
-        uneditable = item.data(TYPE, Qt.ItemDataRole.UserRole)
+        uneditable = False # item.data(TYPE, Qt.ItemDataRole.UserRole)
 
         if uneditable or not isinstance(data, DataNode) or data is GCK: # GCK not edit-able
             return

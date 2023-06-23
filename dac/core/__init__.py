@@ -43,15 +43,43 @@ class NodeBase:
 
 
 class DataNode(NodeBase):
+    BASICTYPES = (int, float, str, bool)
+    @staticmethod
+    def Value2BasicTypes(v):
+        if isinstance(v, DataNode.BASICTYPES):
+            return v
+        elif isinstance(v, (list, tuple)):
+            return [DataNode.Value2BasicTypes(e) for e in v]
+        elif isinstance(v, dict):
+            return {k: DataNode.Value2BasicTypes(e) for k, e in v.items()}
+        else:
+            return f"<{type(v).__name__}>"
+        
+    @staticmethod
+    def ContainsOnlyBasicTypes(v):
+        if isinstance(v, str) and v.startswith("<") and v.endswith(">"):
+            return False
+        elif isinstance(v, (list, tuple)):
+            for e in v:
+                if not DataNode.ContainsOnlyBasicTypes(e):
+                    return False
+        elif isinstance(v, dict):
+            for k, e in v.items():
+                if not DataNode.ContainsOnlyBasicTypes(e):
+                    return False
+        return True
+
     def get_construct_config(self) -> dict:
         # _construct_config is same as __dict__
         return {
-            k: v for k, v in self.__dict__.items() if not k.startswith("_")
+            k: DataNode.Value2BasicTypes(v)
+            for k, v in self.__dict__.items()
+            if not k.startswith("_")
         }
     
     def apply_construct_config(self, construct_config: dict):
         for k, v in construct_config.items():
-            if k in self.__dict__:
+            if k in self.__dict__ and DataNode.ContainsOnlyBasicTypes(v):
                 self.__dict__[k] = v
 
 class GlobalContextKey(DataNode):
