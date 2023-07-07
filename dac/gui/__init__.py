@@ -51,6 +51,9 @@ class TaskBase:
         self.dac_win = dac_win
         self.name = name
 
+    def request_update_action(self):
+        pass
+
     def __call__(self, action: ActionBase):
         pass
 
@@ -405,9 +408,13 @@ class ActionListWidget(QTreeWidget):
 
             if len(acts)==1:
                 def cb_task_gen(task, act):
-                    def cb_task():
-                        task(act)
+                    def request_update_action():
                         self.sig_edit_action_requested.emit(act)
+
+                    def cb_task():
+                        task.request_update_action = request_update_action
+                        task(act)
+                        request_update_action()
                     return cb_task
                 act: ActionBase = acts[0]
                 for task in act.QUICK_TASKS:
