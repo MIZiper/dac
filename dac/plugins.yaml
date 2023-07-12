@@ -3,10 +3,12 @@ alias:
   da: dac.core.actions
   mt: dac.modules.timedata
   mv: dac.modules.nvh
+  md: dac.modules.drivetrain
 
 data:
   _: # for now only add data to global context
   - /dd/SimpleDefinition
+  - /md/GearboxDefinition
 
 actions:
   _: # the actions for global context
@@ -15,6 +17,7 @@ actions:
   - /da/A1A2 # SAB action
   - /da/A1A2_2 # SAB of SAB
   - dac.modules.drivetrain.actions.ShowFreqLinesTime
+  - /md/actions.ShowFreqLinesFreq
   
   /dd/SimpleDefinition:
   - /da/Separator

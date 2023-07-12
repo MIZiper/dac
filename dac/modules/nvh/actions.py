@@ -108,6 +108,22 @@ class ViewFreqIntermediateAction(VAB):
         if range is not None:
             ax.set_xlim(range)
 
-# extract specific frequencies
+class ExtractAmplitudeAction(PAB):
+    CAPTION = "Extract amplitude at frequencies"
+
+    def __call__(self, channels: list[FreqDomainData], frequencies: list[float], line_tol: int=3):
+        for channel in channels:
+            idxes = np.searchsorted(frequencies, channel.x)
+            for idx in idxes:
+                ...
+
+class ExtractOrderSliceAction(PAB):
+    CAPTION = "Extract order slice"
+
+    def __call__(self, channels: list[FreqIntermediateData], order: float=1, average_by: "Any"=None):
+        for channel in channels:
+            for bin_y, f_batch in zip(channel.ref_bins.y, channel.z):
+                target_x = bin_y * order
+                a = f_batch.extract_amplitude_at(target_x)
+
 # calc rms
-# extract order slice

@@ -35,8 +35,8 @@ class GearboxDefinition(DataBase):
             stgs = [stg.config for stg in self.stages]
         else:
             stgs = [
-                {},
-                {},
+                {"RG": "<int>", "PG": "<int>", "SU": "<int>", "NoP": "[num of planets]"},
+                {"Wheel": "<int>", "Pinion": "<int>"},
             ]
 
         return {
@@ -45,7 +45,10 @@ class GearboxDefinition(DataBase):
         }
     
     def apply_construct_config(self, construct_config: dict):
-        return super().apply_construct_config(construct_config)
+        self.name = construct_config["name"]
+        self.stages.clear()
+        for stage in construct_config["stages"]:
+            self.stages.append(GearStage(stage))
 
 class BallBearing(DataBase):
     def __init__(self, name: str = None, uuid: str = None, N_balls: int=8, D_ball: float=2, D_pitch: float=12, beta: float=15) -> None:
