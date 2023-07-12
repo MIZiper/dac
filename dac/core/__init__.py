@@ -335,7 +335,10 @@ class Container:
             uuid = data_config['_uuid_']
             del data_config['_uuid_']
 
-            data_class: type[DataNode] = Container.GetClass(cls_path)
+            try:
+                data_class: type[DataNode] = Container.GetClass(cls_path)
+            except AttributeError: # not found
+                continue # TODO: log
             data_node = data_class(name="[Default]", uuid=uuid)
             data_node.apply_construct_config(data_config)
 
@@ -350,7 +353,11 @@ class Container:
             uuid = act_config['_uuid_']
             del act_config['_uuid_']
 
-            act_class: type[ActionNode] = Container.GetClass(cls_path)
+            try:
+                act_class: type[ActionNode] = Container.GetClass(cls_path)
+            except AttributeError:
+                continue # TODO: log
+
             if '_context_' in act_config:
                 if act_config['_context_'] not in nodes:
                     continue

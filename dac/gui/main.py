@@ -139,7 +139,12 @@ class MainWindow(MainWindowBase):
             
             if (rst:=alias_pattern.search(cls_path)):
                 cls_path = alias[rst['alias_name']]+"."+rst['rest']
-            return Container.GetClass(cls_path)
+
+            try:
+                return Container.GetClass(cls_path)
+            except AttributeError:
+                self.message(f"Module `{cls_path}` not found")
+                return None
 
         with open(setting_fpath, mode="r", encoding="utf8") as fp:
             setting: dict = yaml.load(fp, Loader=yaml.FullLoader)
@@ -148,32 +153,37 @@ class MainWindow(MainWindowBase):
 
             for gdts in setting['data']["_"]: # global_data_type_string
                 node_type = get_node_type(gdts)
-                Container.RegisterGlobalDataType(node_type)
+                if node_type: Container.RegisterGlobalDataType(node_type)
 
             for dts, catss in setting['actions'].items(): #  data_type_string, context_action_type_string_s
                 if dts=="_": # global_context
                     for cats in catss:
                         node_type = get_node_type(cats)
-                        Container.RegisterGlobalContextAction(node_type)
+                        if node_type: Container.RegisterGlobalContextAction(node_type)
                 else:
                     data_type = get_node_type(dts)
+                    if not node_type: continue
                     for cats in catss:
                         action_type = get_node_type(cats)
-                        Container.RegisterContextAction(data_type, action_type)
+                        if action_type: Container.RegisterContextAction(data_type, action_type)
 
             for ats, tss in setting.get("quick_tasks", {}).items(): # action_type_string, task_string_s
                 action_type = get_node_type(ats)
+                if not action_type: continue
                 action_type.QUICK_TASKS = [] # make superclass.QUICK_TASKS hidden
                 for tts, name, *rest in tss: # task_type_string, name, *rest
                     task_type = get_node_type(tts)
+                    if not task_type: continue
                     task = task_type(dac_win=self, name=name, *rest)
                     action_type.QUICK_TASKS.append(task)
 
             for dts, ass in setting.get("quick_actions", {}).items(): # data_type_string, action_string_s
                 data_type = get_node_type(dts)
+                if not data_type: continue
                 data_type.QUICK_ACTIONS = []
                 for ats, dpn, opd in ass: # action_type_string, data_param_name, other_params_dict
                     action_type = get_node_type(ats)
+                    if not action_type: continue
                     data_type.QUICK_ACTIONS.append((action_type, dpn, opd))
 
     def apply_config(self, config: dict):
