@@ -4,10 +4,14 @@ from PyQt5.QtGui import QMouseEvent
 from PyQt5.QtWidgets import QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem, QStyle
 from PyQt5.Qsci import QsciScintilla, QsciLexerYAML
 
+import sys
 from matplotlib.figure import Figure
 import yaml
+import html
+import traceback
 from io import StringIO
 from functools import partial
+from datetime import datetime
 
 from dac.core import Container, ActionNode, DataNode, GCK, NodeBase
 from dac.core.actions import ActionBase, VAB, PAB
@@ -28,7 +32,11 @@ class MainWindowBase(QMainWindow):
         self.figure: Figure = None
 
     def _create_ui(self):
-        ...
+        self._log_widget = QtWidgets.QPlainTextEdit(parent=self) # the log Level selection?
+        self._log_widget.appendHtml(f"<b>The log output:</b> @ {datetime.now():%Y-%m-%d} <br/>")
+        self._log_widget.setReadOnly(True)
+        self._log_widget.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self._log_widget.hide()
 
     def _create_menu(self):
         ...
@@ -38,13 +46,48 @@ class MainWindowBase(QMainWindow):
         status.addPermanentWidget(self._progress_widget)
 
     def start_thread_worker(self, worker: ThreadWorker):
-        worker.signals.message.connect(self.message) # TODO: direct to log widget
+        worker.signals.message.connect(self.message)
         self._progress_widget.add_worker(worker)
         self._thread_pool.start(worker)
 
-    def message(self, msg):
-        print(msg)
+    def message(self, msg, log=True):
         self.statusBar().showMessage(msg, 3000)
+        if log:
+            self._log_widget.appendPlainText(f"{datetime.now():%H:%M:%S} - {msg}")
+
+    def _action_resize_log_widget(self):
+        h = self.height() - 60
+        w = int(self.width() // 2.5)
+        self._log_widget.setGeometry(self.width()-20-w, 30, w, h)
+
+    def action_toggle_log_widget(self):
+        if self._log_widget.isVisible():
+            self._log_widget.hide()
+        else:
+            self._action_resize_log_widget()
+            self._log_widget.show()
+            self._log_widget.horizontalScrollBar().setValue(0)
+            self._log_widget.raise_()
+
+    def resizeEvent(self, a0: QtGui.QResizeEvent) -> None:
+        if self._log_widget.isVisible():
+            self._action_resize_log_widget()
+        return super().resizeEvent(a0)
+
+    def show(self) -> None:
+        def excepthook(etype, evalue, tracebackobj):
+            self._log_widget.appendHtml(f"<br/><b><font color='red'>{etype.__name__}:</font></b> {evalue}")
+            info_stream = StringIO()
+            traceback.print_tb(tracebackobj, file=info_stream)
+            info_stream.seek(0)
+            info_str = info_stream.read()
+            escaped_str = html.escape(info_str).replace('\n', '<br/>').replace(' ', '&nbsp;')
+            self._log_widget.appendHtml(f"<div style='font-family:Consolas'>{escaped_str}</div>")
+
+            self.message("Error occurred, check in log output <Ctrl-L>", log=False)
+        
+        sys.excepthook = excepthook
+        return super().show()
 
 class TaskBase:
     def __init__(self, dac_win: MainWindowBase, name: str, *args):
@@ -354,6 +397,7 @@ class ActionListWidget(QTreeWidget):
             self.refresh()
 
         action.container = container
+        self._parent_win.message(f"[{action.name}]")
 
         if isinstance(action, VAB):
             action.figure = self._parent_win.figure
@@ -555,7 +599,6 @@ class NodeEditorWidget(QWidget):
         self.sig_return_node.emit(self._current_node, config, fire)
 
 if __name__=="__main__":
-    import sys
     app = QtWidgets.QApplication(sys.argv)
     win = MainWindowBase()
     win.show()
