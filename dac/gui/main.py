@@ -62,7 +62,6 @@ class MainWindow(MainWindowBase):
         
         menubar = self.menuBar()
         app_menu = menubar.addMenu("&App")
-        tool_menu = menubar.addMenu("&Tool")
 
         new_project_action = app_menu.addAction("&New project")
         app_menu.addSeparator()
@@ -115,6 +114,8 @@ class MainWindow(MainWindowBase):
         saveas_project_action.triggered.connect(action_saveas)
         load_project_action.triggered.connect(action_load_project)
         exit_action.triggered.connect(self.close)
+
+        menubar.addMenu(self._dac_menu)
     
     def _create_status(self):
         return super()._create_status()

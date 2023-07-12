@@ -39,7 +39,10 @@ class MainWindowBase(QMainWindow):
         self._log_widget.hide()
 
     def _create_menu(self):
-        ...
+        menubar = self.menuBar()
+        self._dac_menu = tool_menu = menubar.addMenu("&Tool")
+
+        tool_menu.addAction("Toggle log output", self.action_toggle_log_widget, shortcut=Qt.CTRL+Qt.Key_L)
 
     def _create_status(self):
         status = self.statusBar()
@@ -268,7 +271,6 @@ class DataListWidget(QTreeWidget):
             else:
                 menu.addAction("Activate").triggered.connect(cb_activate_gen(node_object))
 
-            # TODO: add quick actions here
             # TODO: run actions of this context in sequence
 
             def cb_del_gen(key_object):
@@ -588,7 +590,7 @@ class NodeEditorWidget(QWidget):
         self._current_node = None
 
     def edit_node(self, node: NodeBase):
-        s = yaml.dump(node.get_construct_config())
+        s = yaml.dump(node.get_construct_config(), allow_unicode=True)
         self.editor.setText(s + "\n# " + type(node).__name__)
         self._current_node = node
 

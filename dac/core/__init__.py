@@ -106,7 +106,7 @@ class ActionNode(NodeBase):
         FAILED = -1
 
     @staticmethod
-    def Annotation2Config(ann: type | GenericAlias):
+    def Annotation2Config(ann: type | GenericAlias): # | UnionType
         if hasattr(ann, '_fields'): # namedtuple
             return [f"[{f}]" for f in ann._fields]
         elif isinstance(ann, GenericAlias): # ok: list[], tuple[]; nok: dict[], type[]
@@ -272,7 +272,7 @@ class Container:
                 return config
             else: # str
                 return ann[config]
-        elif issubclass(ann, DataNode):
+        elif issubclass(ann, DataNode): # and isinstance(config, str)
             if (value:=self.get_node_of_type(node_name=config, node_type=ann)) is None:
                 raise NodeNotFoundError(f"Node '{config}' of '{ann.__name__}' not found.")
             return value
