@@ -10,11 +10,12 @@ from dac import __version__, APPNAME
 from dac.core import NodeBase, ActionNode, DataNode, Container
 from dac.gui import MainWindowBase, DataListWidget, ActionListWidget, NodeEditorWidget
 
-APPSETTING = QtCore.QSettings(APPNAME, "Main")
 SET_RECENTDIR = "RecentDir"
 
 class MainWindow(MainWindowBase):
     APPTITLE = APPNAME
+    APPSETTING = QtCore.QSettings(APPNAME, "Main")
+
     def __init__(self) -> None:
         super().__init__()
         self.resize(1200, 800)
@@ -87,22 +88,22 @@ class MainWindow(MainWindowBase):
         def action_saveas():
             fpath, fext = QtWidgets.QFileDialog.getSaveFileName(
                 parent=self, caption="Save project configuration", filter="DAC config (*.dac.json);;All(*.*)",
-                directory=APPSETTING.value(SET_RECENTDIR)
+                directory=self.APPSETTING.value(SET_RECENTDIR)
             )
             if not fpath:
                 return
-            APPSETTING.setValue(SET_RECENTDIR, path.dirname(fpath))
+            self.APPSETTING.setValue(SET_RECENTDIR, path.dirname(fpath))
             self.project_config_fpath = fpath
             action_save()
             self.setWindowTitle(f"{path.basename(fpath)} | {self.APPTITLE}")
         def action_load_project():
             fpath, fext = QtWidgets.QFileDialog.getOpenFileName(
                 parent=self, caption="Open project configuration", filter="DAC config (*.json);;All (*.*)",
-                directory=APPSETTING.value(SET_RECENTDIR)
+                directory=self.APPSETTING.value(SET_RECENTDIR)
             )
             if not fpath:
                 return
-            APPSETTING.setValue(SET_RECENTDIR, path.dirname(fpath))
+            self.APPSETTING.setValue(SET_RECENTDIR, path.dirname(fpath))
             with open(fpath, mode="r", encoding="utf8") as fp:
                 config = json.load(fp)
             self.project_config_fpath = fpath
