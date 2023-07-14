@@ -426,14 +426,16 @@ class ActionListWidget(QTreeWidget):
             return
         itms = self.selectedItems()
         menu = QtWidgets.QMenu("ActionMenu")
-        menu_stack = []
 
-        if not itms:
-            # NOTE: when tree is full (and with scrollbar), it's not easy to trigger
+        def add_new_actions(menu: QtWidgets.QMenu, index: int=None):
+            menu_stack = []
             def cb_creation_gen(a_t: type[ActionNode]):
                 def cb_creation():
                     a = a_t(context_key=container.current_key)
-                    container.actions.append(a)
+                    if index is None:
+                        container.actions.append(a)
+                    else:
+                        container.actions.insert(index, a)
                     self.refresh()
                     self.sig_edit_action_requested.emit(a)
                 return cb_creation
@@ -449,6 +451,8 @@ class ActionListWidget(QTreeWidget):
                         menu.addAction(a_t).setEnabled(False)
                 else:
                     menu.addAction(a_t.CAPTION).triggered.connect(cb_creation_gen(a_t))
+        if not itms:
+            add_new_actions(menu)
         else:
             acts = [itm.data(NAME, Qt.ItemDataRole.UserRole) for itm in itms]
 
@@ -467,6 +471,8 @@ class ActionListWidget(QTreeWidget):
                     task: TaskBase
                     menu.addAction(task.name).triggered.connect(cb_task_gen(task, act))
                 menu.addSeparator()
+                submenu = menu.addMenu("Insert before")
+                add_new_actions(submenu, container.actions.index(act))
 
             def cb_cp2_gen(aa: list[ActionNode], context_key: DataNode):
                 def cb_cp2():
