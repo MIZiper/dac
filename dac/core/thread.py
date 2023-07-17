@@ -9,7 +9,7 @@ class WorkerSignals(QObject):
     Supported signals are:
     - started: No data
     - finished: No data
-    - error:`tuple` (exctype, value, traceback.format_exc() )
+    - error: `exctype, value, traceback`
     - result: `object` data returned from processing, anything
     - progress: `int, int` indicating progress metadata
     - message: `str` the message from worker
@@ -17,7 +17,7 @@ class WorkerSignals(QObject):
 
     started = pyqtSignal()
     finished = pyqtSignal()
-    error = pyqtSignal(tuple)
+    error = pyqtSignal(type, object, object)
     result = pyqtSignal(object)
     progress = pyqtSignal(int, int)
     message = pyqtSignal(str)
@@ -61,9 +61,9 @@ class ThreadWorker(QRunnable):
             
             result = self.fn(*self.args, **self.kwargs)
         except:
-            traceback.print_exc()
-            exctype, value = sys.exc_info()[:2]
-            self.signals.error.emit((exctype, value, traceback.format_exc()))
+            # traceback.print_exc()
+            # exctype, value, tb = sys.exc_info()
+            self.signals.error.emit(*sys.exc_info())
         else:
             self.signals.result.emit(result)  # Return the result of the processing
         finally:

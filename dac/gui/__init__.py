@@ -50,6 +50,7 @@ class MainWindowBase(QMainWindow):
 
     def start_thread_worker(self, worker: ThreadWorker):
         worker.signals.message.connect(self.message)
+        worker.signals.error.connect(self.excepthook)
         self._progress_widget.add_worker(worker)
         self._thread_pool.start(worker)
 
@@ -77,19 +78,19 @@ class MainWindowBase(QMainWindow):
             self._action_resize_log_widget()
         return super().resizeEvent(a0)
 
-    def show(self) -> None:
-        def excepthook(etype, evalue, tracebackobj):
-            self._log_widget.appendHtml(f"<br/><b><font color='red'>{etype.__name__}:</font></b> {evalue}")
-            info_stream = StringIO()
-            traceback.print_tb(tracebackobj, file=info_stream)
-            info_stream.seek(0)
-            info_str = info_stream.read()
-            escaped_str = html.escape(info_str).replace('\n', '<br/>').replace(' ', '&nbsp;')
-            self._log_widget.appendHtml(f"<div style='font-family:Consolas'>{escaped_str}</div>")
+    def excepthook(self, etype, evalue, tracebackobj):
+        self._log_widget.appendHtml(f"<br/><b><font color='red'>{etype.__name__}:</font></b> {evalue}")
+        info_stream = StringIO()
+        traceback.print_tb(tracebackobj, file=info_stream)
+        info_stream.seek(0)
+        info_str = info_stream.read()
+        escaped_str = html.escape(info_str).replace('\n', '<br/>').replace(' ', '&nbsp;')
+        self._log_widget.appendHtml(f"<div style='font-family:Consolas'>{escaped_str}</div>")
 
-            self.message("Error occurred, check in log output <Ctrl-L>", log=False)
-        
-        sys.excepthook = excepthook
+        self.message("Error occurred, check in log output <Ctrl-L>", log=False)
+
+    def show(self) -> None:
+        sys.excepthook = self.excepthook
         return super().show()
 
 class TaskBase:
