@@ -12,11 +12,11 @@ class ClassName:
         ...
 
     @classmethod
-    def class_method_call(cls):
+    def ClassMethodCall(cls):
         ...
 
     @property
-    def PropertyName(self):
+    def property_name(self):
         ...
 
     @staticmethod

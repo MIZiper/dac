@@ -1,5 +1,6 @@
 from os import path
 import json, yaml, re
+import click
 
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtCore import Qt
@@ -205,6 +206,14 @@ class MainWindow(MainWindowBase):
             "dac": {} if self.container is None else self.container.get_save_config()
         }
 
+@click.command()
+@click.option("--config-file", help="Configuration file to load")
+def main(config_file: str):
+    win = MainWindow()
+    if config_file is not None:
+        with open(config_file, mode="r") as fp:
+            config = json.loads(config_file)
+            win.apply_config(config)
 
 if __name__=="__main__":
     import sys

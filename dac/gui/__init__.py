@@ -43,6 +43,7 @@ class MainWindowBase(QMainWindow):
         self._dac_menu = tool_menu = menubar.addMenu("&Tool")
 
         tool_menu.addAction("Toggle log output", self.action_toggle_log_widget, shortcut=Qt.CTRL+Qt.Key_L)
+        # add copy figure
 
     def _create_status(self):
         status = self.statusBar()
@@ -186,6 +187,7 @@ class DataListWidget(QTreeWidget):
             itm = QtWidgets.QTreeWidgetItem(global_item)
             itm.setText(NAME, node_name)
             itm.setText(TYPE, node_type.__name__)
+            itm.setText(REMARK, node_object.uuid)
             itm.setData(NAME, Qt.ItemDataRole.UserRole, node_object)
             if container.current_key is node_object:
                 itm.setIcon(NAME, self._STYLE.standardIcon(QStyle.StandardPixmap.SP_CommandLink))
@@ -200,6 +202,7 @@ class DataListWidget(QTreeWidget):
                 itm = QtWidgets.QTreeWidgetItem(local_item)
                 itm.setText(NAME, node_name)
                 itm.setText(TYPE, node_type.__name__)
+                itm.setText(REMARK, node_object.uuid)
                 itm.setData(NAME, Qt.ItemDataRole.UserRole, node_object)
                 itm.setData(TYPE, Qt.ItemDataRole.UserRole, True) # mark as un-editable
                 # itm.setDisabled(True) # TODO: enable for editing, and quick_actions context menu
@@ -218,8 +221,9 @@ class DataListWidget(QTreeWidget):
             nodes = []
             for i in self.selectedItems():
                 node = i.data(NAME, Qt.ItemDataRole.UserRole)
-                if type(node) is type(node_object): # or subclass?
-                    nodes.append(node)
+                # if type(node) is type(node_object): # or subclass?
+                #     nodes.append(node)
+                nodes.append(node)
 
             def cb_quickaction_gen(qat: tuple[type[ActionBase], str, dict], data_nodes: list[DataNode]):
                 act_type, data_param_name, other_params = qat
