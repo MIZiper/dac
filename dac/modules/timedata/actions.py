@@ -21,7 +21,7 @@ class LoadAction(PAB):
 
 class TruncAction(ActionBase):
     CAPTION = "Truncate TimeData"
-    def __call__(self, channels: list[TimeData], duration: tuple[float, float]=(0, 0)):
+    def __call__(self, channels: list[TimeData], duration: tuple[float, float]=(0, 0)) -> list[TimeData]:
         rst = []
         xfrom, xto = duration
 
@@ -41,7 +41,7 @@ class TruncAction(ActionBase):
         return rst
 
 class FilterAction(ActionBase):
-    def __call__(self, channels: list[TimeData], freq: tuple[float, float], order: int=3, filter_type: FilterType=FilterType.LowPass):
+    def __call__(self, channels: list[TimeData], freq: tuple[float, float], order: int=3, filter_type: FilterType=FilterType.LowPass) -> list[TimeData]:
         rst = []
 
         if filter_type in (FilterType.BandPass, FilterType.BandStop):
@@ -59,7 +59,7 @@ class FilterAction(ActionBase):
         return rst
 
 class ResampleAction(ActionBase):
-    def __call__(self, channels: list[TimeData], dt: float=1):
+    def __call__(self, channels: list[TimeData], dt: float=1) -> list[TimeData]:
         rst = []
         for i, channel in enumerate(channels):
             interval = int(dt // channel.dt)
@@ -105,6 +105,60 @@ class CounterToTachoAction(ActionBase):
 
         return TimeData(name="Tacho", y=rpm, dt=channel.dt, y_unit="rpm")
     
+class ChopOffSpikesAction(PAB):
+    CAPTION = "Chop off spikes"
+    def __call__(self, channels: list[TimeData], max_dydt: float, limits: tuple[float, float]=None) -> list[TimeData]:
+        # `max_dydt`: maximum delta y per sec
+
+        if limits is None:
+            low_lim, high_lim = -np.inf, np.inf
+        else:
+            low_lim, high_lim = limits
+
+        ret_channels = []
+        n = len(channels)
+
+        for j, channel in enumerate(channels):
+            signal = channel
+            orig_data = signal.y
+            target_data = orig_data.copy()
+
+            max_dy = max_dydt * signal.dt
+
+            look4raise = True
+            s, e = 0, 0
+
+            if len(target_data)>0:
+                pv = orig_data[0]
+            else:
+                continue
+            
+            for i, cv in enumerate(orig_data[1:]):
+                dy = cv-pv
+                if look4raise:
+                    if dy > max_dy:
+                        s = i # start from prev idx
+                        sv = pv
+                        look4raise = False
+                else:
+                    if np.abs(dy)<max_dy and np.abs(cv-sv)<max_dy*(i+1-s) and cv<=high_lim and cv>=low_lim:
+                        look4raise = True
+                        target_data[(s+1):(i+1)] = np.linspace(sv, cv, num=(i-s+2), endpoint=True)[1:-1]
+                pv = cv
+            
+            ret_channels.append(
+                TimeData(
+                    name=f"{channel.name}-Chop",
+                    y=target_data,
+                    dt=signal.dt,
+                    y_unit=signal.y_unit
+                )
+            )
+
+            self.progress(j+1, n)
+
+        return ret_channels
+
 class PulseToAzimuthAction(ActionBase):
     CAPTION = "Pulse to azimuth"
     def __call__(self, channel: TimeData, ref_level: float, ppr: int=1, higher_as_pulse: bool=True, phase_shift: float=0) -> TimeData:
