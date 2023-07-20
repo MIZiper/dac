@@ -24,6 +24,53 @@ class GearStage:
         self.ratio = ratio
         self.stage_type = t
 
+    def f(self, input_speed): # order=1
+        return input_speed / 60
+
+    def fz(self, input_speed): # order=1
+        if self.stage_type==GearStage.StageType.Planetary:
+            return input_speed / 60 * self.config['RG']
+        elif self.stage_type==GearStage.StageType.Parallel:
+            return input_speed / 60 * self.config['Wheel']
+
+    def input_speed(self, output_speed):
+        return output_speed / self.ratio
+
+    def get_freq_at_order(self, order: str):
+        ...
+
+    def get_order_name_at_freq(self, freq: float, max_order: int, tolerance: int):
+        # return the name
+        ...
+
+    def get_freqs_labels_at(self, speed: float, speed_on_output: bool=True):
+        rst = [
+            (
+                self.f( self.input_speed(speed) if speed_on_output else speed ),
+                "f"
+            ),
+            (
+                self.fz( self.input_speed(speed) if speed_on_output else speed ),
+                "fz"
+            ),
+        ]
+        if self.stage_type==GearStage.StageType.Planetary:
+            NoP = self.config['NoP']
+            rst.append(
+                (
+                    NoP * self.f( self.input_speed(speed) if speed_on_output else speed ),
+                    f"{NoP}pf",
+                )
+            )
+            rst.append(
+                (
+                    self.f( self.input_speed(speed) if speed_on_output else speed ) * self.config['RG'] / self.config['PG'], # PG rotation speed related to PC
+                    f"fw",
+                )
+            )
+
+        return rst
+
 class GearboxDefinition(DataBase):
     def __init__(self, name: str = None, uuid: str = None, stages: list[GearStage]=None) -> None:
         super().__init__(name, uuid)
@@ -49,6 +96,28 @@ class GearboxDefinition(DataBase):
         self.stages.clear()
         for stage in construct_config["stages"]:
             self.stages.append(GearStage(stage))
+
+    def get_freqs_labels_at(self, speed: float, speed_on_output: bool=True, choice_bits: int=-1):
+        rst = []
+        if not speed_on_output:
+            for i, stg in enumerate(self.stages):
+                if (choice_bits==-1) or (choice_bits & (1<<i)):
+                    for freq, lbl in stg.get_freqs_labels_at(speed, speed_on_output):
+                        rst.append(
+                            (freq, f"{lbl}_{i+1}",)
+                        )
+                speed = speed * stg.ratio
+        else:
+            n = len(self.stages)
+            for i, stg in enumerate(self.stages[::-1]):
+                if (choice_bits==-1) or (choice_bits & (1<<(n-i-1))):
+                    for freq, lbl in stg.get_freqs_labels_at(speed, speed_on_output):
+                        rst.append(
+                            (freq, f"{lbl}_{n-i}",)
+                        )
+                speed = speed / stg.ratio
+
+        return rst
 
 class BallBearing(DataBase):
     def __init__(self, name: str = None, uuid: str = None, N_balls: int=8, D_ball: float=2, D_pitch: float=12, beta: float=15) -> None:
