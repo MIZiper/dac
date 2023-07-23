@@ -9,6 +9,17 @@ from .data import FreqIntermediateData, DataBins, FreqDomainData
 class ToFreqDomainAction(ActionBase):
     CAPTION = "Simple FFT to frequency domain"
 
+    def __call__(self, channels: list[TimeData]) -> list[FreqDomainData]:
+        rst = []
+        
+        for i, ch in enumerate(channels):
+            N = ch.length
+            df = ...
+            fdata = np.abs(np.fft.fft(ch.y))[:N//2] / N * 2
+            rst.append(FreqDomainData())
+
+        return rst
+
 class ToFreqIntermediateAction(PAB):
     CAPTION = "FFT to frequency domain with window and reference"
 
@@ -65,7 +76,7 @@ class AverageIntermediateAction(ActionBase):
 class ViewFreqDomainAction(VAB):
     CAPTION = "Show FFT spectrum"
 
-    def __call__(self, channels: list[FreqDomainData], range: tuple[float, float]=None, with_phase: bool=False):
+    def __call__(self, channels: list[FreqDomainData], xlim: tuple[float, float]=None, ylim: tuple[float, float]=None, with_phase: bool=False):
         fig = self.figure
         gs = GridSpec(2, 1, height_ratios=[2, 1])
 
@@ -79,15 +90,15 @@ class ViewFreqDomainAction(VAB):
         ax.set_xlabel("Frequency [Hz]")
         ax.set_ylabel("Amplitude")
 
+        if xlim: ax.set_xlim(xlim)
+        if ylim: ax.set_ylim(ylim)
+
         for channel in channels:
             ax.plot(channel.x, channel.amplitude, label=f"{channel.name} [{channel.y_unit}]")
             if with_phase:
                 ax_p.plot(channel.x, channel.phase)
 
         ax.legend(loc="upper right")
-
-        if range is not None:
-            ax.set_xlim(range)
 
 class ViewFreqIntermediateAction(VAB):
     CAPTION = "Show FFT color plot"
@@ -127,3 +138,27 @@ class ExtractOrderSliceAction(PAB):
                 a = f_batch.extract_amplitude_at(target_x)
 
 # calc rms
+
+class FilterSpectrumAction(PAB):
+    CAPTION = "Filter spectrum"
+    def __call__(self, channels: list[FreqDomainData], bands: list[float, float], remove: bool=True) -> list[FreqDomainData]:
+        rst = []
+        if remove:
+            for ch in channels:
+                rst.append(ch.remove_spec(bands=bands))
+        else:
+            for ch in channels:
+                rst.append(ch.keep_spec(bands=bands))
+        return rst
+    
+class SpectrumToTimeAction(PAB):
+    CAPTION = "Convert spectrum to TimeData"
+
+class SpectrumAsTimeAction(PAB):
+    CAPTION = "Treate frequency spectrum as TimeData"
+
+class EnvelopeTimeAction(PAB):
+    # scipy.signal.hilbert
+    pass
+
+# BearingEnvelopeAnalysis = FFT + FilterSpec + ...

@@ -42,6 +42,36 @@ class FreqDomainData(DataBase):
     def amplitude(self):
         return np.abs(self.y)
     
+    def remove_spec(self, bands: list[float, float]):
+        y = self.y.copy()
+        x = self.x
+
+        for ffrom, fto in bands:
+            b = ffrom <= x <= fto
+            y[b] = 0
+
+        return FreqDomainData(
+            name=self.name,
+            y=y,
+            df=self.df,
+            y_unit=self.y_unit
+        )
+    
+    def keep_spec(self, bands: list[float, float]):
+        y = np.zeros_like(self.y)
+        x = self.x
+
+        for ffrom, fto in bands:
+            b = ffrom <= x <= fto
+            y[b] = self.y[b]
+
+        return FreqDomainData(
+            name=self.name,
+            y=y,
+            df=self.df,
+            y_unit=self.y_unit
+        )
+    
     def integral(self, order: int=1):
         a = self.x * 1j * 2 * np.pi
         b = np.zeros(self.lines, dtype="complex")
@@ -59,9 +89,16 @@ class FreqDomainData(DataBase):
     def to_timedomain(self):
         single_spec = self.y
         double_spec = np.concatenate(single_spec, np.conjugate(single_spec[self.lines:0:-1]))
+        # error => y * N
         y = np.real(np.fft.ifft(double_spec))
 
         return TimeData(name=self.name, y=y, dt=1/(self.lines*self.df*2), y_unit=self.y_unit)
+    
+    def as_timedomain(self):
+        ...
+
+    def get_amplitudes_at(self, frequencies: list[float], lines: int):
+        ...
 
 class FreqIntermediateData(DataBase):
     def __init__(self, name: str = None, uuid: str = None, z: np.ndarray=None, df: float=1, z_unit: str="-", ref_bins: DataBins=None) -> None:

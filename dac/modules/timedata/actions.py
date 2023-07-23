@@ -41,6 +41,7 @@ class TruncAction(ActionBase):
         return rst
 
 class FilterAction(ActionBase):
+    CAPTION = "Filter TimeData"
     def __call__(self, channels: list[TimeData], freq: tuple[float, float], order: int=3, filter_type: FilterType=FilterType.LowPass) -> list[TimeData]:
         rst = []
 
