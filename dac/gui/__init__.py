@@ -9,8 +9,9 @@ from matplotlib.figure import Figure
 import yaml
 import html
 import traceback
-from io import StringIO
+from io import StringIO, BytesIO
 from functools import partial
+from collections import defaultdict
 from datetime import datetime
 
 from dac.core import Container, ActionNode, DataNode, GCK, NodeBase
@@ -30,6 +31,7 @@ class MainWindowBase(QMainWindow):
         self._progress_widget = ProgressWidget4Threads(self)
 
         self.figure: Figure = None
+        self._settings = defaultdict(bool)
 
     def _create_ui(self):
         self._log_widget = QtWidgets.QPlainTextEdit(parent=self) # the log Level selection?
@@ -43,7 +45,12 @@ class MainWindowBase(QMainWindow):
         self._dac_menu = tool_menu = menubar.addMenu("&Tool")
 
         tool_menu.addAction("Toggle log output", self.action_toggle_log_widget, shortcut=Qt.CTRL+Qt.Key_L)
-        # add copy figure
+        tool_menu.addAction("Copy figure", self.action_copy_figure)
+        tool_menu.addSeparator()
+        no_thread_action = QtWidgets.QAction("No threading", tool_menu)
+        no_thread_action.setCheckable(True)
+        no_thread_action.triggered.connect(lambda: self.action_toggle_setting("no_thread"))
+        tool_menu.addAction(no_thread_action)
 
     def _create_status(self):
         status = self.statusBar()
@@ -53,7 +60,10 @@ class MainWindowBase(QMainWindow):
         worker.signals.message.connect(self.message)
         worker.signals.error.connect(self.excepthook)
         self._progress_widget.add_worker(worker)
-        self._thread_pool.start(worker)
+        if self._settings["no_thread"]:
+            worker.run()
+        else:
+            self._thread_pool.start(worker)
 
     def message(self, msg, log=True):
         self.statusBar().showMessage(msg, 3000)
@@ -73,6 +83,16 @@ class MainWindowBase(QMainWindow):
             self._log_widget.show()
             self._log_widget.horizontalScrollBar().setValue(0)
             self._log_widget.raise_()
+
+    def action_toggle_setting(self, key):
+        self._settings[key] = not self._settings[key]
+
+    def action_copy_figure(self):
+        if self.figure is None:
+            return
+        with BytesIO() as buf:
+            self.figure.savefig(buf)
+            QtWidgets.QApplication.clipboard().setImage(QtGui.QImage.fromData(buf.getvalue()))
 
     def resizeEvent(self, a0: QtGui.QResizeEvent) -> None:
         if self._log_widget.isVisible():
