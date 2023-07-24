@@ -13,7 +13,7 @@ class ShowFreqLinesTime(VAB):
 
 class ShowFreqLinesFreq(VAB):
     CAPTION = "Mark frequency lines on spectrum"
-    def __call__(self, speed_channel: TimeData, gearbox: GearboxDefinition, stages: list[int], speed_on_output: bool=True, fmt_lines: list[str]=None):
+    def __call__(self, gearbox: GearboxDefinition, speed_channel: TimeData, speed_on_output: bool=True, stages: list[int]=[1, 2], fmt_lines: list[str]=["{f_1}", "{f_2}-{f_1}"]):
         if not speed_channel or not gearbox:
             return
         

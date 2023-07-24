@@ -30,6 +30,7 @@ actions:
   - /mt/actions.PulseToAzimuthAction
   - "[<]"
   - "[Freq domain]"
+  - /mv/actions.ToFreqDomainAction
   - /mv/actions.ToFreqIntermediateAction
   - /mv/actions.ViewFreqIntermediateAction
   - /mv/actions.AverageIntermediateAction
@@ -38,6 +39,8 @@ actions:
 quick_actions: # temporary action creation for immediate run (action take only one parameter)
   /mt/TimeData:
   - [/mt/actions.ShowTimeDataAction, channels, {}]
+  /mv/data.FreqDomainData:
+  - [/mv/actions.ViewFreqDomainAction, channels, {with_phase: true}]
 
 quick_tasks:
   /mt/actions.LoadAction:

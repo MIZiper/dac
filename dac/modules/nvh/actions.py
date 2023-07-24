@@ -6,18 +6,22 @@ from dac.modules.timedata import TimeData
 from . import WindowType, BandCorrection, BinMethod, AverageType
 from .data import FreqIntermediateData, DataBins, FreqDomainData
 
-class ToFreqDomainAction(ActionBase):
-    CAPTION = "Simple FFT to frequency domain"
+class ToFreqDomainAction(PAB):
+    CAPTION = "Simple FFT to frequency domain" # rect window
 
     def __call__(self, channels: list[TimeData]) -> list[FreqDomainData]:
         rst = []
-        
+        m = len(channels)
         for i, ch in enumerate(channels):
-            N = ch.length
-            df = ...
-            fdata = np.abs(np.fft.fft(ch.y))[:N//2] / N * 2
-            rst.append(FreqDomainData())
+            batch_N = ch.length
+            df = 1 / (batch_N*ch.dt)
+            fdata = np.fft.fft(ch.y) / batch_N
 
+            double_spec = fdata[:int(np.ceil(batch_N/2))]
+            double_spec[1:] *= 2
+
+            rst.append(FreqDomainData(name=ch.name, y=double_spec, df=df, y_unit=ch.y_unit))
+            self.progress(i+1, m)
         return rst
 
 class ToFreqIntermediateAction(PAB):
@@ -27,7 +31,7 @@ class ToFreqIntermediateAction(PAB):
                  window: WindowType=WindowType.Hanning, corr: BandCorrection=BandCorrection.NarrowBand,
                  resolution: float=0.5, overlap: float=0.75,
                  ref_channel: TimeData=None,
-                 ) -> list[FreqIntermediateData]:
+                ) -> list[FreqIntermediateData]:
         
         freqs = []
 
