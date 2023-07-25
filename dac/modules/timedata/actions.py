@@ -55,7 +55,7 @@ class FilterAction(ActionBase):
             b, a = signal.butter(order, Wn, filter_type.value)
             y = signal.filtfilt(b, a, channel.y)
 
-            rst.append(TimeData(name=channel.name, y=y, dt=channel.dt, y_unit=channel.y_unit, comment=channel.comment))
+            rst.append(TimeData(name=f"{channel.name}-FiltT", y=y, dt=channel.dt, y_unit=channel.y_unit, comment=channel.comment))
 
         return rst
 

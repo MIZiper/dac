@@ -29,12 +29,15 @@ actions:
   - /mt/actions.CounterToTachoAction
   - /mt/actions.PulseToAzimuthAction
   - "[<]"
+  - /mt/actions.FilterAction
   - "[Freq domain]"
   - /mv/actions.ToFreqDomainAction
   - /mv/actions.ToFreqIntermediateAction
   - /mv/actions.ViewFreqIntermediateAction
   - /mv/actions.AverageIntermediateAction
   - /mv/actions.ViewFreqDomainAction
+  - /mv/actions.FilterSpectrumAction
+  - /mv/actions.SpectrumToTimeAction
 
 quick_actions: # temporary action creation for immediate run (action take only one parameter)
   /mt/TimeData:

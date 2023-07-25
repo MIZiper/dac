@@ -145,7 +145,7 @@ class ExtractOrderSliceAction(PAB):
 
 class FilterSpectrumAction(PAB):
     CAPTION = "Filter spectrum"
-    def __call__(self, channels: list[FreqDomainData], bands: list[float, float], remove: bool=True) -> list[FreqDomainData]:
+    def __call__(self, channels: list[FreqDomainData], bands: list[tuple[float, float]], remove: bool=True) -> list[FreqDomainData]:
         rst = []
         if remove:
             for ch in channels:
@@ -157,6 +157,11 @@ class FilterSpectrumAction(PAB):
     
 class SpectrumToTimeAction(PAB):
     CAPTION = "Convert spectrum to TimeData"
+    def __call__(self, channels: list[FreqDomainData]) -> list[TimeData]:
+        rst = []
+        for ch in channels:
+            rst.append(ch.to_timedomain())
+        return rst
 
 class SpectrumAsTimeAction(PAB):
     CAPTION = "Treate frequency spectrum as TimeData"

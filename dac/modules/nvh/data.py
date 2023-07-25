@@ -42,31 +42,31 @@ class FreqDomainData(DataBase):
     def amplitude(self):
         return np.abs(self.y)
     
-    def remove_spec(self, bands: list[float, float]):
+    def remove_spec(self, bands: list[tuple[float, float]]):
         y = self.y.copy()
         x = self.x
 
         for ffrom, fto in bands:
-            b = ffrom <= x <= fto
+            b = np.all([ffrom<=x, x<=fto], axis=0)
             y[b] = 0
 
         return FreqDomainData(
-            name=self.name,
+            name=f"{self.name}-FiltF",
             y=y,
             df=self.df,
             y_unit=self.y_unit
         )
     
-    def keep_spec(self, bands: list[float, float]):
+    def keep_spec(self, bands: list[tuple[float, float]]):
         y = np.zeros_like(self.y)
         x = self.x
 
         for ffrom, fto in bands:
-            b = ffrom <= x <= fto
+            b = np.all([ffrom<=x, x<=fto], axis=0)
             y[b] = self.y[b]
 
         return FreqDomainData(
-            name=self.name,
+            name=f"{self.name}-ExtractF",
             y=y,
             df=self.df,
             y_unit=self.y_unit
@@ -78,7 +78,7 @@ class FreqDomainData(DataBase):
         b[1:] = a[1:]**(-order)
         y = self.y * b
 
-        return FreqDomainData(name=self.name, y=y, df=self.df, y_unit=self.y_unit+f"*{'s'*order}")    
+        return FreqDomainData(name=f"{self.name}-IntF", y=y, df=self.df, y_unit=self.y_unit+f"*{'s'*order}")    
     
     def effective_value(self, fmin=0, fmax=0):
         # index = (freq > fmin) & (freq <= fmax)
@@ -88,9 +88,10 @@ class FreqDomainData(DataBase):
     
     def to_timedomain(self):
         single_spec = self.y
-        double_spec = np.concatenate(single_spec, np.conjugate(single_spec[self.lines:0:-1]))
-        # error => y * N
-        y = np.real(np.fft.ifft(double_spec))
+        double_spec = np.concatenate([single_spec, np.conjugate(single_spec[self.lines:0:-1])]) / 2
+        double_spec[0] *= 2
+        # I really need to consider saving all spectrum without converting between ss and ds
+        y = np.real(np.fft.ifft(double_spec * len(double_spec)))
 
         return TimeData(name=self.name, y=y, dt=1/(self.lines*self.df*2), y_unit=self.y_unit)
     
