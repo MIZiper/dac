@@ -27,9 +27,18 @@ class GearStage:
     def f(self, input_speed): # order=1
         return input_speed / 60
 
-    def fz(self, input_speed): # order=1
+    def fz(self, input_speed, order=1):
         if self.stage_type==GearStage.StageType.Planetary:
-            return input_speed / 60 * self.config['RG']
+            n = self.config['NoP']
+            z = self.config['RG']*order
+            Z = round(z/n) * n # in non-factorizing case, find closest (dominant) side band; for factorizing, same as `z`
+            _Z = (-1)**(Z>z)*n*(Z!=z)+Z # the other side band
+            # _Z = np.sign(z-Z)*n+Z # same
+
+            # TODO: distinguish fz and fzN/fzn, otherwise 2*{fz} is not {2fz}
+            
+            return input_speed / 60 * Z
+        
         elif self.stage_type==GearStage.StageType.Parallel:
             return input_speed / 60 * self.config['Wheel']
 

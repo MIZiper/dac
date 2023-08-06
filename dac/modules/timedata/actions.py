@@ -75,12 +75,14 @@ class PrepDataAction(SAB, seq=[TruncAction, ResampleAction, FilterAction]): # ex
 
 class ShowTimeDataAction(VAB):
     CAPTION = "Show measurement data"
-    def __call__(self, channels: list[TimeData], plot_dt: float=None):
+    def __call__(self, channels: list[TimeData], plot_dt: float=None, xlim: tuple[float, float]=None, ylim: tuple[float, float]=None):
         fig = self.figure
         fig.suptitle("Time data visualization")
 
         ax = fig.gca()
         ax.set_xlabel("Time [s]")
+        if xlim: ax.set_xlim(xlim)
+        if ylim: ax.set_ylim(ylim)
         
         for channel in channels:
             x, y = channel.x, channel.y

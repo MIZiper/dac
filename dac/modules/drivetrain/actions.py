@@ -85,7 +85,7 @@ class ShowFreqLinesFreq(VAB):
             bits |= 1<<(stage_num-1)
 
         trans = ax.get_xaxis_text1_transform(0)
-        speed = np.mean(speed_channel.y) # if isnumber(speed_channel), just assign
+        speed = np.abs(np.mean(speed_channel.y)) # if isnumber(speed_channel), just assign
 
         for freq, label in gearbox.get_freqs_labels_at(speed, speed_on_output, choice_bits=bits):
             # TODO: based on checkbox
