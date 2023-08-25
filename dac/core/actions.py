@@ -29,7 +29,7 @@ class VisualizeActionBase(ActionBase):
         super().__init__(context_key, name, uuid)
         self._figure: Figure = None
         self._cids = [] # never overwrite in __call__
-        self._patches = [] # to host evented patches
+        self._widgets = [] # to host evented widgets
 
         # on_callback to change the node params itself
 
@@ -43,13 +43,18 @@ class VisualizeActionBase(ActionBase):
     
     @figure.setter
     def figure(self, fig: Figure):
+        # when a figure assigned to visualization, need to clean the previous events and widgets (that have events)
         canvas = fig.canvas
         self._figure = fig
-        fig.clf()
         if hasattr(canvas, "_cids"):
             for cid in canvas._cids:
                 canvas.mpl_disconnect(cid)
+        if hasattr(canvas, "_widgets"):
+            for widget in canvas._widgets:
+                widget.disconnect_events()
         canvas._cids = self._cids = []
+        canvas._widgets = self._widgets = []
+        fig.clf()
 
     def post_run(self, *args, **kwargs):
         self.canvas.draw_idle()
@@ -145,7 +150,7 @@ class SequenceActionBase(PAB, VAB):
                 ...
             if isinstance(action, VAB):
                 self._cids.extend(action._cids)
-                self._patches.append(action._patches)
+                self._widgets.extend(action._widgets)
             # action.post_run()
 
             self.progress(i+1, n)

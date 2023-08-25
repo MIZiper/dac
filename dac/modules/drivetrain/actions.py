@@ -18,7 +18,7 @@ class ShowFreqLinesTime(VAB):
             fmt_lines = []
 
         canvas = self.canvas
-        widgets = self._patches
+        widgets = [] # it's actually patches
 
         def on_press(event):
             if ( (not (ax:=event.inaxes)) or event.button!=1 or canvas.widgetlock.locked() ):
