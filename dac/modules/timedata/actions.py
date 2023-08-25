@@ -42,13 +42,14 @@ class TruncAction(ActionBase):
 
 class FilterAction(ActionBase):
     CAPTION = "Filter TimeData"
-    def __call__(self, channels: list[TimeData], freq: tuple[float, float], order: int=3, filter_type: FilterType=FilterType.LowPass) -> list[TimeData]:
+    def __call__(self, channels: list[TimeData], freqs: tuple[float, float], order: int=3, filter_type: FilterType=FilterType.BandPass) -> list[TimeData]:
+        # with current annotation mechanism, freq as single float won't be passed inside
         rst = []
 
         if filter_type in (FilterType.BandPass, FilterType.BandStop):
-            w = np.array(freq)
+            w = np.array(freqs)
         else:
-            w = freq
+            w = freqs[0]
 
         for i, channel in enumerate(channels):
             Wn = w / (channel.fs / 2)

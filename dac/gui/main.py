@@ -49,6 +49,8 @@ class MainWindow(MainWindowBase):
         self.canvas = canvas = FigureCanvasQTAgg(figure)
         self.navibar = navibar = NavigationToolbar2QT(canvas, self)
 
+        # strong focus on canvas
+
         center_widget = QtWidgets.QWidget(self)
         vlayout = QtWidgets.QVBoxLayout(center_widget)
         vlayout.addWidget(canvas)

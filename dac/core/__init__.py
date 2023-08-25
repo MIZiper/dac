@@ -46,7 +46,7 @@ class DataNode(NodeBase):
     BASICTYPES = (int, float, str, bool)
     @staticmethod
     def Value2BasicTypes(v):
-        if isinstance(v, DataNode.BASICTYPES):
+        if type(v) in DataNode.BASICTYPES: # `isinstance` not enough because e.g. `np.float64` is subclass of `float`
             return v
         elif isinstance(v, (list, tuple)):
             return [DataNode.Value2BasicTypes(e) for e in v]
