@@ -1,7 +1,9 @@
-from dac.core.actions import VAB, PAB, SAB
+import numpy as np
 from . import BallBearing, GearboxDefinition
 from dac.modules.timedata import TimeData
-import numpy as np
+from dac.core.actions import VAB, PAB, SAB
+from dac.modules.timedata.actions import ShowTimeDataAction
+from dac.modules.nvh.actions import ViewFreqDomainAction
 
 class BearingInputStage(int): # cannot use namedtuple(BallBearing, BearingInputStage) because no conversion for namedtuple
     pass
@@ -106,3 +108,9 @@ class ShowFreqLinesFreq(VAB):
 
             ax.axvline(freq, ymax=0.95-0.05*(i%2), ls="--", lw=1)
             ax.text(freq, 0.95-0.05*(i%2), label, transform=trans[0])
+
+class ShowSpectrumWithFreqLines(SAB, seq=[ViewFreqDomainAction, ShowFreqLinesFreq]):
+    CAPTION = "Show FFT spectrum with freq lines"
+
+class ShowTimeDataWithFreqLines(SAB, seq=[ShowTimeDataAction, ShowFreqLinesTime]):
+    CAPTION = "Show time data with freq lines"

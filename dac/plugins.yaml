@@ -13,31 +13,34 @@ data:
 actions:
   _: # the actions for global context
   - /da/Separator
-  - "[Test]"
+  - "[Test space>]"
   - /da/A1A2 # SAB action
   - /da/A1A2_2 # SAB of SAB
   - dac.modules.drivetrain.actions.ShowFreqLinesTime
   - /md/actions.ShowFreqLinesFreq
+  - "[<]"
   
   /dd/SimpleDefinition:
   - /da/Separator
   - "[Time domain]" # section hint
   - /mt/actions.LoadAction
-  - dac.modules.timedata.construct.SignalConstructAction # same as /mt/construct.SignalConstructAction
-  - /mt/actions.ShowTimeDataAction
+  - /md/actions.ShowTimeDataWithFreqLines
   - "[Time data>]"
   - /mt/actions.CounterToTachoAction
   - /mt/actions.PulseToAzimuthAction
-  - "[<]"
   - /mt/actions.FilterAction
+  - "[<]"
   - "[Freq domain]"
   - /mv/actions.ToFreqDomainAction
+  - /md/actions.ShowSpectrumWithFreqLines
   - /mv/actions.ToFreqIntermediateAction
   - /mv/actions.ViewFreqIntermediateAction
   - /mv/actions.AverageIntermediateAction
-  - /mv/actions.ViewFreqDomainAction
   - /mv/actions.FilterSpectrumAction
   - /mv/actions.SpectrumToTimeAction
+  - "[Test space>]"
+  - dac.modules.timedata.construct.SignalConstructAction # same as /mt/construct.SignalConstructAction
+  - "[<]"
 
 quick_actions: # temporary action creation for immediate run (action take only one parameter)
   /mt/TimeData:
