@@ -173,6 +173,7 @@ class DacWidget(QtCore.QObject):
 class DataListWidget(QTreeWidget):
     sig_edit_data_requested = QtCore.pyqtSignal(DataNode)
     sig_action_update_requested = QtCore.pyqtSignal()
+    sig_action_runall_requested = QtCore.pyqtSignal()
     
     def __init__(self, parent: MainWindowBase) -> None:
         super().__init__(parent)
@@ -291,12 +292,18 @@ class DataListWidget(QTreeWidget):
                     self.refresh()
                 return cb_activate
             
+            def cb_activaterun_gen(key_object):
+                def cb_activaterun():
+                    cb_activate_gen(key_object)()
+                    self.sig_action_runall_requested.emit()
+                return cb_activaterun
+
+            menu.addAction("Activate and Run-all").triggered.connect(cb_activaterun_gen(node_object))
+            
             if node_object is container.current_key:
                 menu.addAction("De-activate").triggered.connect(cb_activate_gen(GCK))
             else:
                 menu.addAction("Activate").triggered.connect(cb_activate_gen(node_object))
-
-            # TODO: run actions of this context in sequence
 
             def cb_del_gen(key_object):
                 def cb_del():
@@ -401,7 +408,7 @@ class ActionListWidget(QTreeWidget):
 
             itm.setIcon(NAME, self._STYLE.standardIcon(ActionListWidget.PIXMAP[action.status]))
 
-    def run_action(self, action: ActionNode):
+    def run_action(self, action: ActionNode, complete_cb: callable=None):
         if (container := self._container) is None:
             return
         params = container.prepare_params_for_action(action._SIGNATURE, action._construct_config)
@@ -422,6 +429,8 @@ class ActionListWidget(QTreeWidget):
 
             action.status = ActionNode.ActionStatus.COMPLETE # TODO: update accordingly
             self.refresh()
+            if callable(complete_cb):
+                complete_cb()
 
         action.container = container
         self._parent_win.message(f"[{action.name}]")
@@ -446,6 +455,27 @@ class ActionListWidget(QTreeWidget):
             action.post_run()
             completed(rst)
 
+    def run_all_actions(self): # both `container.get_node_of_type` and `current_context.add_node(rst)` need current context
+        if (container := self._container) is None:
+            return
+        
+        def action_yield():
+            for action in container.ActionsInCurrentContext:
+                if isinstance(action, VAB):
+                    continue
+                yield action
+
+        action_yielder = action_yield()
+        
+        def run_next_action():
+            try:
+                action = next(action_yielder)
+                self.run_action(action, run_next_action)
+            except StopIteration:
+                pass
+
+        run_next_action()
+        
     def action_context_requested(self, pos: QtCore.QPoint):
         if (container := self._container) is None:
             return

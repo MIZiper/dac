@@ -130,6 +130,9 @@ class MainWindow(MainWindowBase):
         self.data_list_widget.sig_action_update_requested.connect(
             self.action_list_widget.refresh
         )
+        self.data_list_widget.sig_action_runall_requested.connect(
+            self.action_list_widget.run_all_actions
+        )
         self.action_list_widget.sig_data_update_requested.connect(
             self.data_list_widget.refresh
         )
