@@ -6,6 +6,7 @@ from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtCore import Qt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.backend_bases import key_press_handler
 
 from dac import __version__, APPNAME
 from dac.core import NodeBase, ActionNode, DataNode, Container
@@ -49,7 +50,8 @@ class MainWindow(MainWindowBase):
         self.canvas = canvas = FigureCanvasQTAgg(figure)
         self.navibar = navibar = NavigationToolbar2QT(canvas, self)
 
-        # strong focus on canvas
+        canvas.mpl_connect("key_press_event", lambda event: key_press_handler(event, canvas, navibar))
+        canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         center_widget = QtWidgets.QWidget(self)
         vlayout = QtWidgets.QVBoxLayout(center_widget)
