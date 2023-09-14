@@ -113,6 +113,9 @@ class MainWindowBase(QMainWindow):
     def show(self) -> None:
         sys.excepthook = self.excepthook
         return super().show()
+    
+    def spawn_cofigure(self) -> Figure:
+        pass
 
 class TaskBase:
     def __init__(self, dac_win: MainWindowBase, name: str, *args):

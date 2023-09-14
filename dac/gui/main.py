@@ -141,6 +141,25 @@ class MainWindow(MainWindowBase):
         self.node_editor.sig_return_node.connect(self.data_list_widget.action_apply_node_config)
         self.node_editor.sig_return_node.connect(self.action_list_widget.action_apply_node_config)
 
+    def spawn_cofigure(self):
+        figure = Figure()
+        canvas = FigureCanvasQTAgg(figure)
+        navibar = NavigationToolbar2QT(canvas, self)
+
+        canvas.mpl_connect("key_press_event", lambda event: key_press_handler(event, canvas, navibar))
+        canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+        widget = QtWidgets.QWidget(self, flags=Qt.WindowType.Tool)
+        widget.setWindowTitle("Copilot figure")
+        widget.resize(650, 450)
+        layout = QtWidgets.QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(navibar)
+        layout.addWidget(canvas)
+        widget.show()
+
+        return figure
+
     def use_plugins(self, setting_fpath: str):
         alias_pattern = re.compile("^/(?P<alias_name>.+)/(?P<rest>.+)")
         def get_node_type(cls_path: str) -> str | type[NodeBase]:
