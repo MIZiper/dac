@@ -654,7 +654,7 @@ class NodeEditorWidget(QWidget):
         self._current_node = None
 
     def edit_node(self, node: NodeBase):
-        s = yaml.dump(node.get_construct_config(), allow_unicode=True)
+        s = yaml.dump(node.get_construct_config(), allow_unicode=True, sort_keys=False)
         self.editor.setText(s + "\n# " + type(node).__name__)
         self._current_node = node
 
