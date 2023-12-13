@@ -1,6 +1,7 @@
 from os import path
 import json, yaml, re
 import click
+from glob import glob
 
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtCore import Qt
@@ -160,7 +161,7 @@ class MainWindow(MainWindowBase):
 
         return figure
 
-    def use_plugins(self, setting_fpath: str):
+    def use_plugins(self, setting_fpath: str, clean: bool=True):
         alias_pattern = re.compile("^/(?P<alias_name>.+)/(?P<rest>.+)")
         def get_node_type(cls_path: str) -> str | type[NodeBase]:
             if cls_path[0]=="[" and cls_path[-1]=="]":
@@ -174,9 +175,18 @@ class MainWindow(MainWindowBase):
             except AttributeError:
                 self.message(f"Module `{cls_path}` not found")
                 return None
+            
+        if clean:
+            Container._context_action_types.clear()
+            Container._global_node_types.clear()
+            # quick_tasks and quick_actions are always overwritten
 
         with open(setting_fpath, mode="r", encoding="utf8") as fp:
             setting: dict = yaml.load(fp, Loader=yaml.FullLoader)
+            if not setting: return
+
+            if (inherit_rel_path:=setting.get('inherit')) is not None:
+                self.use_plugins(path.join(path.dirname(setting_fpath), inherit_rel_path), clean=False)
 
             alias = setting['alias']
 
@@ -215,6 +225,22 @@ class MainWindow(MainWindowBase):
                     if not action_type: continue
                     data_type.QUICK_ACTIONS.append((action_type, dpn, opd))
 
+    def use_plugins_dir(self, setting_dpath: str, default: str=None):
+        menubar = self.menuBar()
+        plugin_menu = menubar.addMenu("Plugins") # TODO: make it about-to-open style, so search files everytime
+
+        def apply_plugins_file_gen(f):
+            def apply_plugins_file():
+                self.use_plugins(f, clean=True)
+            return apply_plugins_file
+        
+        for f in glob(path.join(setting_dpath, "*.yaml")):
+            act = plugin_menu.addAction(path.basename(f))
+            act.triggered.connect(apply_plugins_file_gen(f))
+
+        if default:
+            self.use_plugins(path.join(setting_dpath, default))
+
     def apply_config(self, config: dict):
         if self.project_config_fpath:
             self.setWindowTitle(f"{path.basename(self.project_config_fpath)} | {self.APPTITLE}")
@@ -248,8 +274,10 @@ if __name__=="__main__":
     win = MainWindow()
 
     # add splash progress for module loading
-    setting_fpath = path.join(path.dirname(__file__), "..", "plugins.yaml")
-    win.use_plugins(setting_fpath)
+
+    # setting_fpath = path.join(path.dirname(__file__), "..", "plugins/0.base.yaml")
+    # win.use_plugins(setting_fpath)
+    win.use_plugins_dir(path.join(path.dirname(__file__), "../plugins"), default="0.base.yaml")
 
     win.show()
     app.exit(app.exec())

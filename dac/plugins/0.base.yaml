@@ -1,3 +1,5 @@
+inherit: null # relative path for inherit yaml
+
 alias:
   dd: dac.core.data
   da: dac.core.actions
@@ -13,12 +15,8 @@ data:
 actions:
   _: # the actions for global context
   - /da/Separator
-  - "[Test space>]"
-  - /da/A1A2 # SAB action
-  - /da/A1A2_2 # SAB of SAB
   - dac.modules.drivetrain.actions.ShowFreqLinesTime
   - /md/actions.ShowFreqLinesFreq
-  - "[<]"
   
   /dd/SimpleDefinition:
   - /da/Separator
@@ -38,9 +36,6 @@ actions:
   - /mv/actions.AverageIntermediateAction
   - /mv/actions.FilterSpectrumAction
   - /mv/actions.SpectrumToTimeAction
-  - "[Test space>]"
-  - dac.modules.timedata.construct.SignalConstructAction # same as /mt/construct.SignalConstructAction
-  - "[<]"
 
 quick_actions: # temporary action creation for immediate run (action take only one parameter)
   /mt/TimeData:

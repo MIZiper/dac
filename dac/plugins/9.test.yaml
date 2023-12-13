@@ -1,0 +1,27 @@
+inherit: "0.base.yaml" # relative path for inherit yaml
+
+alias:
+  dd: dac.core.data
+  da: dac.core.actions
+  mt: dac.modules.timedata
+  mv: dac.modules.nvh
+  md: dac.modules.drivetrain
+
+data:
+  _: []
+
+actions:
+  _: # the actions for global context
+  - "[Test space>]"
+  - /da/A1A2 # SAB action
+  - /da/A1A2_2 # SAB of SAB
+  - "[<]"
+  
+  /dd/SimpleDefinition:
+  - "[Test space>]"
+  - dac.modules.timedata.construct.SignalConstructAction # same as /mt/construct.SignalConstructAction
+  - "[<]"
+
+quick_actions: {}
+
+quick_tasks: {}
