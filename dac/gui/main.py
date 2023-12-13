@@ -234,7 +234,8 @@ class MainWindow(MainWindowBase):
 
 @click.command()
 @click.option("--config-file", help="Configuration file to load")
-def main(config_file: str):
+@click.option("--plugins-file", help="YAML file for plugins")
+def main(config_file: str, plugins_file: str):
     win = MainWindow()
     if config_file is not None:
         with open(config_file, mode="r") as fp:

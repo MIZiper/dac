@@ -107,7 +107,7 @@ class ViewFreqDomainAction(VAB):
 class ViewFreqIntermediateAction(VAB):
     CAPTION = "Show FFT color plot"
 
-    def __call__(self, channel: FreqIntermediateData, range: tuple[float, float]=None):
+    def __call__(self, channel: FreqIntermediateData, xlim: tuple[float, float]=None):
         fig = self.figure
         ax = fig.gca()
 
@@ -120,8 +120,8 @@ class ViewFreqIntermediateAction(VAB):
         m = ax.pcolormesh(xs, ys, np.abs(channel.z), cmap='jet')
         cb = fig.colorbar(m)
         cb.set_label(f"Amplitude [{channel.z_unit}]")
-        if range is not None:
-            ax.set_xlim(range)
+        if xlim is not None:
+            ax.set_xlim(xlim)
 
 class ExtractAmplitudeAction(PAB):
     CAPTION = "Extract amplitude at frequencies"

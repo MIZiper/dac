@@ -53,7 +53,8 @@ class MainWindowBase(QMainWindow):
         tool_menu.addAction(no_thread_action)
 
     def _create_status(self):
-        status = self.statusBar()
+        status = DacStatusBar(self)
+        self.setStatusBar(status)
         status.addPermanentWidget(self._progress_widget)
 
     def start_thread_worker(self, worker: ThreadWorker):
@@ -169,6 +170,11 @@ class ProgressWidget4Threads(QtWidgets.QWidget):
         worker.signals.finished.connect(finished)
         self._layout.addWidget(progress_widget)
         # the original idea was to automatically switch among progress with one progressbar
+
+class DacStatusBar(QtWidgets.QStatusBar):
+    def mouseDoubleClickEvent(self, a0: QMouseEvent) -> None:
+        self.parentWidget().action_toggle_log_widget()
+        return super().mouseDoubleClickEvent(a0)
 
 class DacWidget(QtCore.QObject):
     ...
@@ -667,5 +673,8 @@ class NodeEditorWidget(QWidget):
 if __name__=="__main__":
     app = QtWidgets.QApplication(sys.argv)
     win = MainWindowBase()
+    win._create_ui()
+    win._create_menu()
+    win._create_status()
     win.show()
     app.exit(app.exec())

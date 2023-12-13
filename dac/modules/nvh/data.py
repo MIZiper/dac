@@ -145,6 +145,9 @@ class FreqIntermediateData(DataBase):
         elif average_by==AverageType.Linear:
             y = np.mean(np.abs(self.z), axis=0)
         return FreqDomainData(name=self.name, y=y, df=self.df, y_unit=self.z_unit)
+    
+    def rectfy_to(self, x_slice: tuple, y_slice: tuple) -> "FreqIntermediateData":
+        pass
 
     def reference_to(self, reference: "FreqIntermediateData"):
         data = np.conj(reference.z) * self.z / np.abs(reference.z)
