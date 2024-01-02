@@ -188,20 +188,20 @@ class MainWindow(MainWindowBase):
             if (inherit_rel_path:=setting.get('inherit')) is not None:
                 self.use_plugins(path.join(path.dirname(setting_fpath), inherit_rel_path), clean=False)
 
-            alias = setting['alias']
+            alias = setting.get('alias', {})
 
-            for gdts in setting['data']["_"]: # global_data_type_string
+            for gdts in setting.get('data', {}).get("_", []): # global_data_type_string
                 node_type = get_node_type(gdts)
                 if node_type: Container.RegisterGlobalDataType(node_type)
 
-            for dts, catss in setting['actions'].items(): #  data_type_string, context_action_type_string_s
+            for dts, catss in setting.get('actions', {}).items(): #  data_type_string, context_action_type_string_s
                 if dts=="_": # global_context
                     for cats in catss:
                         node_type = get_node_type(cats)
                         if node_type: Container.RegisterGlobalContextAction(node_type)
                 else:
                     data_type = get_node_type(dts)
-                    if not node_type: continue
+                    if not data_type: continue
                     for cats in catss:
                         action_type = get_node_type(cats)
                         if action_type: Container.RegisterContextAction(data_type, action_type)
