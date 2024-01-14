@@ -147,7 +147,25 @@ class FreqIntermediateData(DataBase):
         return FreqDomainData(name=self.name, y=y, df=self.df, y_unit=self.z_unit)
     
     def rectfy_to(self, x_slice: tuple, y_slice: tuple) -> "FreqIntermediateData":
-        pass
+        ref_bins = self.ref_bins
+        ys = ref_bins.y
+        idx = np.argsort(ys)
+        ys = ys[idx]
+        zs = self.z[idx]
+
+        xs = self.x # the frequencies
+
+        x_bins = np.arange(x_slice)
+        x_idxes = np.digitize(xs, x_bins)
+        y_bins = np.arange(y_bins)
+        y_idxes = np.digitize(ys, y_bins)
+
+        # average by energy
+        for y in ys:
+            for x in xs:
+                pass
+
+        return FreqIntermediateData
 
     def reference_to(self, reference: "FreqIntermediateData"):
         data = np.conj(reference.z) * self.z / np.abs(reference.z)

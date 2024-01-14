@@ -76,6 +76,7 @@ class ShowFreqLinesFreq(VAB):
             # `fmt_lines`, e.g.
             # {f_2}-{f_1}
             # f_custom, 1.1
+            # TODO: f_custom, {f_2}-{f_1} # and usable without `speed_channel` or `gearbox`
 
             fmt_lines = []
         

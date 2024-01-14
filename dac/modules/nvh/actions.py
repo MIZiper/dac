@@ -107,17 +107,25 @@ class ViewFreqDomainAction(VAB):
 class ViewFreqIntermediateAction(VAB):
     CAPTION = "Show FFT color plot"
 
-    def __call__(self, channel: FreqIntermediateData, xlim: tuple[float, float]=None):
+    def __call__(self, channel: FreqIntermediateData, xlim: tuple[float, float]=None, clim: tuple[float, float]=[0, 0.001]):
         fig = self.figure
         ax = fig.gca()
 
+        if clim is None:
+            clim = [None, None]
+        cmin, cmax = clim
+
         fig.suptitle(f"Color map: {channel.name}")
         xs = channel.x
+        zs = channel.z
         ax.set_xlabel("Frequency [Hz]")
         if (ref_bins:=channel.ref_bins) is not None:
             ys = channel.ref_bins.y
+            idx = np.argsort(ys)
+            ys = ys[idx]
+            zs = zs[idx]
             ax.set_ylabel(f"{ref_bins.name} [{ref_bins.y_unit}]")
-        m = ax.pcolormesh(xs, ys, np.abs(channel.z), cmap='jet')
+        m = ax.pcolormesh(xs, ys, np.abs(zs), cmap='jet', vmin=cmin, vmax=cmax)
         cb = fig.colorbar(m)
         cb.set_label(f"Amplitude [{channel.z_unit}]")
         if xlim is not None:
@@ -169,5 +177,13 @@ class SpectrumAsTimeAction(PAB):
 class EnvelopeTimeAction(PAB):
     # scipy.signal.hilbert
     pass
+
+class LoadCaseSpectrumComparison(VAB):
+    def __call__(self, loadcases: list[str], channel_name: str):
+        pass
+
+class LoadCaseFreqIntermediateAverage(VAB):
+    def __call__(self, loadcases: list[str], channel_name: str, ref_case: str):
+        pass
 
 # BearingEnvelopeAnalysis = FFT + FilterSpec + ...
