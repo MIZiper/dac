@@ -1,6 +1,6 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QMouseEvent
+from PyQt5.QtGui import QCloseEvent, QMouseEvent
 from PyQt5.QtWidgets import QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem, QStyle
 from PyQt5.Qsci import QsciScintilla, QsciLexerYAML
 
@@ -40,6 +40,8 @@ class MainWindowBase(QMainWindow):
         self._log_widget.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
         self._log_widget.hide()
 
+        self._ipy_widget: QtWidgets.QWidget = None
+
     def _create_menu(self):
         menubar = self.menuBar()
         self._dac_menu = tool_menu = menubar.addMenu("&Tool")
@@ -47,6 +49,7 @@ class MainWindowBase(QMainWindow):
         tool_menu.addAction("Toggle log output", self.action_toggle_log_widget, shortcut=Qt.CTRL+Qt.Key_L)
         tool_menu.addAction("Copy figure", self.action_copy_figure)
         tool_menu.addSeparator()
+        tool_menu.addAction("Toggle IPyConsole", self.action_toggle_ipy_widget, shortcut=Qt.CTRL+Qt.Key_I)
         no_thread_action = QtWidgets.QAction("No threading", tool_menu)
         no_thread_action.setCheckable(True)
         no_thread_action.triggered.connect(lambda: self.action_toggle_setting("no_thread"))
@@ -85,6 +88,53 @@ class MainWindowBase(QMainWindow):
             self._log_widget.horizontalScrollBar().setValue(0)
             self._log_widget.raise_()
 
+    def _action_resize_ipy_widget(self):
+        if self._ipy_widget is None:
+            return
+        h = self.height() - 60
+        w = int(self.width() // 2.5)
+        self._ipy_widget.setGeometry(20, 30, w, h)
+
+    def action_toggle_ipy_widget(self, **kwargs):
+        if self._ipy_widget is None:
+            try:
+                from qtconsole.rich_jupyter_widget import RichJupyterWidget
+                from qtconsole.inprocess import QtInProcessKernelManager # inprocess kernel can push variable
+            except ImportError:
+                self.message("IPython console not available", log=False)
+                return
+
+            kernel_manager = QtInProcessKernelManager()
+            kernel_manager.start_kernel()
+            kernel = kernel_manager.kernel
+
+            # if not hasattr(kernel, "io_loop"): # https://github.com/ipython/ipykernel/issues/319
+            #     import ipykernel.kernelbase
+            #     ipykernel.kernelbase.Kernel.start(kernel)
+            # # "io_loop" issue got resolved in new version?
+
+            kernel_client = kernel_manager.client()
+            kernel_client.start_channels()
+
+            ipython_widget = RichJupyterWidget(parent=self)
+            ipython_widget.kernel_manager = kernel_manager
+            ipython_widget.kernel_client = kernel_client
+
+            ipython_widget.exit_requested.connect(lambda: ipython_widget.hide())
+
+            self._ipy_widget = ipython_widget
+        else:
+            ipython_widget: RichJupyterWidget = self._ipy_widget
+
+        if ipython_widget.isVisible() and not kwargs:
+            ipython_widget.hide()
+        else:
+            kernel = ipython_widget.kernel_manager.kernel
+            kernel.shell.push(kwargs)
+            self._action_resize_ipy_widget()
+            ipython_widget.show()
+            ipython_widget.raise_()
+
     def action_toggle_setting(self, key):
         self._settings[key] = not self._settings[key]
 
@@ -98,6 +148,8 @@ class MainWindowBase(QMainWindow):
     def resizeEvent(self, a0: QtGui.QResizeEvent) -> None:
         if self._log_widget.isVisible():
             self._action_resize_log_widget()
+        if self._ipy_widget is not None and self._ipy_widget.isVisible():
+            self._action_resize_ipy_widget()
         return super().resizeEvent(a0)
 
     def excepthook(self, etype, evalue, tracebackobj):
@@ -114,6 +166,13 @@ class MainWindowBase(QMainWindow):
     def show(self) -> None:
         sys.excepthook = self.excepthook
         return super().show()
+    
+    def closeEvent(self, a0: QCloseEvent) -> None:
+        # TODO: kill the threads in threadpool
+        if self._ipy_widget is not None:
+            self._ipy_widget.kernel_client.stop_channels()
+            self._ipy_widget.kernel_manager.shutdown_kernel()
+        return super().closeEvent(a0)
     
     def spawn_cofigure(self) -> Figure:
         pass
