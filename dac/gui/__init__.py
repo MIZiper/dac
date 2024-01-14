@@ -55,6 +55,8 @@ class MainWindowBase(QMainWindow):
         no_thread_action.triggered.connect(lambda: self.action_toggle_setting("no_thread"))
         tool_menu.addAction(no_thread_action)
 
+        # TODO: debug mode {no thread; show action code; send data to ipy; reload modules}
+
     def _create_status(self):
         status = DacStatusBar(self)
         self.setStatusBar(status)
@@ -332,10 +334,17 @@ class DataListWidget(QTreeWidget):
                 act_type, data_param_name, other_params = qat
                 menu.addAction(act_type.CAPTION).triggered.connect(cb_quickaction_gen(qat, nodes))
             menu.addSeparator()
+
+        def cb_pushnode_gen(key_object):
+            def cb_pushnode():
+                self._parent_win.action_toggle_ipy_widget(dac_node=key_object)
+
+            return cb_pushnode
         
         if (uneditable:=itm.data(TYPE, Qt.ItemDataRole.UserRole)): # data nodes in local context
-            if len(menu.actions()):
-                menu.exec(self.viewport().mapToGlobal(pos))
+            menu.addAction("Push to IPy").triggered.connect(cb_pushnode_gen(node_object))
+            # TODO: enable delete local object
+            menu.exec(self.viewport().mapToGlobal(pos))
             return # stop here, no activate / delete
         
         if node_object is GCK:
@@ -385,6 +394,7 @@ class DataListWidget(QTreeWidget):
                 return cb_del
             
             menu.addSeparator()
+            menu.addAction("Push to IPy").triggered.connect(cb_pushnode_gen(node_object))
             menu.addAction("Delete").triggered.connect(cb_del_gen(node_object))
 
         menu.exec(self.viewport().mapToGlobal(pos))
