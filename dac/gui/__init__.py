@@ -2,9 +2,9 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QCloseEvent, QMouseEvent
 from PyQt5.QtWidgets import QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem, QStyle
-from PyQt5.Qsci import QsciScintilla, QsciLexerYAML
+from PyQt5.Qsci import QsciScintilla, QsciLexerYAML, QsciLexerPython
 
-import sys
+import sys, inspect
 from matplotlib.figure import Figure
 import yaml
 import html
@@ -650,8 +650,35 @@ class ActionListWidget(QTreeWidget):
                     mvb4menu.addAction(oa.name).triggered.connect(cb_mvaft_gen(acts, oa))
 
             # TODO: change to drag&drop, mime data using indexes
+                    
+            def cb_showcode_gen(a: ActionNode):
+                def cb_showcode():
+                    try:
+                        src = inspect.getsource(a.__class__)
+                    except ModuleNotFoundError: # in compiled program, no src code
+                        self._parent_win.message("No src code available", log=False)
+                        return
+                    editor = QsciScintilla(self._parent_win)
+                    editor.setWindowFlag(Qt.WindowType.Tool)
+                    editor.resize(666, 333)
+                    lexer = QsciLexerPython(editor)
+                    lexer.setFont(QtGui.QFont("Consolas"))
+                    editor.setLexer(lexer)
+                    editor.setUtf8(True)
+                    editor.setAutoIndent(True)
+                    # editor.setEolVisibility(True)
+                    editor.setIndentationGuides(True)
+                    editor.setTabWidth(4)
+                    editor.setIndentationsUseTabs(False)
+                    editor.setMarginType(1, QsciScintilla.NumberMargin)
+
+                    editor.setWindowTitle(a.name)
+                    editor.setText(src)
+                    editor.show()
+                return cb_showcode
             
             menu.addSeparator()
+            menu.addAction("Show code").triggered.connect(cb_showcode_gen(acts[0]))
             menu.addAction("Delete").triggered.connect(cb_del_gen(acts))
 
         menu.exec(self.viewport().mapToGlobal(pos))
