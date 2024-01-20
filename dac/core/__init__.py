@@ -224,6 +224,7 @@ class Container:
     _global_node_types = []
     _context_action_types = defaultdict(list)
     _type_agencies = {}
+    _modules = set()
 
     def __init__(self) -> None:
         self.actions: list[ActionNode] = []
@@ -378,6 +379,7 @@ class Container:
     def GetClass(class_path: str) -> type[NodeBase]:
         module_name, class_name = class_path.rsplit(".", 1)
         module = importlib.import_module(module_name)
+        Container._modules.add(module)
         return getattr(module, class_name)
 
     @staticmethod

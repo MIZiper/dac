@@ -4,7 +4,7 @@ from PyQt5.QtGui import QCloseEvent, QMouseEvent
 from PyQt5.QtWidgets import QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem, QStyle
 from PyQt5.Qsci import QsciScintilla, QsciLexerYAML, QsciLexerPython
 
-import sys, inspect
+import sys, inspect, importlib
 from matplotlib.figure import Figure
 import yaml
 import html
@@ -54,6 +54,7 @@ class MainWindowBase(QMainWindow):
         no_thread_action.setCheckable(True)
         no_thread_action.triggered.connect(lambda: self.action_toggle_setting("no_thread"))
         tool_menu.addAction(no_thread_action)
+        tool_menu.addAction("Reload modules", self.action_reload_modules, shortcut=Qt.CTRL+Qt.Key_R)
 
         # TODO: debug mode {no thread; show action code; send data to ipy; reload modules}
 
@@ -147,6 +148,16 @@ class MainWindowBase(QMainWindow):
             self.figure.savefig(buf)
             QtWidgets.QApplication.clipboard().setImage(QtGui.QImage.fromData(buf.getvalue()))
 
+    def action_reload_modules(self):
+        dlg = MultipleItemsDialog(self, sorted([mod.__name__ for mod in Container._modules]),
+                                  caption="Reload modules", label="Select modules which need reloaded. \nFor function dev purpose. \nIn some cases, reloading project is required to make the change effect.")
+        dlg.exec()
+        if dlg.result() and (itms := dlg.get_result()):
+            for mod_name in itms:
+                mod = importlib.import_module(mod_name)
+                importlib.reload(mod)
+                # the sequence may be an issue, e.g. ModA depend on ModB, but ModA get reloaded first, and then ModB. (Then reload it twice?)
+
     def resizeEvent(self, a0: QtGui.QResizeEvent) -> None:
         if self._log_widget.isVisible():
             self._action_resize_log_widget()
@@ -236,6 +247,29 @@ class DacStatusBar(QtWidgets.QStatusBar):
     def mouseDoubleClickEvent(self, a0: QMouseEvent) -> None:
         self.parentWidget().action_toggle_log_widget()
         return super().mouseDoubleClickEvent(a0)
+
+class MultipleItemsDialog(QtWidgets.QDialog):
+    def __init__(self, parent: QWidget, items: list[str], caption: str, label: str) -> None:
+        super().__init__(parent)
+        self._items = items
+
+        self.setWindowTitle(caption)
+        self.item_list = item_list = QtWidgets.QListWidget(self)
+        item_list.setSelectionMode(item_list.SelectionMode.ExtendedSelection)
+        item_list.addItems(items)
+        cap_label = QtWidgets.QLabel(label, self)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.addWidget(cap_label)
+        layout.addWidget(item_list)
+        btn_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self)
+        layout.addWidget(btn_box)
+
+        btn_box.accepted.connect(self.accept)
+        btn_box.rejected.connect(self.reject)
+
+    def get_result(self):
+        return [itm.text() for itm in self.item_list.selectedItems()]
 
 class DacWidget(QtCore.QObject):
     ...
