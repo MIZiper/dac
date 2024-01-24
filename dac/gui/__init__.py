@@ -1,146 +1,183 @@
-from PyQt5 import QtWidgets, QtCore, QtGui
+import importlib
+import inspect
+import json
+import re
+import sys
+from functools import partial
+from glob import glob
+from io import BytesIO, StringIO
+from os import path
+
+import yaml
+from matplotlib.backend_bases import key_press_handler
+from matplotlib.backends.backend_qt5agg import (FigureCanvasQTAgg,
+                                                NavigationToolbar2QT)
+from matplotlib.figure import Figure
+from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.Qsci import QsciLexerPython, QsciLexerYAML, QsciScintilla
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QCloseEvent, QMouseEvent
-from PyQt5.QtWidgets import QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem, QStyle
-from PyQt5.Qsci import QsciScintilla, QsciLexerYAML, QsciLexerPython
+from PyQt5.QtWidgets import (QMainWindow, QStyle, QTreeWidget, QTreeWidgetItem,
+                             QWidget)
 
-import sys, inspect, importlib
-from matplotlib.figure import Figure
-import yaml
-import html
-import traceback
-from io import StringIO, BytesIO
-from functools import partial
-from collections import defaultdict
-from datetime import datetime
-
-from dac.core import Container, ActionNode, DataNode, GCK, NodeBase
-from dac.core.actions import ActionBase, VAB, PAB
+from dac import APPNAME, __version__
+from dac.core import GCK, ActionNode, Container, DataNode, NodeBase
+from dac.core.actions import PAB, VAB, ActionBase
 from dac.core.thread import ThreadWorker
+from dac.gui.base import MainWindowBase
 
 NAME, TYPE, REMARK = range(3)
+SET_RECENTDIR = "RecentDir"
 
-class MainWindowBase(QMainWindow):
+
+
+class TaskBase:
+    def __init__(self, dac_win: "MainWindow", name: str, *args):
+        self.dac_win = dac_win
+        self.name = name
+
+    def request_update_action(self):
+        pass
+
+    def __call__(self, action: ActionBase):
+        pass
+
+class MainWindow(MainWindowBase):
+    APPTITLE = APPNAME
+    APPSETTING = QtCore.QSettings(APPNAME, "Main")
+
     def __init__(self) -> None:
         super().__init__()
-
-        self.setWindowTitle("DAC Base Window")
-        self.resize(1024, 768)
-
-        self._thread_pool = QtCore.QThreadPool.globalInstance()
-        self._progress_widget = ProgressWidget4Threads(self)
+        self.resize(1200, 800)
 
         self.figure: Figure = None
-        self._settings = defaultdict(bool)
 
+        self._create_ui()
+        self._create_menu()
+        self._create_status()
+        self._route_signals()
+
+        self.container: Container = None
+        self.project_config_fpath: str = None
+        self.apply_config({})
+        
     def _create_ui(self):
-        self._log_widget = QtWidgets.QPlainTextEdit(parent=self) # the log Level selection?
-        self._log_widget.appendHtml(f"<b>The log output:</b> @ {datetime.now():%Y-%m-%d} <br/>")
-        self._log_widget.setReadOnly(True)
-        self._log_widget.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
-        self._log_widget.hide()
+        super()._create_ui()
 
-        self._ipy_widget: QtWidgets.QWidget = None
+        self.setDockNestingEnabled(True)
+        self.data_list_widget = data_list = DataListWidget(self)
+        self.action_list_widget = action_list = ActionListWidget(self)
+        self.node_editor = node_editor = NodeEditorWidget(self)
 
+        data_list_docker = QtWidgets.QDockWidget("Data", self)
+        data_list_docker.setWidget(data_list)
+        action_list_docker = QtWidgets.QDockWidget("Action", self)
+        action_list_docker.setWidget(action_list)
+        node_editor_docker = QtWidgets.QDockWidget("Editor", self)
+        node_editor_docker.setWidget(node_editor)
+
+        self.figure = figure = Figure()
+        self.canvas = canvas = FigureCanvasQTAgg(figure)
+        self.navibar = navibar = NavigationToolbar2QT(canvas, self)
+
+        canvas.mpl_connect("key_press_event", lambda event: key_press_handler(event, canvas, navibar))
+        canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+        center_widget = QtWidgets.QWidget(self)
+        vlayout = QtWidgets.QVBoxLayout(center_widget)
+        vlayout.addWidget(canvas)
+        vlayout.addWidget(navibar)
+
+        self.setCentralWidget(center_widget)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, data_list_docker)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, node_editor_docker)
+        self.splitDockWidget(data_list_docker, action_list_docker, Qt.Orientation.Horizontal)
+    
     def _create_menu(self):
+        super()._create_menu()
+        
         menubar = self.menuBar()
-        self._dac_menu = tool_menu = menubar.addMenu("&Tool")
+        app_menu = menubar.addMenu("&App")
 
-        tool_menu.addAction("Toggle log output", self.action_toggle_log_widget, shortcut=Qt.CTRL+Qt.Key_L)
-        tool_menu.addAction("Copy figure", self.action_copy_figure)
-        tool_menu.addSeparator()
-        tool_menu.addAction("Toggle IPyConsole", self.action_toggle_ipy_widget, shortcut=Qt.CTRL+Qt.Key_I)
-        no_thread_action = QtWidgets.QAction("No threading", tool_menu)
-        no_thread_action.setCheckable(True)
-        no_thread_action.triggered.connect(lambda: self.action_toggle_setting("no_thread"))
-        tool_menu.addAction(no_thread_action)
+        new_project_action = app_menu.addAction("&New project")
+        app_menu.addSeparator()
+        save_project_action = app_menu.addAction("&Save project")
+        saveas_project_action = app_menu.addAction("Save as ...")
+        load_project_action = app_menu.addAction("&Load project")
+        app_menu.addSeparator()
+        exit_action = app_menu.addAction("E&xit")
+
+        def action_new_project():
+            self.project_config_fpath = None
+            self.apply_config({})
+            self.message("New project created")
+        def action_save():
+            config_fpath = self.project_config_fpath
+            if config_fpath is None:
+                action_saveas()
+                return
+            with open(config_fpath, mode="w", encoding="utf8") as fp:
+                config = self.get_config()
+                json.dump(config, fp, indent=2)
+                self.message(f"Save project to {config_fpath}")
+        def action_saveas():
+            fpath, fext = QtWidgets.QFileDialog.getSaveFileName(
+                parent=self, caption="Save project configuration", filter="DAC config (*.dac.json);;All(*.*)",
+                directory=self.APPSETTING.value(SET_RECENTDIR)
+            )
+            if not fpath:
+                return
+            self.APPSETTING.setValue(SET_RECENTDIR, path.dirname(fpath))
+            self.project_config_fpath = fpath
+            action_save()
+            self.setWindowTitle(f"{path.basename(fpath)} | {self.APPTITLE}")
+        def action_load_project():
+            fpath, fext = QtWidgets.QFileDialog.getOpenFileName(
+                parent=self, caption="Open project configuration", filter="DAC config (*.json);;All (*.*)",
+                directory=self.APPSETTING.value(SET_RECENTDIR)
+            )
+            if not fpath:
+                return
+            self.APPSETTING.setValue(SET_RECENTDIR, path.dirname(fpath))
+            with open(fpath, mode="r", encoding="utf8") as fp:
+                config = json.load(fp)
+            self.project_config_fpath = fpath
+            self.apply_config(config)
+            self.message(f"Project loaded from {fpath}")
+
+        new_project_action.triggered.connect(action_new_project)
+        save_project_action.triggered.connect(action_save)
+        saveas_project_action.triggered.connect(action_saveas)
+        load_project_action.triggered.connect(action_load_project)
+        exit_action.triggered.connect(self.close)
+
+        tool_menu = self._dac_menu
+        copy_action = tool_menu.addAction("Copy figure", self.action_copy_figure)
+        tool_menu.insertAction(tool_menu.actions()[0], copy_action)
         tool_menu.addAction("Reload modules", self.action_reload_modules, shortcut=Qt.CTRL+Qt.Key_R)
 
         # TODO: debug mode {no thread; show action code; send data to ipy; reload modules}
 
+        menubar.addMenu(self._dac_menu)
+    
     def _create_status(self):
-        status = DacStatusBar(self)
-        self.setStatusBar(status)
-        status.addPermanentWidget(self._progress_widget)
+        return super()._create_status()
 
-    def start_thread_worker(self, worker: ThreadWorker):
-        worker.signals.message.connect(self.message)
-        worker.signals.error.connect(self.excepthook)
-        self._progress_widget.add_worker(worker)
-        if self._settings["no_thread"]:
-            worker.run()
-        else:
-            self._thread_pool.start(worker)
-
-    def message(self, msg, log=True):
-        self.statusBar().showMessage(msg, 3000)
-        if log:
-            self._log_widget.appendPlainText(f"{datetime.now():%H:%M:%S} - {msg}")
-
-    def _action_resize_log_widget(self):
-        h = self.height() - 60
-        w = int(self.width() // 2.5)
-        self._log_widget.setGeometry(self.width()-20-w, 30, w, h)
-
-    def action_toggle_log_widget(self):
-        if self._log_widget.isVisible():
-            self._log_widget.hide()
-        else:
-            self._action_resize_log_widget()
-            self._log_widget.show()
-            self._log_widget.horizontalScrollBar().setValue(0)
-            self._log_widget.raise_()
-
-    def _action_resize_ipy_widget(self):
-        if self._ipy_widget is None:
-            return
-        h = self.height() - 60
-        w = int(self.width() // 2.5)
-        self._ipy_widget.setGeometry(20, 30, w, h)
-
-    def action_toggle_ipy_widget(self, **kwargs):
-        if self._ipy_widget is None:
-            try:
-                from qtconsole.rich_jupyter_widget import RichJupyterWidget
-                from qtconsole.inprocess import QtInProcessKernelManager # inprocess kernel can push variable
-            except ImportError:
-                self.message("IPython console not available", log=False)
-                return
-
-            kernel_manager = QtInProcessKernelManager()
-            kernel_manager.start_kernel()
-            kernel = kernel_manager.kernel
-
-            # if not hasattr(kernel, "io_loop"): # https://github.com/ipython/ipykernel/issues/319
-            #     import ipykernel.kernelbase
-            #     ipykernel.kernelbase.Kernel.start(kernel)
-            # # "io_loop" issue got resolved in new version?
-
-            kernel_client = kernel_manager.client()
-            kernel_client.start_channels()
-
-            ipython_widget = RichJupyterWidget(parent=self)
-            ipython_widget.kernel_manager = kernel_manager
-            ipython_widget.kernel_client = kernel_client
-
-            ipython_widget.exit_requested.connect(lambda: ipython_widget.hide())
-
-            self._ipy_widget = ipython_widget
-        else:
-            ipython_widget: RichJupyterWidget = self._ipy_widget
-
-        if ipython_widget.isVisible() and not kwargs:
-            ipython_widget.hide()
-        else:
-            kernel = ipython_widget.kernel_manager.kernel
-            kernel.shell.push(kwargs)
-            self._action_resize_ipy_widget()
-            ipython_widget.show()
-            ipython_widget.raise_()
-
-    def action_toggle_setting(self, key):
-        self._settings[key] = not self._settings[key]
-
+    def _route_signals(self):
+        self.data_list_widget.sig_edit_data_requested.connect(self.node_editor.edit_node)
+        self.action_list_widget.sig_edit_action_requested.connect(self.node_editor.edit_node)
+        self.data_list_widget.sig_action_update_requested.connect(
+            self.action_list_widget.refresh
+        )
+        self.data_list_widget.sig_action_runall_requested.connect(
+            self.action_list_widget.run_all_actions
+        )
+        self.action_list_widget.sig_data_update_requested.connect(
+            self.data_list_widget.refresh
+        )
+        self.node_editor.sig_return_node.connect(self.data_list_widget.action_apply_node_config)
+        self.node_editor.sig_return_node.connect(self.action_list_widget.action_apply_node_config)
+        
     def action_copy_figure(self):
         if self.figure is None:
             return
@@ -158,131 +195,131 @@ class MainWindowBase(QMainWindow):
                 importlib.reload(mod)
                 # the sequence may be an issue, e.g. ModA depend on ModB, but ModA get reloaded first, and then ModB. (Then reload it twice?)
 
-    def resizeEvent(self, a0: QtGui.QResizeEvent) -> None:
-        if self._log_widget.isVisible():
-            self._action_resize_log_widget()
-        if self._ipy_widget is not None and self._ipy_widget.isVisible():
-            self._action_resize_ipy_widget()
-        return super().resizeEvent(a0)
+    def spawn_cofigure(self):
+        figure = Figure()
+        canvas = FigureCanvasQTAgg(figure)
+        navibar = NavigationToolbar2QT(canvas, self)
 
-    def excepthook(self, etype, evalue, tracebackobj):
-        self._log_widget.appendHtml(f"<br/><b><font color='red'>{etype.__name__}:</font></b> {evalue}")
-        info_stream = StringIO()
-        traceback.print_tb(tracebackobj, file=info_stream)
-        info_stream.seek(0)
-        info_str = info_stream.read()
-        escaped_str = html.escape(info_str).replace('\n', '<br/>').replace(' ', '&nbsp;')
-        self._log_widget.appendHtml(f"<div style='font-family:Consolas'>{escaped_str}</div>")
+        canvas.mpl_connect("key_press_event", lambda event: key_press_handler(event, canvas, navibar))
+        canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-        self.message("Error occurred, check in log output <Ctrl-L>", log=False)
-
-    def show(self) -> None:
-        sys.excepthook = self.excepthook
-        return super().show()
-    
-    def closeEvent(self, a0: QCloseEvent) -> None:
-        # TODO: kill the threads in threadpool
-        if self._ipy_widget is not None:
-            self._ipy_widget.kernel_client.stop_channels()
-            self._ipy_widget.kernel_manager.shutdown_kernel()
-        return super().closeEvent(a0)
-    
-    def spawn_cofigure(self) -> Figure:
-        pass
-
-class TaskBase:
-    def __init__(self, dac_win: MainWindowBase, name: str, *args):
-        self.dac_win = dac_win
-        self.name = name
-
-    def request_update_action(self):
-        pass
-
-    def __call__(self, action: ActionBase):
-        pass
-
-class ProgressBundle(QtWidgets.QWidget):
-    def __init__(self, caption):
-        super().__init__()
-        layout = QtWidgets.QVBoxLayout(self)
+        widget = QtWidgets.QWidget(self, flags=Qt.WindowType.Tool)
+        widget.setWindowTitle("Copilot figure")
+        widget.resize(650, 450)
+        layout = QtWidgets.QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.addWidget(navibar)
+        layout.addWidget(canvas)
+        widget.show()
+
+        return figure
+
+    def use_plugins(self, setting_fpath: str, clean: bool=True):
+        alias_pattern = re.compile("^/(?P<alias_name>.+)/(?P<rest>.+)")
+        def get_node_type(cls_path: str) -> str | type[NodeBase]:
+            if cls_path[0]=="[" and cls_path[-1]=="]":
+                return cls_path # just str as section string
+            
+            if (rst:=alias_pattern.search(cls_path)):
+                cls_path = alias[rst['alias_name']]+"."+rst['rest']
+
+            try:
+                return Container.GetClass(cls_path)
+            except AttributeError:
+                self.message(f"Module `{cls_path}` not found")
+                return None
+            
+        if clean:
+            Container._context_action_types.clear()
+            Container._global_node_types.clear()
+            # quick_tasks and quick_actions are always overwritten
+
+        with open(setting_fpath, mode="r", encoding="utf8") as fp:
+            setting: dict = yaml.load(fp, Loader=yaml.FullLoader)
+            if not setting: return
+
+            if (inherit_rel_path:=setting.get('inherit')) is not None:
+                self.use_plugins(path.join(path.dirname(setting_fpath), inherit_rel_path), clean=False)
+
+            alias = setting.get('alias', {})
+
+            for gdts in setting.get('data', {}).get("_", []): # global_data_type_string
+                node_type = get_node_type(gdts)
+                if node_type: Container.RegisterGlobalDataType(node_type)
+
+            for dts, catss in setting.get('actions', {}).items(): #  data_type_string, context_action_type_string_s
+                if dts=="_": # global_context
+                    for cats in catss:
+                        node_type = get_node_type(cats)
+                        if node_type: Container.RegisterGlobalContextAction(node_type)
+                else:
+                    data_type = get_node_type(dts)
+                    if not data_type: continue
+                    for cats in catss:
+                        action_type = get_node_type(cats)
+                        if action_type: Container.RegisterContextAction(data_type, action_type)
+
+            for ats, tss in setting.get("quick_tasks", {}).items(): # action_type_string, task_string_s
+                action_type = get_node_type(ats)
+                if not action_type: continue
+                action_type.QUICK_TASKS = [] # make superclass.QUICK_TASKS hidden
+                for tts, name, *rest in tss: # task_type_string, name, *rest
+                    task_type = get_node_type(tts)
+                    if not task_type: continue
+                    task = task_type(dac_win=self, name=name, *rest)
+                    action_type.QUICK_TASKS.append(task)
+
+            for dts, ass in setting.get("quick_actions", {}).items(): # data_type_string, action_string_s
+                data_type = get_node_type(dts)
+                if not data_type: continue
+                data_type.QUICK_ACTIONS = []
+                for ats, dpn, opd in ass: # action_type_string, data_param_name, other_params_dict
+                    action_type = get_node_type(ats)
+                    if not action_type: continue
+                    data_type.QUICK_ACTIONS.append((action_type, dpn, opd))
+
+    def use_plugins_dir(self, setting_dpath: str, default: str=None):
+        menubar = self.menuBar()
+        plugin_menu = menubar.addMenu("Plugins") # TODO: make it about-to-open style, so search files everytime
+
+        def apply_plugins_file_gen(f):
+            def apply_plugins_file():
+                self.use_plugins(f, clean=True)
+            return apply_plugins_file
         
-        self._progressbar = progress_bar = QtWidgets.QProgressBar()
-        progress_bar.setTextVisible(False)
-        progress_bar.setMaximum(0)
-        progress_bar.setFixedHeight(6)
-        self._caption = caption
-        self._label = label = QtWidgets.QLabel("<b style='color:orange;'>(Hold)</b> " + caption)
-        layout.addWidget(label)
-        layout.addWidget(progress_bar)
+        for f in glob(path.join(setting_dpath, "*.yaml")):
+            act = plugin_menu.addAction(path.basename(f))
+            act.triggered.connect(apply_plugins_file_gen(f))
 
-    def progress(self, i, n):
-        self._progressbar.setMaximum(n)
-        self._progressbar.setValue(i)
+        if default:
+            self.use_plugins(path.join(setting_dpath, default))
 
-    def started(self):
-        self._label.setText(self._caption)
+    def apply_config(self, config: dict):
+        if self.project_config_fpath:
+            self.setWindowTitle(f"{path.basename(self.project_config_fpath)} | {self.APPTITLE}")
+        else:
+            self.setWindowTitle(f"[New project] | {self.APPTITLE}")
 
-    # TODO: dbl-click to cancel thread
+        dac_config = config.get("dac", {})
+        self.container = container = Container.parse_save_config(dac_config)
+        self.data_list_widget.refresh(container)
+        self.action_list_widget.refresh(container)
 
-class ProgressWidget4Threads(QtWidgets.QWidget):
-    def __init__(self, parent) -> None:
-        super().__init__(parent=parent)
-        self._layout = QtWidgets.QHBoxLayout(self)
-        self._layout.setContentsMargins(0, 0, 0, 0)
-        self.setMinimumHeight(28)
-
-    def add_worker(self, worker: ThreadWorker):
-        progress_widget = ProgressBundle(worker.caption)
-        worker.signals.progress.connect(progress_widget.progress)
-        worker.signals.started.connect(progress_widget.started)
-        def finished():
-            self._layout.removeWidget(progress_widget)
-        worker.signals.finished.connect(finished)
-        self._layout.addWidget(progress_widget)
-        # the original idea was to automatically switch among progress with one progressbar
-
-class DacStatusBar(QtWidgets.QStatusBar):
-    def mouseDoubleClickEvent(self, a0: QMouseEvent) -> None:
-        self.parentWidget().action_toggle_log_widget()
-        return super().mouseDoubleClickEvent(a0)
-
-class MultipleItemsDialog(QtWidgets.QDialog):
-    def __init__(self, parent: QWidget, items: list[str], caption: str, label: str) -> None:
-        super().__init__(parent)
-        self._items = items
-
-        self.setWindowTitle(caption)
-        self.item_list = item_list = QtWidgets.QListWidget(self)
-        item_list.setSelectionMode(item_list.SelectionMode.ExtendedSelection)
-        item_list.addItems(items)
-        cap_label = QtWidgets.QLabel(label, self)
-
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.addWidget(cap_label)
-        layout.addWidget(item_list)
-        btn_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self)
-        layout.addWidget(btn_box)
-
-        btn_box.accepted.connect(self.accept)
-        btn_box.rejected.connect(self.reject)
-
-    def get_result(self):
-        return [itm.text() for itm in self.item_list.selectedItems()]
-
-class DacWidget(QtCore.QObject):
-    ...
+    def get_config(self):
+        return {
+            "_": {"version": __version__},
+            "dac": {} if self.container is None else self.container.get_save_config()
+        }
 
 class DataListWidget(QTreeWidget):
     sig_edit_data_requested = QtCore.pyqtSignal(DataNode)
     sig_action_update_requested = QtCore.pyqtSignal()
     sig_action_runall_requested = QtCore.pyqtSignal()
     
-    def __init__(self, parent: MainWindowBase) -> None:
+    def __init__(self, parent: MainWindow) -> None:
         super().__init__(parent)
         self._STYLE = self.style()
-        self._parent_win = parent
+        self.dac_win = parent
         self._container: Container = None
 
         self.setHeaderLabels(["Name", "Type", "Remark"])
@@ -357,7 +394,7 @@ class DataListWidget(QTreeWidget):
                     act = act_type(context_key=container.current_key)
                     act.container = container
                     if isinstance(act, VAB):
-                        act.figure = self._parent_win.figure
+                        act.figure = self.dac_win.figure
                     act.pre_run()
                     act(**params)
                     act.post_run()
@@ -371,7 +408,7 @@ class DataListWidget(QTreeWidget):
 
         def cb_pushnode_gen(key_object):
             def cb_pushnode():
-                self._parent_win.action_toggle_ipy_widget(dac_node=key_object)
+                self.dac_win.action_toggle_ipy_widget(dac_node=key_object)
 
             return cb_pushnode
         
@@ -486,10 +523,10 @@ class ActionListWidget(QTreeWidget):
         ActionNode.ActionStatus.FAILED: QStyle.StandardPixmap.SP_DialogCancelButton,
     }
 
-    def __init__(self, parent: MainWindowBase) -> None:
+    def __init__(self, parent: MainWindow) -> None:
         super().__init__(parent)
         self._STYLE = self.style()
-        self._parent_win = parent
+        self.dac_win = parent
         self._container: Container = None
 
         self.setHeaderLabels(["Name", "Output", "Remark"])
@@ -545,10 +582,10 @@ class ActionListWidget(QTreeWidget):
                 complete_cb()
 
         action.container = container
-        self._parent_win.message(f"[{action.name}]")
+        self.dac_win.message(f"[{action.name}]")
 
         if isinstance(action, VAB):
-            action.figure = self._parent_win.figure
+            action.figure = self.dac_win.figure
 
         if isinstance(action, PAB):
             def fn(p, progress_emitter, logger):
@@ -560,7 +597,7 @@ class ActionListWidget(QTreeWidget):
                 return rst
             worker = ThreadWorker(fn=fn, caption=action.name, p=params)
             worker.signals.result.connect(completed)
-            self._parent_win.start_thread_worker(worker)
+            self.dac_win.start_thread_worker(worker)
         else:
             action.pre_run()
             rst = action(**params)
@@ -700,9 +737,9 @@ class ActionListWidget(QTreeWidget):
                     try:
                         src = inspect.getsource(a.__class__)
                     except ModuleNotFoundError: # in compiled program, no src code
-                        self._parent_win.message("No src code available", log=False)
+                        self.dac_win.message("No src code available", log=False)
                         return
-                    editor = QsciScintilla(self._parent_win)
+                    editor = QsciScintilla(self.dac_win)
                     editor.setWindowFlag(Qt.WindowType.Tool)
                     editor.resize(666, 333)
                     lexer = QsciLexerPython(editor)
@@ -753,7 +790,7 @@ class ActionListWidget(QTreeWidget):
 class NodeEditorWidget(QWidget):
     sig_return_node = QtCore.pyqtSignal(NodeBase, dict, bool)
 
-    def __init__(self, parent: MainWindowBase):
+    def __init__(self, parent: MainWindow):
         super().__init__(parent)
 
         vlayout = QtWidgets.QVBoxLayout(self)
@@ -800,11 +837,33 @@ class NodeEditorWidget(QWidget):
         config = yaml.load(StringIO(self.editor.text()), Loader=yaml.FullLoader)
         self.sig_return_node.emit(self._current_node, config, fire)
 
+
+class MultipleItemsDialog(QtWidgets.QDialog):
+    def __init__(self, parent: QWidget, items: list[str], caption: str, label: str) -> None:
+        super().__init__(parent)
+        self._items = items
+
+        self.setWindowTitle(caption)
+        self.item_list = item_list = QtWidgets.QListWidget(self)
+        item_list.setSelectionMode(item_list.SelectionMode.ExtendedSelection)
+        item_list.addItems(items)
+        cap_label = QtWidgets.QLabel(label, self)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.addWidget(cap_label)
+        layout.addWidget(item_list)
+        btn_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self)
+        layout.addWidget(btn_box)
+
+        btn_box.accepted.connect(self.accept)
+        btn_box.rejected.connect(self.reject)
+
+    def get_result(self):
+        return [itm.text() for itm in self.item_list.selectedItems()]
+
 if __name__=="__main__":
     app = QtWidgets.QApplication(sys.argv)
-    win = MainWindowBase()
-    win._create_ui()
-    win._create_menu()
-    win._create_status()
+    win = MainWindow()
+    win.use_plugins_dir(path.join(path.dirname(__file__), "../plugins"), default="0.base.yaml")
     win.show()
     app.exit(app.exec())
