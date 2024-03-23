@@ -98,8 +98,25 @@ class FreqDomainData(DataBase):
     def as_timedomain(self):
         ...
 
-    def get_amplitudes_at(self, frequencies: list[float], lines: int):
-        ...
+    def get_amplitudes_at(self, frequencies: list[float], lines: int=3, width: float=None) -> list[tuple[float, float]]:
+        if width is not None:
+            lines = int(np.ceil(width / self.df))
+
+        x = self.x
+        y = self.y
+        fas = []
+
+        for f in frequencies:
+            i = np.searchsorted(x, f)
+            y_p = y[(i-lines):(i+lines)]
+            x_p = x[(i-lines):(i+lines)]
+            if len(y_p)==0:
+                continue
+            i_p = np.argmax(y_p)
+            fas.append( (x_p[i_p], y_p[i_p],) )
+
+        return fas
+
 
 class FreqIntermediateData(DataBase):
     def __init__(self, name: str = None, uuid: str = None, z: np.ndarray=None, df: float=1, z_unit: str="-", ref_bins: DataBins=None) -> None:

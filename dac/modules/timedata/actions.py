@@ -1,4 +1,5 @@
 import numpy as np
+import re
 from scipy import signal
 
 from dac.core.actions import ActionBase, VAB, PAB, SAB
@@ -183,3 +184,11 @@ class PulseToAzimuthAction(ActionBase):
     
 class RefPulseToAzimuthAction(PAB):
     ... # create azimuth using reference
+
+class OpAction(ActionBase):
+    CAPTION = "Operation on TimeData"
+    def __call__(self, channels: list[TimeData], op_str: str="{0}", y_unit: str="-") -> TimeData:
+        # assert same dt and same length
+        ys = [channel.y for channel in channels]
+        y = eval(re.sub(r"{(\d+)}", r"ys[\1]", op_str))
+        return TimeData("Channel-Op_ed", y=y, dt=channels[0].dt, y_unit=y_unit)

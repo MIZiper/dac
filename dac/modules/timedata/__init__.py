@@ -25,7 +25,7 @@ class TimeData(DataBase):
     
     @property
     def t(self):
-        return self.x
+        return self.x # combine with t0
     
     def to_bins(self, df: float, overlap: float) -> np.ndarray:
         y = self.y

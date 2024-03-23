@@ -25,3 +25,6 @@ class ClassName:
 
 # [Hint string]
 # <TypeName>
+        
+# NewType-ChannelName # e.g. Azi/
+# ChannelName-Op_ed # e.g. Trunc/Filter/Env
