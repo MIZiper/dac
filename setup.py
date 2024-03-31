@@ -11,7 +11,10 @@ setup(
     download_url="https://github.com/MIZiper/dac.git",
     license="Apache-2.0",
     packages=find_packages(),
-    install_requires=["click", "numpy", "scipy", "pyqt5", "matplotlib", "pyyaml", "qscintilla", "nptdms"],
-    requires=["qtconsole"],
+    install_requires=["click", "numpy", "scipy", "matplotlib", "pyyaml", "nptdms"],
+    extras_require={
+        "GUI": ["pyqt5", "qscintilla"],
+        "IPY": ["pyqt5", "qscintilla", "qtconsole"],
+    },
     python_requires=">=3.10", # `|` used for types union
 )
