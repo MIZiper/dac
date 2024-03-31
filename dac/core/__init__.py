@@ -40,6 +40,9 @@ class NodeBase:
             **self.get_construct_config(),
         }
 
+class NodeNotFoundError(Exception):
+    pass
+
 
 
 class DataNode(NodeBase):
@@ -82,13 +85,13 @@ class DataNode(NodeBase):
             if k in self.__dict__ and DataNode.ContainsOnlyBasicTypes(v):
                 self.__dict__[k] = v
 
-class GlobalContextKey(DataNode):
+class ContextKeyNode(DataNode):
     pass
 
-GCK = GlobalContextKey("Global Context Key")
-
-class NodeNotFoundError(Exception):
+class GlobalContextKey(ContextKeyNode):
     pass
+
+GCK = GlobalContextKey("Global Context")
 
 
 
@@ -221,19 +224,16 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
         self.add_node(node)
 
 class Container:
-    _global_node_types = []
-    _context_action_types = defaultdict(list)
-    _type_agencies = {}
+    _key_types = [] # [ type[context_key_node] ]
+    _action_types = defaultdict(list) # {type[context_key_node]:  [ type[action_node] ]}
+    _type_agencies = {} # {type: handler}
     _modules = set()
 
     def __init__(self) -> None:
         self.actions: list[ActionNode] = []
-        self.contexts: dict[DataNode, DataContext] = defaultdict(lambda: DataContext(self))
-        self.current_key: DataNode = GCK
-
-    @property
-    def GlobalContext(self) -> DataContext:
-        return self.contexts[GCK]
+        self.contexts: dict[ContextKeyNode, DataContext] = defaultdict(lambda: DataContext(self))
+        self.context_keys = DataContext(self)
+        self.current_key: ContextKeyNode = GCK
 
     @property
     def CurrentContext(self) -> DataContext:
@@ -242,28 +242,33 @@ class Container:
     @property
     def ActionsInCurrentContext(self) -> list[ActionNode]:
         return filter(lambda a: a.context_key is self.current_key, self.actions)
-
-    def get_node_of_type(self, node_name: str, node_type: type[NodeBase]) -> NodeBase:
-        if node:=self.CurrentContext.get_node_of_type(node_name, node_type):
+    
+    def get_node_of_type_for(self, context_key: ContextKeyNode, node_name: str, node_type: type[NodeBase]) -> NodeBase | None:
+        context = self.get_context(context_key)
+        if node:=context.get_node_of_type(node_name, node_type):
             return node
-        elif self.current_key is not GCK:
-            return self.GlobalContext.get_node_of_type(node_name, node_type)
+        elif (context_key is not GCK) and (node:=self.context_keys[GCK].get_node_of_type(node_name, node_type)):
+            return node
+        elif node:=self.context_keys.get_node_of_type(node_name, node_type):
+            return node
         else:
-            # search in agency (?)
             return None
 
-    def activate_context(self, context_key: DataNode) -> DataContext:
+    def get_node_of_type(self, node_name: str, node_type: type[NodeBase]) -> NodeBase | None:
+        return self.get_node_of_type_for(self.current_key, node_name, node_type)
+
+    def activate_context(self, context_key: ContextKeyNode) -> DataContext:
         self.current_key = context_key
         return self.CurrentContext
 
-    def get_context(self, context_key: DataNode) -> DataContext:
+    def get_context(self, context_key: ContextKeyNode) -> DataContext:
         return self.contexts[context_key]
     
-    def remove_global_node(self, node_object: NodeBase):
-        del self.GlobalContext[type(node_object)][node_object.name]
-        if node_object in self.contexts:
-            del self.contexts[node_object]
-        self.actions = [action for action in self.actions if action.context_key is not node_object]
+    def remove_context_key(self, context_key: ContextKeyNode):
+        del self.context_keys[type(context_key)][context_key.name]
+        if context_key in self.contexts:
+            del self.contexts[context_key]
+        self.actions = [action for action in self.actions if action.context_key is not context_key]
 
     def _get_value_of_annotation(self, ann: type | GenericAlias, config: Any):
         if config is None:
@@ -318,7 +323,7 @@ class Container:
     def get_save_config(self):
         return {
             "actions": [action.get_save_config() for action in self.actions],
-            "global_nodes": [n_o.get_save_config() for n_t, n_n, n_o in self.GlobalContext.NodeIter],
+            "contexts": [n_o.get_save_config() for n_t, n_n, n_o in self.context_keys.NodeIter],
             # add combo_action definitions, combo_action = action1 + action2 + action3 ...
             # able to define pre-defined parameters and user-input parameters
             # only available in current project, but can be saved as a template
@@ -329,7 +334,7 @@ class Container:
         container = Container()
         nodes = {}
 
-        g_nodes = config.get("global_nodes") or []
+        g_nodes = config.get("contexts") or config.get("global_nodes") or []
         for data_config in g_nodes:
             cls_path = data_config['_class_']
             del data_config['_class_']
@@ -345,7 +350,7 @@ class Container:
 
             nodes[uuid] = data_node
 
-            container.GlobalContext.add_node(data_node)
+            container.context_keys.add_node(data_node)
 
         actions = config.get("actions") or []
         for act_config in actions:
@@ -383,20 +388,20 @@ class Container:
         return getattr(module, class_name)
 
     @staticmethod
-    def RegisterGlobalDataType(node_type: type[DataNode] | str):
-        Container._global_node_types.append(node_type)
+    def RegisterGlobalDataType(node_type: type[ContextKeyNode] | str):
+        Container._key_types.append(node_type)
 
     @staticmethod
-    def GetGlobalDataTypes() -> list[type[DataNode] | str]:
-        return Container._global_node_types
+    def GetGlobalDataTypes() -> list[type[ContextKeyNode] | str]:
+        return Container._key_types
 
     @staticmethod
-    def RegisterContextAction(context_type: type[DataNode], action_type: type[ActionNode] | str):
-        Container._context_action_types[context_type].append(action_type)
+    def RegisterContextAction(context_type: type[ContextKeyNode], action_type: type[ActionNode] | str):
+        Container._action_types[context_type].append(action_type)
 
     @staticmethod
-    def GetContextActionTypes(context_type: type[DataNode]) -> list[type[ActionNode] | str]:
-        return Container._context_action_types[context_type]
+    def GetContextActionTypes(context_type: type[ContextKeyNode]) -> list[type[ActionNode] | str]:
+        return Container._action_types[context_type]
     
     @staticmethod
     def RegisterGlobalContextAction(action_type: type[ActionNode] | str):

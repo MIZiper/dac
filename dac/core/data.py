@@ -1,4 +1,4 @@
-from . import DataNode
+from dac.core import DataNode, ContextKeyNode
 
 r"""Concepts and principles
 
@@ -14,5 +14,5 @@ class DataBase(DataNode):
     # the actions to be performed on individual data node
     # equal to `ActionBase(win, fig, ...)(DataBase())`
 
-class SimpleDefinition(DataNode):
+class SimpleDefinition(ContextKeyNode):
     pass

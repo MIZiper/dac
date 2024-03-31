@@ -1,7 +1,6 @@
-from matplotlib.figure import Figure
 import inspect
-from dac.core import DataNode
-from . import ActionNode
+from matplotlib.figure import Figure
+from dac.core import DataNode, ContextKeyNode, ActionNode
 
 import numpy as np
 from time import sleep
@@ -14,7 +13,7 @@ class ActionBase(ActionNode): # needs thread
 # TODO: add batch processing: read data, process with predefined parameters, process, save or export, clean and free memory
 
 class ProcessActionBase(ActionBase):
-    def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
+    def __init__(self, context_key: ContextKeyNode, name: str = None, uuid: str = None) -> None:
         super().__init__(context_key, name, uuid)
         self._progress = lambda i, n: self._message(f"Progress: {i}/{n}")
         self._message = print
@@ -25,7 +24,7 @@ class ProcessActionBase(ActionBase):
         self._message(f"[{self.name}]>{s}")
 
 class VisualizeActionBase(ActionBase):
-    def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
+    def __init__(self, context_key: ContextKeyNode, name: str = None, uuid: str = None) -> None:
         super().__init__(context_key, name, uuid)
         self._figure: Figure = None
         self._cids = [] # never overwrite in __call__
@@ -88,7 +87,7 @@ class SequenceActionBase(PAB, VAB):
 
         cls._SIGNATURE = signatures
     
-    def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
+    def __init__(self, context_key: ContextKeyNode, name: str = None, uuid: str = None) -> None:
         super().__init__(context_key, name, uuid)
         self._construct_config = SequenceActionBase._GetCCFromS(self._SIGNATURE)
 

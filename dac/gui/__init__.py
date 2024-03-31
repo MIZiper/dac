@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import (QMainWindow, QStyle, QTreeWidget, QTreeWidgetItem,
                              QWidget)
 
 from dac import APPNAME, __version__
-from dac.core import GCK, ActionNode, Container, DataNode, NodeBase
+from dac.core import GCK, ActionNode, Container, DataNode, NodeBase, ContextKeyNode
 from dac.core.actions import PAB, VAB, ActionBase
 from dac.core.thread import ThreadWorker
 from dac.gui.base import MainWindowBase
@@ -230,8 +230,8 @@ class MainWindow(MainWindowBase):
                 return None
             
         if clean:
-            Container._context_action_types.clear()
-            Container._global_node_types.clear()
+            Container._action_types.clear()
+            Container._key_types.clear()
             # quick_tasks and quick_actions are always overwritten
 
         with open(setting_fpath, mode="r", encoding="utf8") as fp:
@@ -341,34 +341,31 @@ class DataListWidget(QTreeWidget):
         else:
             self._container = container
 
-        global_item = QtWidgets.QTreeWidgetItem(self)
-        global_item.setText(NAME, "N/A")
-        global_item.setText(TYPE, "Global Nodes")
-        global_item.setData(NAME, Qt.ItemDataRole.UserRole, GCK)
-        for node_type, node_name, node_object in container.GlobalContext.NodeIter:
-            itm = QtWidgets.QTreeWidgetItem(global_item)
+        context_item = QtWidgets.QTreeWidgetItem(self)
+        context_item.setText(NAME, "N/A")
+        context_item.setText(TYPE, "Context")
+        context_item.setData(NAME, Qt.ItemDataRole.UserRole, GCK)
+        for node_type, node_name, node_object in container.context_keys.NodeIter:
+            itm = QtWidgets.QTreeWidgetItem(context_item)
             itm.setText(NAME, node_name)
             itm.setText(TYPE, node_type.__name__)
             itm.setText(REMARK, node_object.uuid)
             itm.setData(NAME, Qt.ItemDataRole.UserRole, node_object)
             if container.current_key is node_object:
                 itm.setIcon(NAME, self._STYLE.standardIcon(QStyle.StandardPixmap.SP_CommandLink))
-        global_item.setExpanded(True)
+        context_item.setExpanded(True)
 
-        local_item = QtWidgets.QTreeWidgetItem(self)
-        local_item.setText(NAME, "N/A")
-        local_item.setText(TYPE, "Local Nodes")
-        if container.current_key is not GCK:
-            local_item.setText(NAME, container.current_key.name)
-            for node_type, node_name, node_object in container.CurrentContext.NodeIter:
-                itm = QtWidgets.QTreeWidgetItem(local_item)
-                itm.setText(NAME, node_name)
-                itm.setText(TYPE, node_type.__name__)
-                itm.setText(REMARK, node_object.uuid)
-                itm.setData(NAME, Qt.ItemDataRole.UserRole, node_object)
-                itm.setData(TYPE, Qt.ItemDataRole.UserRole, True) # mark as un-editable
-                # itm.setDisabled(True) # TODO: enable for editing, and quick_actions context menu
-        local_item.setExpanded(True)
+        data_item = QtWidgets.QTreeWidgetItem(self)
+        data_item.setText(NAME, container.current_key.name)
+        data_item.setText(TYPE, "Data")
+        for node_type, node_name, node_object in container.CurrentContext.NodeIter:
+            itm = QtWidgets.QTreeWidgetItem(data_item)
+            itm.setText(NAME, node_name)
+            itm.setText(TYPE, node_type.__name__)
+            itm.setText(REMARK, node_object.uuid)
+            itm.setData(NAME, Qt.ItemDataRole.UserRole, node_object)
+            itm.setData(TYPE, Qt.ItemDataRole.UserRole, True) # mark as un-editable
+        data_item.setExpanded(True)
 
     def action_context_requested(self, pos: QtCore.QPoint):
         if (container := self._container) is None:
@@ -422,7 +419,7 @@ class DataListWidget(QTreeWidget):
             def cb_creation_gen(n_t: type[DataNode]):
                 def cb_creation():
                     new_node = n_t(name="[New node]")
-                    container.GlobalContext.add_node(new_node)
+                    container.context_keys.add_node(new_node)
                     self.refresh()
                     self.sig_edit_data_requested.emit(new_node)
                 return cb_creation
@@ -459,7 +456,7 @@ class DataListWidget(QTreeWidget):
                         container.activate_context(GCK)
                         self.sig_action_update_requested.emit()
 
-                    container.remove_global_node(key_object)
+                    container.remove_context_key(key_object)
                     self.refresh()
 
                 return cb_del
@@ -508,7 +505,7 @@ class DataListWidget(QTreeWidget):
         
         # if node from previous container, seems works too
         if (new_name:=config.get("name")) and new_name!=node.name:
-            self._container.GlobalContext.rename_node_to(node, new_name)
+            self._container.context_keys.rename_node_to(node, new_name) # NOTE: error when applying from local nodes
         node.apply_construct_config(config)
         self.refresh()
 
@@ -678,7 +675,7 @@ class ActionListWidget(QTreeWidget):
                 submenu = menu.addMenu("Insert before")
                 add_new_actions(submenu, container.actions.index(act))
 
-            def cb_cp2_gen(aa: list[ActionNode], context_key: DataNode):
+            def cb_cp2_gen(aa: list[ActionNode], context_key: ContextKeyNode):
                 def cb_cp2():
                     for oa in aa:
                         oac = oa.get_construct_config()
@@ -718,7 +715,7 @@ class ActionListWidget(QTreeWidget):
             if container.current_key is not GCK:
                 cp2menu = menu.addMenu("Copy to")
                 current_type = type(container.current_key)
-                for node_type, node_name, node in container.GlobalContext.NodeIter:
+                for node_type, node_name, node in container.context_keys.NodeIter:
                     if isinstance(node, current_type):
                         # only allow copying to context of same type
                         cp2menu.addAction(node_name).triggered.connect(
