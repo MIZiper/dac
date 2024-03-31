@@ -7,8 +7,8 @@ from dac.gui import MainWindow
 
 @click.command()
 @click.option("--config-file", help="Configuration file to load")
-@click.option("--plugins-file", help="YAML file for plugins")
-def main(config_file: str, plugins_file: str):
+@click.option("--plugin-file", help="YAML file for plugins")
+def main(config_file: str, plugin_file: str):
     win = MainWindow()
     if config_file is not None:
         with open(config_file, mode="r") as fp:
@@ -23,7 +23,7 @@ if __name__=="__main__":
     # add splash progress for module loading
 
     # setting_fpath = path.join(path.dirname(__file__), "..", "plugins/0.base.yaml")
-    # win.use_plugins(setting_fpath)
+    # win.use_plugin(setting_fpath)
     win.use_plugins_dir(path.join(path.dirname(__file__), "../plugins"), default="0.base.yaml")
 
     win.show()

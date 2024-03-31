@@ -214,7 +214,7 @@ class MainWindow(MainWindowBase):
 
         return figure
 
-    def use_plugins(self, setting_fpath: str, clean: bool=True):
+    def use_plugin(self, setting_fpath: str, clean: bool=True):
         alias_pattern = re.compile("^/(?P<alias_name>.+)/(?P<rest>.+)")
         def get_node_type(cls_path: str) -> str | type[NodeBase]:
             if cls_path[0]=="[" and cls_path[-1]=="]":
@@ -239,7 +239,7 @@ class MainWindow(MainWindowBase):
             if not setting: return
 
             if (inherit_rel_path:=setting.get('inherit')) is not None:
-                self.use_plugins(path.join(path.dirname(setting_fpath), inherit_rel_path), clean=False)
+                self.use_plugin(path.join(path.dirname(setting_fpath), inherit_rel_path), clean=False)
 
             alias = setting.get('alias', {})
 
@@ -282,17 +282,17 @@ class MainWindow(MainWindowBase):
         menubar = self.menuBar()
         plugin_menu = menubar.addMenu("Plugins") # TODO: make it about-to-open style, so search files everytime
 
-        def apply_plugins_file_gen(f):
-            def apply_plugins_file():
-                self.use_plugins(f, clean=True)
-            return apply_plugins_file
+        def apply_plugin_file_gen(f):
+            def apply_plugin_file():
+                self.use_plugin(f, clean=True)
+            return apply_plugin_file
         
         for f in glob(path.join(setting_dpath, "*.yaml")):
             act = plugin_menu.addAction(path.basename(f))
-            act.triggered.connect(apply_plugins_file_gen(f))
+            act.triggered.connect(apply_plugin_file_gen(f))
 
         if default:
-            self.use_plugins(path.join(setting_dpath, default))
+            self.use_plugin(path.join(setting_dpath, default))
 
     def apply_config(self, config: dict):
         if self.project_config_fpath:
@@ -306,9 +306,13 @@ class MainWindow(MainWindowBase):
         self.action_list_widget.refresh(container)
 
     def get_config(self):
+        container_config = {} if self.container is None else self.container.get_save_config()
+
         return {
-            "_": {"version": __version__},
-            "dac": {} if self.container is None else self.container.get_save_config()
+            "dac": {
+                "_": {"version": __version__},
+                **container_config,
+            }
         }
 
 class DataListWidget(QTreeWidget):
@@ -397,7 +401,7 @@ class DataListWidget(QTreeWidget):
                     act.post_run()
                 return cb_quickaction
             
-            for qat  in node_object.QUICK_ACTIONS:
+            for qat in node_object.QUICK_ACTIONS:
                 qat: tuple[type[ActionBase], str, dict]
                 act_type, data_param_name, other_params = qat
                 menu.addAction(act_type.CAPTION).triggered.connect(cb_quickaction_gen(qat, nodes))
@@ -493,8 +497,7 @@ class DataListWidget(QTreeWidget):
 
     def mousePressEvent(self, e: QMouseEvent) -> None:
         # mid-btn-click => copy name. mid-button-click won't trigger 'itemClicked'
-        if e.button()==Qt.MouseButton.MidButton:
-            itm = self.itemAt(e.pos())
+        if (e.button()==Qt.MouseButton.MidButton) and (itm := self.itemAt(e.pos())):
             name = itm.text(NAME)
             QtWidgets.QApplication.clipboard().setText(name)
         return super().mousePressEvent(e)

@@ -270,37 +270,37 @@ class Container:
             del self.contexts[context_key]
         self.actions = [action for action in self.actions if action.context_key is not context_key]
 
-    def _get_value_of_annotation(self, ann: type | GenericAlias, config: Any):
-        if config is None:
+    def _get_value_of_annotation(self, ann: type | GenericAlias, pre_value: Any):
+        if pre_value is None:
             return None
         elif issubclass(ann, Enum):
-            if isinstance(config, Enum): # from default
-                return config
+            if isinstance(pre_value, Enum): # from default
+                return pre_value
             else: # str
-                return ann[config]
-        elif issubclass(ann, DataNode): # and isinstance(config, str)
-            if (value:=self.get_node_of_type(node_name=config, node_type=ann)) is None:
-                raise NodeNotFoundError(f"Node '{config}' of '{ann.__name__}' not found.")
+                return ann[pre_value]
+        elif issubclass(ann, DataNode): # and isinstance(pre_value, str)
+            if (value:=self.get_node_of_type(node_name=pre_value, node_type=ann)) is None:
+                raise NodeNotFoundError(f"Node '{pre_value}' of '{ann.__name__}' not found.")
             return value
         elif isinstance(ann, GenericAlias):
             if ann.__name__=="list" and len(ann.__args__)==1:
                 value = []
-                for c in config:
+                for c in pre_value:
                     try:
                         v = self._get_value_of_annotation(ann.__args__[0], c)
                     except NodeNotFoundError:
                         continue
                     value.append(v)
             elif ann.__name__=="tuple":
-                value = [self._get_value_of_annotation(a, c) for a, c in zip(ann.__args__, config)]
+                value = [self._get_value_of_annotation(a, c) for a, c in zip(ann.__args__, pre_value)]
             else:
                 raise NotImplementedError
             
             return value
         elif ann in Container._type_agencies:
-            return Container._type_agencies[ann](config)
+            return Container._type_agencies[ann](pre_value)
         else:
-            return config
+            return pre_value
     
     def prepare_params_for_action(self, signature: inspect.Signature | dict, construct_config: dict) -> dict:
         params = {}
