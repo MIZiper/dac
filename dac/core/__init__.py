@@ -247,7 +247,7 @@ class Container:
         context = self.get_context(context_key)
         if node:=context.get_node_of_type(node_name, node_type):
             return node
-        elif (context_key is not GCK) and (node:=self.context_keys[GCK].get_node_of_type(node_name, node_type)):
+        elif (context_key is not GCK) and (node:=self.contexts[GCK].get_node_of_type(node_name, node_type)):
             return node
         elif node:=self.context_keys.get_node_of_type(node_name, node_type):
             return node
