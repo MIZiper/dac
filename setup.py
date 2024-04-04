@@ -11,6 +11,7 @@ setup(
     download_url="https://github.com/MIZiper/dac.git",
     license="Apache-2.0",
     packages=find_packages(),
+    package_data={"dac": ["plugins/*.yaml", "gui/resources/*.png"]},
     install_requires=["click", "numpy", "scipy", "matplotlib", "pyyaml", "nptdms"],
     extras_require={
         "GUI": ["pyqt5", "qscintilla"],

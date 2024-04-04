@@ -47,6 +47,9 @@ def use_plugin(setting_fpath: str, clean: bool=True, dac_win=None):
                     action_type = get_node_type(cats)
                     if action_type: Container.RegisterContextAction(data_type, action_type)
 
+        if not hasattr(dac_win, "show"): # web-based cannot use PyQt5 and the tasks
+            return
+
         for ats, tss in setting.get("quick_tasks", {}).items(): # action_type_string, task_string_s
             action_type = get_node_type(ats)
             if not action_type: continue
