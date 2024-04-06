@@ -195,6 +195,7 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
     def __init__(self, container: "Container") -> None:
         super().__init__()
         self._container = container
+        self._uuid_dict = {} # {uuid: (node_type, name)} # don't store object to avoid ref
 
     @property
     def NodeIter(self) -> list[tuple[type[DataNode], str, DataNode]]:
@@ -208,6 +209,7 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
             self[node_type][node.name] = node # in global context, should delete original node related actions (potential error)
         else:
             self[node_type] = {node.name: node}
+        self._uuid_dict[node.uuid] = (node_type, node.name)
 
     def get_node_of_type(self, node_name: str, node_type: type[NodeBase]) -> NodeBase:
         try:
@@ -222,6 +224,10 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
             pass
         node.name = new_name
         self.add_node(node)
+
+    def get_node_by_uuid(self, uuid: str) -> NodeBase:
+        node_type, node_name = self._uuid_dict[uuid]
+        return self[node_type][node_name]
 
 class Container:
     _key_types = [] # [ type[context_key_node] ]
