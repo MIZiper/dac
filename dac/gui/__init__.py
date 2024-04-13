@@ -217,10 +217,11 @@ class MainWindow(MainWindowBase):
 
     def use_plugin(self, setting_fpath: str, clean: bool=True):
         use_plugin(setting_fpath, clean, dac_win=self)
+        self._plugin_menu.setTitle(f"Plugins: {path.basename(setting_fpath)}")
 
     def use_plugins_dir(self, setting_dpath: str, default: str=None):
         menubar = self.menuBar()
-        plugin_menu = menubar.addMenu("Plugins") # TODO: make it about-to-open style, so search files everytime
+        self._plugin_menu = plugin_menu = menubar.addMenu("Plugins") # TODO: make it about-to-open style, so search files everytime
 
         def apply_plugin_file_gen(f):
             def apply_plugin_file():
@@ -681,7 +682,7 @@ class ActionListWidget(QTreeWidget):
                         return
                     editor = QsciScintilla(self.dac_win)
                     editor.setWindowFlag(Qt.WindowType.Tool)
-                    editor.resize(666, 333)
+                    editor.resize(1200, 520)
                     lexer = QsciLexerPython(editor)
                     lexer.setFont(QtGui.QFont("Consolas"))
                     editor.setLexer(lexer)
