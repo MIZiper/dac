@@ -596,6 +596,16 @@ class ActionListWidget(QTreeWidget):
                         menu.addAction(a_t).setEnabled(False)
                 else:
                     menu.addAction(a_t.CAPTION).triggered.connect(cb_creation_gen(a_t))
+                    
+            modifiers = QtWidgets.QApplication.keyboardModifiers()
+            if modifiers & QtCore.Qt.KeyboardModifier.ShiftModifier:
+                def custom_callback():
+                    cls_path, ok = QtWidgets.QInputDialog.getText(self, "Custom input", "Input custom 'lib.module.action' to create action.")
+                    if not ok:
+                        return
+                    a_t = Container.GetClass(cls_path)
+                    cb_creation_gen(a_t=a_t)()
+                menu.addAction(">> Custom input <<").triggered.connect(custom_callback)
         if not itms:
             add_new_actions(menu)
         else:
