@@ -9,13 +9,23 @@ from .data import FreqIntermediateData, DataBins, FreqDomainData
 class ToFreqDomainAction(PAB):
     CAPTION = "Simple FFT to frequency domain" # rect window
 
-    def __call__(self, channels: list[TimeData]) -> list[FreqDomainData]:
+    def __call__(self, channels: list[TimeData], window: WindowType=WindowType.Uniform, corr: BandCorrection=BandCorrection.NarrowBand) -> list[FreqDomainData]:
         rst = []
         m = len(channels)
+        window_funcs = {
+            WindowType.Hanning: np.hanning,
+            WindowType.Hamming: np.hamming,
+        }
         for i, ch in enumerate(channels):
             batch_N = ch.length
             df = 1 / (batch_N*ch.dt)
-            fdata = np.fft.fft(ch.y) / batch_N
+            
+            if window in window_funcs:
+                windowed_y = ch.y * window_funcs[window](batch_N)
+            else:
+                window = WindowType.Uniform
+                windowed_y = ch.y
+            fdata = np.fft.fft(windowed_y) / batch_N * window.value[corr.value]
 
             double_spec = fdata[:int(np.ceil(batch_N/2))]
             double_spec[1:] *= 2
