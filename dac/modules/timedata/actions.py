@@ -22,7 +22,7 @@ class LoadAction(PAB):
 
 class TruncAction(ActionBase):
     CAPTION = "Truncate TimeData"
-    def __call__(self, channels: list[TimeData], duration: tuple[float, float]=(0, 0)) -> list[TimeData]:
+    def __call__(self, channels: list[TimeData], duration: tuple[float, float]=[0, 0]) -> list[TimeData]:
         rst = []
         xfrom, xto = duration
 
@@ -37,7 +37,7 @@ class TruncAction(ActionBase):
 
             idx_from = np.searchsorted(x, xfrom)
             y = channel.y[idx_from:idx_to]
-            rst.append(TimeData(channel.name, y=y, dt=channel.dt, y_unit=channel.y_unit, comment=channel.comment))
+            rst.append(TimeData(f"{channel.name}-Trunc", y=y, dt=channel.dt, y_unit=channel.y_unit, comment=channel.comment))
         
         return rst
 

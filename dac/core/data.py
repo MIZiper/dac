@@ -16,3 +16,9 @@ class DataBase(DataNode):
 
 class SimpleDefinition(ContextKeyNode):
     pass
+
+class ReferenceBase:
+    pass
+
+class StatData:
+    pass

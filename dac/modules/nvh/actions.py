@@ -159,6 +159,8 @@ class ExtractOrderSliceAction(PAB):
                 target_x = bin_y * order
                 a = f_batch.extract_amplitude_at(target_x)
 
+            # extract to stat_data, with refs
+
 # calc rms
 
 class FilterSpectrumAction(PAB):

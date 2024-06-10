@@ -1,12 +1,17 @@
 import numpy as np
 from . import BallBearing, GearboxDefinition
 from dac.modules.timedata import TimeData
-from dac.core.actions import VAB, PAB, SAB
+from dac.core.actions import VAB, PAB, SAB, ActionBase
 from dac.modules.timedata.actions import ShowTimeDataAction
 from dac.modules.nvh.actions import ViewFreqDomainAction
 
 class BearingInputStage(int): # cannot use namedtuple(BallBearing, BearingInputStage) because no conversion for namedtuple
     pass
+
+class CreateGearboxWithBearings(ActionBase):
+    CAPTION = "Make gearbox with bearings"
+    def __call__(self, gearbox: GearboxDefinition, bearings: list[tuple[BearingInputStage, BallBearing]]) -> GearboxDefinition:
+        pass
 
 class ShowFreqLinesTime(VAB):
     CAPTION = "Mark frequency lines on time domain"

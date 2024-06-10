@@ -20,6 +20,7 @@ actions:
   /dd/SimpleDefinition:
   - "[Test space>]"
   - dac.modules.timedata.construct.SignalConstructAction # same as /mt/construct.SignalConstructAction
+  - /mt/actions.TruncAction
   - "[<]"
 
 quick_actions: {}
