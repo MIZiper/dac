@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="miz-dac",
-    version="0.3.0",
+    version="0.3.1",
     description="Data action context",
     long_description="Minimal measurement data analysis with nodes and container.",
     author="MIZiper",
