@@ -20,7 +20,8 @@ from PyQt5.QtGui import QCloseEvent, QMouseEvent
 from PyQt5.QtWidgets import (QMainWindow, QStyle, QTreeWidget, QTreeWidgetItem,
                              QWidget)
 
-from dac import APPNAME, __version__
+from importlib.metadata import version
+from dac import APPNAME, PYPI_NAME
 from dac.core import GCK, ActionNode, Container, DataNode, NodeBase, ContextKeyNode
 from dac.core.actions import PAB, VAB, ActionBase
 from dac.core.thread import ThreadWorker
@@ -251,7 +252,7 @@ class MainWindow(MainWindowBase):
 
         return {
             "dac": {
-                "_": {"version": __version__},
+                "_": {"version": version(PYPI_NAME)},
                 **container_config,
             }
         }

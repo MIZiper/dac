@@ -1,0 +1,18 @@
+[project]
+name = "miz-dac"
+version = "0.3.2"
+dependencies = ["click", "numpy", "scipy", "matplotlib", "pyyaml", "nptdms"]
+requires-python = ">=3.10" # `|` used for types union
+authors = [{ name = "MIZiper", email = "miziper@163.com" }]
+description = "Minimal measurement data analysis frame with nodes and container."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+keywords = ["data", "context", "analysis"]
+
+[project.optional-dependencies]
+gui = ["pyqt5", "qscintilla"]
+ipy = ["pyqt5", "qscintilla", "qtconsole"]
+
+[project.urls]
+Homepage = "http://mizip.net/"
+Repository = "https://github.com/MIZiper/dac.git"
