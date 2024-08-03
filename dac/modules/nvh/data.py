@@ -2,6 +2,7 @@ import numpy as np
 from dac.core.data import DataBase
 from . import BinMethod, AverageType
 from ..timedata import TimeData
+from collections import namedtuple
 
 class ProcessPackage: # bundle channels and ref_channel
     ...
@@ -184,6 +185,43 @@ class FreqIntermediateData(DataBase):
                 pass
 
         return FreqIntermediateData
+    
+    def extract_orderslice(self, orders: "OrderList", line_tol: int=3) -> "OrderSliceData":
+        xs = self.x # [Hz]
+        ys = self.ref_bins.y
+        zs = self.z # batch x window
+
+        idx = np.argsort(ys)
+        ys = ys[idx]
+        zs = zs[idx]
+
+        order_slice = OrderSliceData(name="OrderSlice", source=self)
+
+        for order in orders.orders:
+            # slice_element
+            se_x = [] # frequency, [Hz]
+            se_y = [] # ref value, e.g. [rpm]
+            se_z = [] # amplitude, e.g. [mm/s]
+
+            for ref_y, f_batch in zip(ys, zs):
+                target_x = ref_y * order.value
+                target_idx = np.searchsorted(xs, target_x)
+
+                # TODO: avoid f(0)
+                # TODO: avoid out-of-range f
+                rel_idx = np.argmax(np.abs(f_batch[max(target_idx-line_tol,0):(target_idx+line_tol)]))
+                final_a = f_batch[target_idx-line_tol+rel_idx]
+                final_f = xs[target_idx-line_tol+rel_idx]
+
+                se_x.append(final_f)
+                # if f already in orderslice? if f not ascending?
+                se_y.append(ref_y)
+                se_z.append(np.abs(final_a))
+                # how to average? by energy
+
+            order_slice.slices[order] = SliceData(f=se_x, ref=se_y, amplitude=se_z)
+
+        return order_slice
 
     def reference_to(self, reference: "FreqIntermediateData"):
         data = np.conj(reference.z) * self.z / np.abs(reference.z)
@@ -231,6 +269,36 @@ class FreqIntermediateData(DataBase):
             FreqDomainData(y=frfH2)
         )
 
+OrderInfo = namedtuple("OrderInfo", ['name', 'value', 'disp_value'])
+    # name: label, e.g. f_1
+    # value: ratio between reference and frequency
+    # disp_value: for the case of unit conversion, e.g. 1st order of 1 [rpm] is actually 1/60 [Hz]
 
-class OrderSliceData:
-    ...
+class SliceData:
+    def __init__(self, f: np.ndarray, ref: np.ndarray, amplitude: np.ndarray):
+        self.f = np.array(f)
+        self.ref = np.array(ref)
+        self.amplitude = np.array(amplitude)
+
+    def get_aligned_f(self):
+        idx = np.argsort(self.f)
+        return self.f[idx], self.amplitude[idx]
+    
+    def get_aligned_ref(self):
+        idx = np.argsort(self.ref)
+        return self.ref[idx], self.amplitude[idx]
+
+class OrderList(DataBase):
+    def __init__(self, name: str = None, uuid: str = None, orders: list[OrderInfo]=None) -> None:
+        super().__init__(name, uuid)
+        self.orders: list[OrderInfo] = orders or []
+
+class OrderSliceData(DataBase):
+    def __init__(self, name: str = None, uuid: str = None, source: FreqIntermediateData = None) -> None:
+        super().__init__(name, uuid)
+
+        self.slices: dict[OrderInfo, SliceData] = {}
+        self.ref_source: FreqIntermediateData = source
+    
+    def rectify2freqdata(self): # when speed is uneven, remove high bandwidth
+        pass

@@ -3,6 +3,7 @@ from . import BallBearing, GearboxDefinition, BearingInputStage
 from dac.modules.timedata import TimeData
 from dac.core.actions import VAB, PAB, SAB, ActionBase
 from dac.modules.timedata.actions import ShowTimeDataAction
+from dac.modules.nvh.data import OrderList, OrderInfo
 from dac.modules.nvh.actions import ViewFreqDomainAction
 
 class CreateBearing(ActionBase):
@@ -25,6 +26,16 @@ class CreateGearboxWithBearings(ActionBase):
             bearings=bearings,
         )
 
+
+class CreateOrdersOfGearbox(ActionBase):
+    CAPTION = "Create orders for gearbox"
+    def __call__(self, gearbox: GearboxDefinition, ref_output: bool=True) -> OrderList:
+        ol = OrderList(f"Orders-{gearbox.name}")
+        for freq, label in gearbox.get_freqs_labels_at(speed=60, speed_on_output=ref_output):
+            # reference shaft has order 1
+            ol.orders.append(OrderInfo(label, freq/60, freq))
+
+        return ol
 
 class ShowFreqLinesTime(VAB):
     CAPTION = "Mark frequency lines on time domain"

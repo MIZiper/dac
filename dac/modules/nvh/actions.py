@@ -1,10 +1,15 @@
 import numpy as np
+from collections import defaultdict
 from matplotlib.gridspec import GridSpec
+from matplotlib.widgets import TextBox, RadioButtons
+from matplotlib.axes import Axes
 
+from dac.core.data import SimpleDefinition
 from dac.core.actions import ActionBase, VAB, PAB, SAB
 from dac.modules.timedata import TimeData
-from . import WindowType, BandCorrection, BinMethod, AverageType
-from .data import FreqIntermediateData, DataBins, FreqDomainData
+from . import WindowType, BandCorrection, BinMethod, AverageType, ToleranceType
+from .data import FreqIntermediateData, DataBins, FreqDomainData, \
+                  OrderInfo, OrderList, SliceData, OrderSliceData
 
 class ToFreqDomainAction(PAB):
     CAPTION = "Simple FFT to frequency domain" # rect window
@@ -145,21 +150,178 @@ class ExtractAmplitudeAction(PAB):
     CAPTION = "Extract amplitude at frequencies"
 
     def __call__(self, channels: list[FreqDomainData], frequencies: list[float], line_tol: int=3):
+        ...
+
+class ViewColorPlotAndCheckOrderSlice(ViewFreqIntermediateAction):
+    # obsolete, it's too laggy
+    CAPTION = "Show color plot with order indication"
+    def __call__(self, channel: FreqIntermediateData, xlim: tuple[float, float] = None, clim: tuple[float, float] = [0, 0.001]):
+        super().__call__(channel, xlim, clim)
+        fig = self.figure
+        ax: Axes = fig.axes[0]
+        
+        ax_order = fig.add_axes([0.1, 0.01, 0.5, 0.05])
+        order_input = TextBox(ax_order, label="Order:", initial=0)
+
+        l = ax.axline((0, 0), slope=0, color='k')
+
+        def on_press(event):
+            if fig.canvas.widgetlock.locked():
+                return            
+            order_input.set_val(f"{event.ydata/event.xdata:.3f}")
+
+        def on_order_submit(order_str: str):
+            order = float(order_str)
+            if order<=0:
+                return
+            l.set_slope(order)
+            fig.canvas.draw_idle()
+            
+        order_input.on_submit(on_order_submit)
+
+        self._cids.append(
+            fig.canvas.mpl_connect('button_press_event', on_press)
+        )
+        self._widgets.append(order_input)
+
+class MarkOrders(VAB):
+    pass
+
+class ViewColorPlotWithOrderSlice(ViewFreqIntermediateAction): # inherit SAB = ViewColorPlot + MarkOrders
+    CAPTION = "Show color plot with order indication"
+    def __call__(self, channel: FreqIntermediateData, orders: OrderList, fmt_lines: list[str]=["{f_1}", "0.5"], xlim: tuple[float, float] = None, clim: tuple[float, float] = [0, 0.001]):
+        pass
+
+class CreateOrders(ActionBase):
+    CAPTION = "Create orders"
+
+    def __call__(self, infos: list[OrderInfo]) -> OrderList:
+        ol = OrderList(name="Orders")
+
+        for name, value, disp_value in infos:
+            if disp_value is None:
+                disp_value = value
+            ol.orders.append(OrderInfo(name, value, disp_value))
+
+        return ol
+
+class ExtractOrderSlicesAction(PAB):
+    CAPTION = "Extract OrderSlice"
+
+    def __call__(self, channels: list[FreqIntermediateData], orders: OrderList, tol_type: ToleranceType=ToleranceType.FixLines, tol_value: float=3) -> list[OrderSliceData]:
+        order_slices = []
         for channel in channels:
-            idxes = np.searchsorted(frequencies, channel.x)
-            for idx in idxes:
-                ...
+            os = channel.extract_orderslice(orders, int(tol_value))
+            os.name = f"OrderSlice-{channel.name}"
+            order_slices.append(os)
 
-class ExtractOrderSliceAction(PAB):
-    CAPTION = "Extract order slice"
+        return order_slices
 
-    def __call__(self, channels: list[FreqIntermediateData], order: float=1, average_by: "Any"=None):
-        for channel in channels:
-            for bin_y, f_batch in zip(channel.ref_bins.y, channel.z):
-                target_x = bin_y * order
-                a = f_batch.extract_amplitude_at(target_x)
+# pick up order from color plot
 
-            # extract to stat_data, with refs
+class ViewOrderSlice(VAB):
+    CAPTION = "View OrderSlice"
+    def __call__(self, order_slice: OrderSliceData):
+        # switch orders
+        # by reference / by frequency
+        fig = self.figure
+        ax = fig.gca()
+
+        ax_orders = fig.add_axes([0.91, 0.13, 0.08, 0.2])
+        ax_method = fig.add_axes([0.91, 0.01, 0.08, 0.1])
+        order_labels = ["None"] + [order.name for order in order_slice.slices]
+        order_choice: OrderInfo | None = None
+        order_selector = RadioButtons(ax_orders, order_labels, active=0)
+        method_labels = ['By frequency', 'By reference']
+        method_choice = 0
+        method_selector = RadioButtons(ax_method, method_labels, active=method_choice)
+
+        def order_change(label):
+            nonlocal order_choice
+            for order in order_slice.slices:
+                if order.name==label:
+                    order_choice = order
+                    break
+            else:
+                order_choice = None
+            update()
+        order_selector.on_clicked(order_change)
+        def method_change(label):
+            nonlocal method_choice
+            method_choice = method_labels.index(label)
+            update()
+        method_selector.on_clicked(method_change)
+
+        def update():
+            ax.cla()
+            if order_choice is None:
+                fig.canvas.draw_idle()
+                return
+            slice = order_slice.slices[order_choice]
+            if method_choice==0: # by freq
+                x, y = slice.get_aligned_f()
+            else:
+                x, y = slice.get_aligned_ref()
+            ax.plot(x, y)
+
+            fig.canvas.draw_idle()
+
+        self._widgets.append(method_selector)
+        self._widgets.append(order_selector)
+
+class ViewOrderSliceOfMeasurements(VAB):
+    CAPTION = "View OrderSlice of measurements"
+    def __call__(self, measurements: list[SimpleDefinition], orderslice_name: str):
+        fig = self.figure
+        ax = fig.gca()
+        ax.set_title(orderslice_name)
+
+        fiad = defaultdict(list) # fork_in_another_direction -_-,
+
+        for measurement in measurements:
+            ctx = self.container.get_context(measurement)
+            orderslice: OrderSliceData = ctx.get_node_of_type(orderslice_name, OrderSliceData)
+            
+            for oi, sd in orderslice.slices.items():
+                fiad[oi.name].append( (measurement.name, sd,) )
+
+        ax_orders = fig.add_axes([0.91, 0.13, 0.08, 0.2])
+        order_names = ["None"] + list(fiad.keys())
+        order_choice:str = ""
+        order_selector = RadioButtons(ax_orders, order_names, active=0)
+        ax_method = fig.add_axes([0.91, 0.01, 0.08, 0.1])
+        method_labels = ['By frequency', 'By reference']
+        method_choice:int = 0
+        method_selector = RadioButtons(ax_method, method_labels, active=method_choice)
+        def order_change(label):
+            nonlocal order_choice
+            order_choice = label
+            update()
+        order_selector.on_clicked(order_change)
+        def method_change(label):
+            nonlocal method_choice
+            method_choice = method_labels.index(label)
+            update()
+        method_selector.on_clicked(method_change)
+
+        def update():
+            ax.cla()
+            ms = fiad.get(order_choice)
+            if not ms:
+                fig.canvas.draw_idle()
+                return
+            for (measurement_name, slice_data,) in ms:
+                slice_data: SliceData
+                if method_choice==0: # by freq
+                    x, y = slice_data.get_aligned_f()
+                else:
+                    x, y = slice_data.get_aligned_ref()
+                ax.plot(x, y, label=f"{measurement_name}")
+            ax.legend(loc='upper right')
+            fig.canvas.draw_idle()
+
+        self._widgets.append(order_selector)
+        self._widgets.append(method_selector)
 
 # calc rms
 

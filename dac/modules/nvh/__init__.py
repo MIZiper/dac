@@ -34,3 +34,9 @@ class FilterType(Enum):
 class BinMethod(Enum):
     Mean = 0
     Min = 1
+
+class ToleranceType(Enum):
+    FixLines = 0
+    FixBandWidth = 1
+    FixOrderWidth = 2
+    FixFrequencyPercentage = 3

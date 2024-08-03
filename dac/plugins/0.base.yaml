@@ -17,6 +17,9 @@ actions:
   - /da/Separator
   - dac.modules.drivetrain.actions.ShowFreqLinesTime
   - /md/actions.ShowFreqLinesFreq
+  - "[OrderSlice]"
+  - /md/actions.CreateOrdersOfGearbox
+  - /mv/actions.ViewOrderSliceOfMeasurements
   - "[Drivetrain]"
   - /md/actions.CreateBearing
   - /md/actions.CreateGearboxWithBearings
@@ -39,6 +42,10 @@ actions:
   - /mv/actions.AverageIntermediateAction
   - /mv/actions.FilterSpectrumAction
   - /mv/actions.SpectrumToTimeAction
+  - "[OrderSlice]"
+  - /mv/actions.CreateOrders
+  - /mv/actions.ExtractOrderSlicesAction
+  - /mv/actions.ViewOrderSlice
 
 quick_actions: # temporary action creation for immediate run (action take only one parameter)
   /mt/TimeData:
