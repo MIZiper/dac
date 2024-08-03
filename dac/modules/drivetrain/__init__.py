@@ -1,6 +1,7 @@
 from enum import Enum
 import numpy as np
 from dac.core.data import DataBase
+from collections import defaultdict
 
 class GearStage:
     class StageType(Enum):
@@ -81,10 +82,11 @@ class GearStage:
         return rst
 
 class GearboxDefinition(DataBase):
-    def __init__(self, name: str = None, uuid: str = None, stages: list[GearStage]=None) -> None:
+    def __init__(self, name: str = None, uuid: str = None, stages: list[GearStage]=None, bearings: list[tuple["BearingInputStage", "BallBearing"]]=None) -> None:
         super().__init__(name, uuid)
 
         self.stages = stages or []
+        self.bearings = bearings or []
 
     def get_construct_config(self) -> dict:
         if self.stages:
@@ -108,6 +110,10 @@ class GearboxDefinition(DataBase):
 
     def get_freqs_labels_at(self, speed: float, speed_on_output: bool=True, choice_bits: int=-1):
         rst = []
+        bearing_dict = defaultdict(list[BallBearing])
+        for stage, bearing in self.bearings:
+            bearing_dict[stage].append(bearing)
+
         if not speed_on_output:
             for i, stg in enumerate(self.stages):
                 if (choice_bits==-1) or (choice_bits & (1<<i)):
@@ -115,6 +121,12 @@ class GearboxDefinition(DataBase):
                         rst.append(
                             (freq, f"{lbl}_{i+1}",)
                         )
+
+                    for bearing in bearing_dict[i+1]:
+                        for freq, lbl in bearing.get_freqs_labels_at(speed):
+                            rst.append(
+                                (freq, f"{lbl}_{bearing.name}",)
+                            )
                 speed = speed * stg.ratio
         else:
             n = len(self.stages)
@@ -126,7 +138,22 @@ class GearboxDefinition(DataBase):
                         )
                 speed = speed / stg.ratio
 
+                # always bearing on input shaft
+                # need to make a virtual 1:1 stage for final output
+                if (choice_bits==-1) or (choice_bits & (1<<(n-i-1))):
+                    for bearing in bearing_dict[n-i]:
+                        for freq, lbl in bearing.get_freqs_labels_at(speed):
+                            rst.append(
+                                (freq, f"{lbl}_{bearing.name}",)
+                            )
+
+        # TODO: force regarding input shaft to simplify code
+
         return rst
+
+class BearingInputStage(int): # cannot use namedtuple(BallBearing, BearingInputStage) because no conversion for namedtuple
+    # always the input speed stage
+    pass
 
 class BallBearing(DataBase):
     def __init__(self, name: str = None, uuid: str = None, N_balls: int=8, D_ball: float=2, D_pitch: float=12, beta: float=15) -> None:
@@ -135,6 +162,15 @@ class BallBearing(DataBase):
         self.D_ball = D_ball
         self.D_pitch = D_pitch # = (D_IR+D_OR)/2
         self.beta = beta
+
+    def get_freqs_labels_at(self, speed: float):
+        freq = speed / 60
+        return [
+            (self.bpfo()*freq, 'bpfo',),
+            (self.bpfi()*freq, 'bpfi',),
+            (self.bsf()*freq, 'bsf',),
+            (self.ftf()*freq, 'ftf',),
+        ]
 
     def bpfo(self):
         # outer race defect frequency

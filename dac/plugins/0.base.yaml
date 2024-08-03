@@ -17,6 +17,9 @@ actions:
   - /da/Separator
   - dac.modules.drivetrain.actions.ShowFreqLinesTime
   - /md/actions.ShowFreqLinesFreq
+  - "[Drivetrain]"
+  - /md/actions.CreateBearing
+  - /md/actions.CreateGearboxWithBearings
   
   /dd/SimpleDefinition:
   - /da/Separator
