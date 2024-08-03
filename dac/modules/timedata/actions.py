@@ -62,6 +62,7 @@ class FilterAction(ActionBase):
         return rst
 
 class ResampleAction(ActionBase):
+    CAPTION = "Resample data to"
     def __call__(self, channels: list[TimeData], dt: float=1) -> list[TimeData]:
         rst = []
         for i, channel in enumerate(channels):
@@ -74,6 +75,23 @@ class ResampleAction(ActionBase):
 
 class PrepDataAction(SAB, seq=[TruncAction, ResampleAction, FilterAction]): # example sequences
     ...
+
+class EnvelopeTimeAction(PAB):
+    CAPTION = "Envelop with Hilbert transform"
+    # only works when there is positive and negative part
+    def __call__(self, channels: list[TimeData], restore_offset: bool=False) -> list[TimeData]:
+        rst = []
+        for i, channel in enumerate(channels):
+            channel_y = channel.y
+            offset = np.mean(channel_y)
+            analytic = signal.hilbert(channel_y-offset)
+            env = np.abs(analytic)
+            if restore_offset:
+                env += offset
+
+            rst.append(TimeData(name=f"{channel.name}-Env", y=env, dt=channel.dt, y_unit=channel.y_unit, comment=channel.comment))
+
+        return rst
 
 class ShowTimeDataAction(VAB):
     CAPTION = "Show measurement data"
@@ -166,7 +184,12 @@ class ChopOffSpikesAction(PAB):
 
 class PulseToAzimuthAction(ActionBase):
     CAPTION = "Pulse to azimuth"
-    def __call__(self, channel: TimeData, ref_level: float, ppr: int=1, higher_as_pulse: bool=True, phase_shift: float=0) -> TimeData:
+    def __call__(self, channel: TimeData, ref_level: float, ppr: int=1, higher_as_pulse: bool=True, phase_shift: float=0, ref_channel: TimeData=None) -> TimeData:
+        # `ref_channel` is for example when speed ramping, azimuth is not linear equal
+        if ref_channel:
+            sr_ratio = ref_channel.dt / channel.dt
+            ref_data = ref_channel.y
+
         data = channel.y
         inpulse = data>ref_level if higher_as_pulse else data<ref_level
         indexes = np.arange(len(data))[inpulse]
@@ -175,7 +198,12 @@ class PulseToAzimuthAction(ActionBase):
         idx_pulse_end = indexes[:-1][idx_diff>np.mean(idx_diff)]
         ang_data = np.zeros_like(data) * np.nan
         for i, (from_idx, to_idx) in enumerate(zip(idx_pulse_end[:-1], idx_pulse_end[1:])):
-            ang_data[from_idx:to_idx] = np.arange(to_idx-from_idx)/(to_idx-from_idx)*360 + 360*i
+            if ref_channel:
+                ref_indexes = (np.arange(from_idx, to_idx) / sr_ratio).astype(int)
+                aligned_subdata = ref_data[ref_indexes]
+                ang_data[from_idx:to_idx] = np.cumsum(aligned_subdata) / np.sum(aligned_subdata) * 360 + 360*i
+            else:
+                ang_data[from_idx:to_idx] = np.arange(to_idx-from_idx)/(to_idx-from_idx)*360 + 360*i
         
         return TimeData(
             name=f"Azi-{channel.name}", dt=channel.dt, y_unit="°",

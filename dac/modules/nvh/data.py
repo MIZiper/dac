@@ -165,7 +165,7 @@ class FreqIntermediateData(DataBase):
             y = np.mean(np.abs(self.z), axis=0)
         return FreqDomainData(name=self.name, y=y, df=self.df, y_unit=self.z_unit)
     
-    def rectfy_to(self, x_slice: tuple, y_slice: tuple) -> "FreqIntermediateData":
+    def rectify_to(self, x_slice: tuple, y_slice: tuple) -> "FreqIntermediateData":
         ref_bins = self.ref_bins
         ys = ref_bins.y
         idx = np.argsort(ys)

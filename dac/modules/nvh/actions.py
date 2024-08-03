@@ -348,10 +348,6 @@ class SpectrumToTimeAction(PAB):
 class SpectrumAsTimeAction(PAB):
     CAPTION = "Treate frequency spectrum as TimeData"
 
-class EnvelopeTimeAction(PAB):
-    # scipy.signal.hilbert
-    pass
-
 class LoadCaseSpectrumComparison(VAB):
     def __call__(self, loadcases: list[str], channel_name: str):
         pass
