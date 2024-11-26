@@ -279,16 +279,7 @@ class Container:
     def _get_value_of_annotation(self, ann: type | GenericAlias, pre_value: Any):
         if pre_value is None:
             return None
-        elif issubclass(ann, Enum):
-            if isinstance(pre_value, Enum): # from default
-                return pre_value
-            else: # str
-                return ann[pre_value]
-        elif issubclass(ann, DataNode): # and isinstance(pre_value, str)
-            if (value:=self.get_node_of_type(node_name=pre_value, node_type=ann)) is None:
-                raise NodeNotFoundError(f"Node '{pre_value}' of '{ann.__name__}' not found.")
-            return value
-        elif isinstance(ann, GenericAlias):
+        elif isinstance(ann, GenericAlias): # move before `issubclass`, otherwise error `ann` is not type
             if ann.__name__=="list" and len(ann.__args__)==1:
                 value = []
                 for c in pre_value:
@@ -302,6 +293,15 @@ class Container:
             else:
                 raise NotImplementedError
             
+            return value
+        elif issubclass(ann, Enum):
+            if isinstance(pre_value, Enum): # from default
+                return pre_value
+            else: # str
+                return ann[pre_value]
+        elif issubclass(ann, DataNode): # and isinstance(pre_value, str)
+            if (value:=self.get_node_of_type(node_name=pre_value, node_type=ann)) is None:
+                raise NodeNotFoundError(f"Node '{pre_value}' of '{ann.__name__}' not found.")
             return value
         elif ann in Container._type_agencies:
             return Container._type_agencies[ann](pre_value)
