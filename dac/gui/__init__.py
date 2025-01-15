@@ -27,6 +27,7 @@ from dac.core.actions import PAB, VAB, ActionBase
 from dac.core.thread import ThreadWorker
 from dac.core.plugin import use_plugin
 from dac.gui.base import MainWindowBase
+from dac.core.snippet import exec_script
 
 NAME, TYPE, REMARK = range(3)
 SET_RECENTDIR = "RecentDir"
@@ -61,6 +62,7 @@ class MainWindow(MainWindowBase):
 
         self.container: Container = None
         self.project_config_fpath: str = None
+        self.exec_script: str = ""
         self.apply_config({})
         
     def _create_ui(self):
@@ -106,6 +108,7 @@ class MainWindow(MainWindowBase):
         save_project_action = app_menu.addAction("&Save project")
         saveas_project_action = app_menu.addAction("Save as ...")
         load_project_action = app_menu.addAction("&Load project")
+        edit_exec_action = app_menu.addAction("&Edit exec script")
         app_menu.addSeparator()
         exit_action = app_menu.addAction("E&xit")
 
@@ -146,11 +149,20 @@ class MainWindow(MainWindowBase):
             self.project_config_fpath = fpath
             self.apply_config(config)
             self.message(f"Project loaded from {fpath}")
+        def action_edit_exec():
+            script, ok = QtWidgets.QInputDialog.getMultiLineText(
+                self, "Edit exec script", "Input Python snippet to be executed", self.exec_script
+            )
+            if not ok:
+                return
+            self.exec_script = script
+            exec_script(script)
 
         new_project_action.triggered.connect(action_new_project)
         save_project_action.triggered.connect(action_save)
         saveas_project_action.triggered.connect(action_saveas)
         load_project_action.triggered.connect(action_load_project)
+        edit_exec_action.triggered.connect(action_edit_exec)
         exit_action.triggered.connect(self.close)
 
         tool_menu = self._dac_menu
@@ -242,7 +254,15 @@ class MainWindow(MainWindowBase):
         else:
             self.setWindowTitle(f"[New project] | {self.APPTITLE}")
 
-        dac_config = config.get("dac", {})
+        dac_config: dict = config.get("dac", {})
+        self.exec_script = script = dac_config.get("exec", "")
+        if script:
+            _, ok = QtWidgets.QInputDialog.getMultiLineText(
+                self, "Embedded exec script found", "Following snippet found, are you sure to execute it?\nPlease make sure the codes are safe.",
+                script
+            )
+            if ok:
+                exec_script(script)
         self.container = container = Container.parse_save_config(dac_config)
         self.data_list_widget.refresh(container)
         self.action_list_widget.refresh(container)
@@ -253,6 +273,7 @@ class MainWindow(MainWindowBase):
         return {
             "dac": {
                 "_": {"version": version(PYPI_NAME)},
+                "exec": self.exec_script, # don't add it by default
                 **container_config,
             }
         }
