@@ -5,6 +5,7 @@ from dac.core.actions import VAB, PAB, SAB, ActionBase
 from dac.modules.timedata.actions import ShowTimeDataAction
 from dac.modules.nvh.data import OrderList, OrderInfo
 from dac.modules.nvh.actions import ViewFreqDomainAction
+from matplotlib.backend_bases import MouseButton, MouseEvent
 
 class CreateBearing(ActionBase):
     CAPTION = "Make a bearing"
@@ -51,8 +52,8 @@ class ShowFreqLinesTime(VAB):
         canvas = self.canvas
         widgets = [] # it's actually patches
 
-        def on_press(event):
-            if ( (not (ax:=event.inaxes)) or event.button!=1 or canvas.widgetlock.locked() ):
+        def on_press(event: MouseEvent):
+            if ( (not (ax:=event.inaxes)) or event.button!=MouseButton.LEFT or canvas.widgetlock.locked() ):
                 return
             for widget in widgets: # widgets from previous press
                 widget.remove()
@@ -112,32 +113,59 @@ class ShowFreqLinesFreq(VAB):
         fig = self.figure
         ax = fig.gca()
 
-        bits = 0
-        for stage_num in stages:
-            bits |= 1<<(stage_num-1)
+        canvas = self.canvas
+        widgets = [] # it's actually patches
 
-        trans = ax.get_xaxis_text1_transform(0)
-        speed = np.abs(np.mean(speed_channel.y)) # if isnumber(speed_channel), just assign
+        def plot_lines(start_freq: float, sideband: bool=False):
+            for widget in widgets: # widgets from previous press
+                widget.remove()
+            widgets.clear()
 
-        for freq, label in gearbox.get_freqs_labels_at(speed, speed_on_output, choice_bits=bits):
-            # TODO: based on checkbox
-            # if 'fz' in label:
-            #     continue
+            bits = 0
+            for stage_num in stages:
+                bits |= 1<<(stage_num-1)
 
-            ax.axvline(freq, ls="--", lw=1)
-            ax.text(freq, 1, label, transform=trans[0])
+            trans = ax.get_xaxis_text1_transform(0)
+            speed = np.abs(np.mean(speed_channel.y)) # if isnumber(speed_channel), just assign
 
-        format_dict = {label: freq for freq, label in gearbox.get_freqs_labels_at(speed, speed_on_output)}
-        for i, fmt_line in enumerate(fmt_lines):
-            label, *freqs = fmt_line.split(",", maxsplit=1)
+            delta_factors = [1] if not sideband else [1, -1]
 
-            if freqs: # freq provided
-                freq = float(freqs[0])
-            else:
-                freq = eval(label.format(**format_dict))
+            for freq, label in gearbox.get_freqs_labels_at(speed, speed_on_output, choice_bits=bits):
+                # TODO: based on checkbox
+                # if 'fz' in label:
+                #     continue
+                for factor in delta_factors:
+                    widgets.append(ax.axvline(start_freq+freq*factor, ls="--", lw=1))
+                    widgets.append(ax.text(start_freq+freq*factor, 1, label, transform=trans[0]))
 
-            ax.axvline(freq, ymax=0.95-0.05*(i%2), ls="--", lw=1)
-            ax.text(freq, 0.95-0.05*(i%2), label, transform=trans[0])
+            format_dict = {label: freq for freq, label in gearbox.get_freqs_labels_at(speed, speed_on_output)}
+            for i, fmt_line in enumerate(fmt_lines):
+                label, *freqs = fmt_line.split(",", maxsplit=1)
+
+                if freqs: # freq provided
+                    freq = float(freqs[0])
+                else:
+                    freq = eval(label.format(**format_dict))
+
+                for factor in delta_factors:
+                    widgets.append(ax.axvline(start_freq+freq*factor, ymax=0.95-0.05*(i%2), ls="--", lw=1))
+                    widgets.append(ax.text(start_freq+freq*factor, 0.95-0.05*(i%2), label, transform=trans[0]))
+            
+            if sideband:
+                widgets.append(ax.axvline(start_freq))
+            canvas.draw_idle()
+
+        def on_press(event: MouseEvent):
+            if ( (not (ax:=event.inaxes)) or canvas.widgetlock.locked() ):
+                return
+            if event.button==MouseButton.LEFT:
+                plot_lines(event.xdata, sideband=True)
+            elif event.button==MouseButton.RIGHT:
+                plot_lines(0, sideband=False)
+
+        plot_lines(0, sideband=False) # init plot
+
+        self._cids.append( canvas.mpl_connect("button_press_event", on_press) )
 
 class ShowSpectrumWithFreqLines(SAB, seq=[ViewFreqDomainAction, ShowFreqLinesFreq]):
     CAPTION = "Show FFT spectrum with freq lines"
