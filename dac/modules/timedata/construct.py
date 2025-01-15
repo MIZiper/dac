@@ -9,20 +9,25 @@ CosineComponent = namedtuple("CosineComponent", ['freq', 'amp', 'phase'])
 class SignalConstructAction(ActionBase):
     CAPTION = "Construct signal with cosines"
     def __call__(self, components: list[CosineComponent], offset: float=0, duration: float=10, fs: int=1000) -> TimeData:
-        r"""Construct time domain data with cosine waves
+        r"""Construct time domain data with cosine waves.
 
         Parameters
         ----------
-        components: [(frequency, amplitude, phase)]
+        components : [(frequency, amplitude, phase)]
             list of tuples, each tuple contains basic info of the cosine wave
 
             frequency: float, [Hz]
+
             amplitude: float
+
             phase: float, [°]
-        fs: int, [Hz]
+
+        fs : int, [Hz]
             sample rate
-        duration: float, [s]
+
+        duration : float, [s]
             sample time
+            
         """
 
         t = np.arange(int(duration * fs)) / fs

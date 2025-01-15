@@ -44,6 +44,25 @@ class TruncAction(ActionBase):
 class FilterAction(ActionBase):
     CAPTION = "Filter TimeData"
     def __call__(self, channels: list[TimeData], freqs: tuple[float, float], order: int=3, filter_type: FilterType=FilterType.BandPass) -> list[TimeData]:
+        """Smooth `TimeData` with `butter` filter.
+
+        Parameters
+        ----------
+        channels : list[TimeData]
+            Input channels, list of original `TimeData`
+        freqs : (start_frequency, end_frequency)
+        order : int
+        filter_type : 'LowPass' | 'HighPass' | 'BandPass' | 'BandStop'
+
+        Returns
+        -------
+        list[TimeData]
+            A list of filtered `TimeData`
+
+        Notes
+        -----
+        ...
+        """
         # with current annotation mechanism, freq as single float won't be passed inside
         rst = []
 
