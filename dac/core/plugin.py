@@ -60,6 +60,15 @@ def use_plugin(setting_fpath: str, clean: bool=True, dac_win=None):
                 task = task_type(dac_win=dac_win, name=name, *rest)
                 action_type.QUICK_TASKS.append(task)
 
+        for ats, (tts, name, *rest) in setting.get("default_task", {}).items(): # action_type_string, task_type_string
+            action_type = get_node_type(ats)
+            if not action_type: continue
+            action_type.DEFAULT_TASK = None
+            task_type = get_node_type(tts)
+            if not task_type: continue
+            task = task_type(dac_win=dac_win, name=name, *rest)
+            action_type.DEFAULT_TASK = task
+
         for dts, ass in setting.get("quick_actions", {}).items(): # data_type_string, action_string_s
             data_type = get_node_type(dts)
             if not data_type: continue

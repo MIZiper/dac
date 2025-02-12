@@ -7,6 +7,7 @@ from time import sleep
 
 class ActionBase(ActionNode): # needs thread
     QUICK_TASKS = []
+    DEFAULT_TASK = None
     # the tasks to assist config input (e.g. browse files instead of filling manually)
     # NOTE: no thread for running the tasks, keep them simple
 

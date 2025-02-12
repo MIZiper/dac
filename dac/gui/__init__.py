@@ -598,7 +598,11 @@ class ActionListWidget(QTreeWidget):
             menu_stack = []
             def cb_creation_gen(a_t: type[ActionNode]):
                 def cb_creation():
-                    a = a_t(context_key=container.current_key)
+                    a: ActionBase = a_t(context_key=container.current_key)
+                    if (task := a.DEFAULT_TASK) is not None:
+                        task: TaskBase
+                        task(a) # no `request_update_action` needed
+
                     if index is None:
                         container.actions.append(a)
                     else:

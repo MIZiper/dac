@@ -26,3 +26,6 @@ actions:
 quick_actions: {}
 
 quick_tasks: {}
+
+default_task:
+  /mt/actions.LoadAction: [/mt/tasks.FillFpathsTask, "Select measurement files"]
