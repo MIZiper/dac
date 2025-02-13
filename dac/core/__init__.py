@@ -1,7 +1,7 @@
 from uuid import uuid4
 from collections import defaultdict
 from typing import Any
-from types import GenericAlias
+from types import GenericAlias, UnionType
 import inspect, importlib
 from enum import IntEnum, Enum
 
@@ -109,7 +109,7 @@ class ActionNode(NodeBase):
         FAILED = -1
 
     @staticmethod
-    def Annotation2Config(ann: type | GenericAlias): # | UnionType
+    def Annotation2Config(ann: type | GenericAlias | UnionType):
         if hasattr(ann, '_fields'): # namedtuple
             return [f"[{f}]" for f in ann._fields]
         elif isinstance(ann, GenericAlias): # ok: list[], tuple[]; nok: dict[], type[]
@@ -117,6 +117,9 @@ class ActionNode(NodeBase):
                 ActionNode.Annotation2Config(t)
                 for t in ann.__args__
             ]
+        elif isinstance(ann, UnionType):
+            return ' | '.join([ActionNode.Annotation2Config(t) for t in ann.__args__]) # error when `... | list[...]`
+            # return f"<{ann}>"
         else:
             return f"<{ann.__name__}>"
 
@@ -276,11 +279,12 @@ class Container:
             del self.contexts[context_key]
         self.actions = [action for action in self.actions if action.context_key is not context_key]
 
-    def _get_value_of_annotation(self, ann: type | GenericAlias, pre_value: Any):
+    def _get_value_of_annotation(self, ann: type | GenericAlias | UnionType, pre_value: Any):
         if pre_value is None:
             return None
         elif isinstance(ann, GenericAlias): # move before `issubclass`, otherwise error `ann` is not type
             if ann.__name__=="list" and len(ann.__args__)==1:
+                # for list, partial_nodes-not-found is allowed
                 value = []
                 for c in pre_value:
                     try:
@@ -289,11 +293,31 @@ class Container:
                         continue
                     value.append(v)
             elif ann.__name__=="tuple":
+                # for tuple, every element should be valid
                 value = [self._get_value_of_annotation(a, c) for a, c in zip(ann.__args__, pre_value)]
             else:
                 raise NotImplementedError
             
             return value
+        elif isinstance(ann, UnionType):
+            # not a good design, incomplete
+            # and for regular number, you have to specify `int | float` explicitly
+            # support only simple union, union of GenericAlias not allowed
+            for t in ann.__args__:
+                if isinstance(pre_value, t):
+                    return pre_value
+                else:
+                    try:
+                        new_value = self._get_value_of_annotation(t, pre_value)
+                        if new_value != pre_value:
+                            # some conversion happened
+                            return new_value
+                        
+                            # but list[BaseType]: new_value==pre_value
+                    except:
+                        # not the type
+                        pass
+            raise TypeError(f"Value '{pre_value}' not in the types '{ann}'.")
         elif issubclass(ann, Enum):
             if isinstance(pre_value, Enum): # from default
                 return pre_value
