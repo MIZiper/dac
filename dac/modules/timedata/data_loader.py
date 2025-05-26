@@ -1,3 +1,9 @@
+"""Provides functions for loading and saving TimeData from/to TDMS files.
+
+This module includes `load_tdms` to read time-series data from TDMS files
+and convert it into a list of `TimeData` objects. It also provides `save_tdms`
+to write a list of `TimeData` objects to a TDMS file.
+"""
 from nptdms import TdmsFile, TdmsGroup, TdmsChannel
 from nptdms import TdmsWriter, RootObject, GroupObject, ChannelObject
 

@@ -1,3 +1,9 @@
+"""Actions related to drivetrain components for the DAC framework.
+
+This module provides actions for creating bearings and gearboxes, generating
+order lists for gearboxes, and visualizing frequency lines on time-domain
+and frequency-domain plots.
+"""
 import numpy as np
 from . import BallBearing, GearboxDefinition, BearingInputStage
 from dac.modules.timedata import TimeData

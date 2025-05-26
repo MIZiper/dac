@@ -1,3 +1,10 @@
+"""Defines base classes for data handling in the DAC framework.
+
+This module provides `DataBase` as a base for data nodes, 
+`SimpleDefinition` for context key nodes, and placeholders 
+for `ReferenceBase` and `StatData`.
+It outlines concepts for data types and definitions within the framework.
+"""
 from dac.core import DataNode, ContextKeyNode
 
 r"""Concepts and principles

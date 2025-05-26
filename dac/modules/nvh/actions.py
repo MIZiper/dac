@@ -1,3 +1,10 @@
+"""Actions for NVH (Noise, Vibration, and Harshness) analysis in the DAC framework.
+
+This module provides actions for converting time-domain data to the frequency
+domain, performing FFT analysis, averaging intermediate frequency data, 
+visualizing frequency domain data and colormaps, extracting order slices, 
+and filtering spectra.
+"""
 import numpy as np
 from collections import defaultdict
 from matplotlib.gridspec import GridSpec

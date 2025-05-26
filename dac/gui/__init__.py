@@ -1,3 +1,9 @@
+"""Main GUI components for the DAC application.
+
+This module defines the `MainWindow` class, which sets up the main application
+window, including data and action lists, a node editor, and a matplotlib canvas.
+It also handles project loading/saving, plugin management, and user interactions.
+"""
 import importlib
 import inspect
 import json

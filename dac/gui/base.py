@@ -1,3 +1,10 @@
+"""Base classes and utilities for the DAC application GUI.
+
+This module provides `MainWindowBase`, a base class for main windows in the DAC
+application, including common functionality like logging, threading, and an
+embedded IPython console. It also includes `ProgressWidget4Threads` for 
+displaying progress of background tasks and `DacStatusBar` for a custom status bar.
+"""
 import html
 import sys
 import traceback

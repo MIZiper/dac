@@ -1,3 +1,10 @@
+"""Defines the `TimeData` class for representing time-series data.
+
+The `TimeData` class stores time-series data, including the data itself (`y`),
+the time step (`dt`), units (`y_unit`), and comments. It provides properties
+for sampling frequency (`fs`), data length, and time vector (`t`), as well as
+methods for converting data to bins and calculating the effective value.
+"""
 from dac.core.data import DataBase
 import numpy as np
 

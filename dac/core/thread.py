@@ -1,3 +1,9 @@
+"""Provides threading support for the DAC framework using PyQt5.
+
+This module defines `WorkerSignals` for communication between worker threads 
+and the main thread, and `ThreadWorker` as a QRunnable class for executing 
+functions in separate threads. This is used to run actions asynchronously.
+"""
 import traceback, sys, inspect
 from PyQt5.QtCore import QRunnable, QObject, pyqtSignal, pyqtSlot, QMutex
 

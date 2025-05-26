@@ -1,3 +1,10 @@
+"""Defines base classes and example actions for the DAC framework.
+
+This module provides `ActionBase` for basic actions, `ProcessActionBase` for 
+data processing actions, `VisualizeActionBase` for actions that create 
+visualizations, and `SequenceActionBase` for combining multiple actions.
+It also includes simple example actions.
+"""
 import inspect
 from matplotlib.figure import Figure
 from dac.core import DataNode, ContextKeyNode, ActionNode

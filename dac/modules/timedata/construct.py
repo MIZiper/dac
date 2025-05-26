@@ -1,3 +1,9 @@
+"""Provides an action for constructing time-series data from cosine components.
+
+This module defines `SignalConstructAction`, which allows users to generate
+`TimeData` objects by specifying a list of cosine wave components (frequency,
+amplitude, phase), an offset, duration, and sampling frequency.
+"""
 import numpy as np
 from collections import namedtuple
 

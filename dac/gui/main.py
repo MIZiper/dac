@@ -1,3 +1,9 @@
+"""Main entry point for the DAC application.
+
+This script launches the DAC application, loads an optional configuration file,
+and initializes plugins. It uses the `click` library for command-line
+argument parsing.
+"""
 import json, sys, click
 from os import path
 

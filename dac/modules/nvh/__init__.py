@@ -1,3 +1,9 @@
+"""Defines various enumerations for NVH (Noise, Vibration, and Harshness) analysis.
+
+This module includes enumerations for window types, band correction methods, 
+amplitude types, averaging types, filter types, binning methods, and 
+tolerance types used in NVH-related processing and actions.
+"""
 from enum import Enum
 import numpy as np
 

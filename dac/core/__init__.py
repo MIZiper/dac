@@ -1,3 +1,8 @@
+"""Core components for DAC.
+
+This module defines the base classes for data nodes, actions, and containers,
+which form the core an extensible data analysis framework.
+"""
 from uuid import uuid4
 from collections import defaultdict
 from typing import Any

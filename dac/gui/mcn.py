@@ -1,3 +1,10 @@
+"""Provides multi-canvas navigation and dockable canvas widgets for Matplotlib.
+
+This module defines `MultiCanvasNavigation` for a Matplotlib navigation toolbar
+that can switch between multiple canvases, and `CanvasDock` for creating 
+dockable widgets containing Matplotlib figures. `MainWindowWithMCN` demonstrates
+their usage.
+"""
 import gc
 
 from PyQt5 import QtCore, QtGui, QtWidgets

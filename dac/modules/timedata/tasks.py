@@ -1,3 +1,9 @@
+"""Defines GUI tasks related to time-series data for the DAC application.
+
+This module provides `FillFpathsTask`, a `TaskBase` subclass that opens a
+file dialog for the user to select measurement files. The selected file paths
+are then used to configure an action, typically for loading time-series data.
+"""
 from os import path
 from PyQt5 import QtWidgets, QtCore
 from dac.core.actions import ActionBase

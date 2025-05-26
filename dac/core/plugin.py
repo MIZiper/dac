@@ -1,3 +1,9 @@
+"""Handles plugin loading and registration for the DAC framework.
+
+This module provides the `use_plugin` function to load plugin configurations
+from YAML files. It registers global data types, context actions, quick tasks,
+and quick actions based on the plugin settings.
+"""
 import re, yaml
 from os import path
 from dac.core import Container, NodeBase

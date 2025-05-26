@@ -1,3 +1,10 @@
+"""Data structures for NVH (Noise, Vibration, and Harshness) analysis.
+
+This module defines classes for representing frequency domain data 
+(`FreqDomainData`), intermediate frequency data (`FreqIntermediateData`),
+order information (`OrderInfo`, `OrderList`), and slice data 
+(`SliceData`, `OrderSliceData`).
+"""
 import numpy as np
 from dac.core.data import DataBase
 from . import BinMethod, AverageType

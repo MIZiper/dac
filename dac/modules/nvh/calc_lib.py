@@ -1,3 +1,8 @@
+"""Provides calculation utilities for NVH (Noise, Vibration, and Harshness) analysis.
+
+This module includes functions for converting values to decibels and for 
+applying A-weighting to frequency data.
+"""
 import numpy as np
 
 def to_decibel(value, ref, by_amplitude=True):

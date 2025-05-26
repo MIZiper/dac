@@ -1,3 +1,10 @@
+"""Provides classes for modeling drivetrain components like gears and bearings.
+
+This module includes `GearStage` to define individual gear stages (planetary or 
+parallel), `GearboxDefinition` to model a complete gearbox with multiple 
+stages, and `BallBearing` to represent ball bearings with their characteristic 
+defect frequencies.
+"""
 from enum import Enum
 import numpy as np
 from dac.core.data import DataBase

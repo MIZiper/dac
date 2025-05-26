@@ -1,3 +1,9 @@
+"""Outlines coding conventions used in the DAC project.
+
+This module provides examples and guidelines for class naming, variable naming,
+function and method naming, and type hinting within the DAC framework.
+It serves as a reference for developers contributing to the project.
+"""
 class ClassName:
     CLASS_IDENTIFIER = None
 
