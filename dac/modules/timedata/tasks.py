@@ -15,6 +15,18 @@ SET_RECENTDIR = "RecentDir"
 
 class FillFpathsTask(TaskBase):
     def __call__(self, action: ActionBase):
+        """Opens a file dialog for the user to select measurement files.
+
+        This task is typically used to populate the `fpaths` (file paths)
+        argument of an action (e.g., a data loading action). It remembers
+        the last used directory for convenience.
+
+        Parameters
+        ----------
+        action : ActionBase
+            The ActionBase instance whose `_construct_config` will be
+            updated with the selected file paths under the key 'fpaths'.
+        """
         fpaths, fext = QtWidgets.QFileDialog.getOpenFileNames(
             self.dac_win, caption="Select measurement files",
             directory=APPSETTING.value(SET_RECENTDIR)
