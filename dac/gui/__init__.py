@@ -513,7 +513,8 @@ class ActionListWidget(QTreeWidget):
 
         for action in container.ActionsInCurrentContext:
             itm = QtWidgets.QTreeWidgetItem(self)
-            itm.setText(NAME, action.name)
+            display_name = action.name if action.name is not None else action.CAPTION
+            itm.setText(NAME, display_name)
             itm.setData(NAME, Qt.ItemDataRole.UserRole, action)
             if action.out_name is not None:
                 itm.setText(TYPE, action.out_name)

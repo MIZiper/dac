@@ -124,7 +124,7 @@ class ActionNode(NodeBase):
             return f"<{ann.__name__}>"
 
     def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
-        super().__init__(name=self.CAPTION, uuid=uuid)
+        super().__init__(name=name, uuid=uuid)
         
         self.status = ActionNode.ActionStatus.INIT
         self.out_name = None
