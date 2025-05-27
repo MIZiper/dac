@@ -150,7 +150,18 @@ class ExtractAmplitudeAction(PAB):
     CAPTION = "Extract amplitude at frequencies"
 
     def __call__(self, channels: list[FreqDomainData], frequencies: list[float], line_tol: int=3):
-        ...
+        results = []
+        for channel in channels:
+            # channel_results will be like: [(f1_actual, amp1_complex), (f2_actual, amp2_complex), ...]
+            channel_results = channel.get_amplitudes_at(frequencies, lines=line_tol)
+            for requested_freq, (actual_freq, complex_amp) in zip(frequencies, channel_results):
+                results.append({
+                    'channel_name': channel.name,
+                    'frequency_request': requested_freq,
+                    'frequency_actual': actual_freq,
+                    'amplitude': np.abs(complex_amp)
+                })
+        return results
 
 class ViewColorPlotAndCheckOrderSlice(ViewFreqIntermediateAction):
     # obsolete, it's too laggy
@@ -190,7 +201,63 @@ class MarkOrders(VAB):
 class ViewColorPlotWithOrderSlice(ViewFreqIntermediateAction): # inherit SAB = ViewColorPlot + MarkOrders
     CAPTION = "Show color plot with order indication"
     def __call__(self, channel: FreqIntermediateData, orders: OrderList, fmt_lines: list[str]=["{f_1}", "0.5"], xlim: tuple[float, float] = None, clim: tuple[float, float] = [0, 0.001]):
-        pass
+        super().__call__(channel, xlim, clim)
+        
+        # fig.gca() might create a new axes if none is current, or return the last current one.
+        # After super().__call__, the color plot's axes should be the current one or easily accessible.
+        if not self.figure.axes:
+            print("Error: No axes found on the figure after drawing color plot.")
+            return
+        ax = self.figure.axes[0] # Main axes for the color plot
+
+        if channel.ref_bins is None or channel.ref_bins.y is None or len(channel.ref_bins.y) == 0:
+            # Assuming self.message is available from a base class or via dac_win
+            # If not, print() is a fallback.
+            # Let's try to use self.dac_win.message if VABs have it, similar to gui components.
+            # For now, print as a safe bet as self.message is not guaranteed in VAB.
+            print("Warning: Cannot draw orders. Reference data (ref_bins.y) is missing or empty.")
+            return
+
+        ref_y_values = np.asarray(channel.ref_bins.y)
+        
+        # Ensure y-values are sorted for cleaner line plotting if they come from ref_bins directly
+        # However, the parent class ViewFreqIntermediateAction already sorts ys (ref_bins.y)
+        # and zs (channel.z) based on ys for pcolormesh. So ref_y_values should be sorted.
+        # ys = channel.ref_bins.y
+        # idx = np.argsort(ys)
+        # ys_sorted = ys[idx]
+        # For order lines, we use the sorted ref_y_values from the parent call.
+
+        for order_info in orders.orders:
+            order_value = order_info.value
+            if order_value is None:
+                print(f"Skipping order '{order_info.name}' due to None value.")
+                continue
+            
+            # Calculate corresponding frequency values (x-axis for the order line)
+            # freq_x_values = order_value * ref_y_values_sorted_for_plot
+            # Use the ref_y_values that were actually plotted by pcolormesh.
+            # The parent class sorts `ys` (which is `channel.ref_bins.y`) before plotting.
+            # So we should use the same sorted `ref_y_values`.
+            
+            # Re-fetch sorted ys as used in parent, if necessary, though direct use should be fine
+            # if parent guarantees sorting.
+            # From ViewFreqIntermediateAction:
+            #   ys = channel.ref_bins.y
+            #   idx = np.argsort(ys)
+            #   ys_sorted_for_plot = ys[idx]
+            # So, we should use this sorted version for consistency if it's not directly `ref_y_values`
+            
+            # Assuming channel.ref_bins.y used by super().__call__() is already sorted for the pcolormesh y-axis
+            # If not, we might need to access the sorted version if the parent stores it,
+            # or re-sort here. For now, assume ref_y_values is what we need.
+            
+            freq_x_values = order_value * ref_y_values
+
+            label = order_info.name or f"Order {order_value:.2f}"
+            ax.plot(freq_x_values, ref_y_values, 'k--', label=label)
+
+        ax.legend()
 
 class CreateOrders(ActionBase):
     CAPTION = "Create orders"
@@ -347,13 +414,120 @@ class SpectrumToTimeAction(PAB):
 
 class SpectrumAsTimeAction(PAB):
     CAPTION = "Treate frequency spectrum as TimeData"
+    def __call__(self, channels: list[FreqDomainData]) -> list[TimeData]:
+        # This action treats the spectrum amplitude as a time series with dt=1.
+        # This is a simplified interpretation and may not be physically meaningful for typical spectrum data.
+        # For actual inverse FFT to time domain, SpectrumToTimeAction should be used.
+        time_data_list = []
+        for channel in channels:
+            amplitudes = np.abs(channel.y)
+            td = TimeData(
+                name=f"{channel.name}_as_time",
+                y=amplitudes,
+                dt=1.0,  # Index-based time
+                y_unit=channel.y_unit
+            )
+            time_data_list.append(td)
+        return time_data_list
 
 class LoadCaseSpectrumComparison(VAB):
     def __call__(self, loadcases: list[str], channel_name: str):
-        pass
+        if self.container is None:
+            print("Error: Container not set for LoadCaseSpectrumComparison.")
+            return
+
+        ax = self.figure.gca()
+        ax.cla()
+
+        ax.set_xlabel("Frequency [Hz]")
+        ax.set_ylabel("Amplitude")
+        ax.set_title(f"Spectrum Comparison: {channel_name}")
+
+        for loadcase_name in loadcases:
+            context_key_node = None
+            # Assuming self.container.context_keys is available and has NodeIter
+            if hasattr(self.container, 'context_keys') and hasattr(self.container.context_keys, 'NodeIter'):
+                for _node_type, _name, node_obj in self.container.context_keys.NodeIter:
+                    if node_obj.name == loadcase_name:
+                        context_key_node = node_obj
+                        break
+            
+            if context_key_node is None:
+                print(f"Warning: Load case context '{loadcase_name}' not found.")
+                continue
+
+            data_context = self.container.get_context(context_key_node)
+            if data_context is None:
+                print(f"Warning: Could not retrieve data context for '{loadcase_name}'.")
+                continue
+                
+            spectrum_data = data_context.get_node_of_type(channel_name, FreqDomainData)
+
+            if spectrum_data:
+                ax.plot(spectrum_data.x, spectrum_data.amplitude, label=f"{loadcase_name} [{spectrum_data.y_unit}]")
+            else:
+                print(f"Warning: Channel '{channel_name}' not found in load case '{loadcase_name}'.")
+
+        ax.legend(loc="upper right")
 
 class LoadCaseFreqIntermediateAverage(VAB):
-    def __call__(self, loadcases: list[str], channel_name: str, ref_case: str):
-        pass
+    def __call__(self, loadcases: list[str], channel_name: str, ref_case: str = None):
+        if self.container is None:
+            print("Error: Container not set for LoadCaseFreqIntermediateAverage.")
+            return
+
+        ax = self.figure.gca()
+        ax.cla()
+
+        ax.set_xlabel("Frequency [Hz]")
+        ax.set_ylabel("Averaged Amplitude")
+        ax.set_title(f"FreqIntermediate Average: {channel_name}")
+
+        spectra_to_average = []
+        x_values = None
+        y_unit = None
+
+        for loadcase_name in loadcases:
+            context_key_node = None
+            if hasattr(self.container, 'context_keys') and hasattr(self.container.context_keys, 'NodeIter'):
+                for _node_type, _name, node_obj in self.container.context_keys.NodeIter:
+                    if node_obj.name == loadcase_name:
+                        context_key_node = node_obj
+                        break
+            
+            if context_key_node is None:
+                print(f"Warning: Load case context '{loadcase_name}' not found.")
+                continue
+
+            data_context = self.container.get_context(context_key_node)
+            if data_context is None:
+                print(f"Warning: Could not retrieve data context for '{loadcase_name}'.")
+                continue
+                
+            intermediate_data = data_context.get_node_of_type(channel_name, FreqIntermediateData)
+
+            if intermediate_data:
+                spectrum = intermediate_data.to_powerspectrum() # Default average type
+                spectra_to_average.append(spectrum.amplitude) # spectrum.amplitude is np.abs(spectrum.y)
+                if x_values is None:
+                    x_values = spectrum.x
+                    y_unit = spectrum.y_unit
+            else:
+                print(f"Warning: Channel '{channel_name}' (FreqIntermediateData) not found in load case '{loadcase_name}'.")
+
+        if not spectra_to_average or x_values is None:
+            print("No data to average or plot.")
+            # Potentially draw an empty plot with title if desired, or just return
+            # For now, just returning as no data means nothing to show.
+            return
+
+        averaged_amplitudes = np.mean(np.array(spectra_to_average), axis=0)
+        
+        label_y_unit = f" [{y_unit}]" if y_unit else ""
+        ax.plot(x_values, averaged_amplitudes, label=f"Average of {len(spectra_to_average)} cases{label_y_unit}")
+        
+        # TODO: Implement comparison with ref_case
+        
+        ax.legend(loc="upper right")
 
 # BearingEnvelopeAnalysis = FFT + FilterSpec + ...
