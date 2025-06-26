@@ -151,7 +151,7 @@ class MainWindow(MainWindowBase):
             self.message(f"Project loaded from {fpath}")
         def action_edit_exec():
             script, ok = QtWidgets.QInputDialog.getMultiLineText(
-                self, "Edit exec script", "Input Python snippet to be executed", self.exec_script
+                self, "Edit exec script", "Input Python snippet to be executed.\nThe defined classes reside under module `dac.core.snippet`", self.exec_script
             )
             if not ok:
                 return
