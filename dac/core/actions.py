@@ -1,3 +1,11 @@
+"""Further basic implementation of Action nodes.
+
+This module provides `ActionBase` for basic simple actions,
+`ProcessActionBase` for computational processing,
+`VisualizeActionBase` for actions that interact with Matplotlib canvas,
+and `SequenceActionBase` for combining multiple actions.
+"""
+
 import inspect
 from matplotlib.figure import Figure
 from dac.core import DataNode, ContextKeyNode, ActionNode

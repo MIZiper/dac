@@ -1,3 +1,9 @@
+"""Thread utils using PyQt5.
+
+This is a generic util.
+Under DAC context, in desktop environment, `ProcessActionBase` use PyQt thread to run the calculation.
+"""
+
 import traceback, sys, inspect
 from PyQt5.QtCore import QRunnable, QObject, pyqtSignal, pyqtSlot, QMutex
 

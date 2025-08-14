@@ -1,3 +1,14 @@
+"""Handles plugin loading, and register data types / action available for context.
+
+Plugin use YAML files to define what data types can be added as contexts,
+and the available actions can be used under corresponding context.
+
+The Data and Action are defined under individual modules.
+Plugin is just a layout definition, any action types can be added to context if you know the path.
+
+Maybe I should rename "plugin" to "scenario".
+"""
+
 import re, yaml
 from os import path
 from dac.core import Container, NodeBase

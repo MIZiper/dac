@@ -1,3 +1,9 @@
+"""Data node base.
+
+It should defines common data node behaviors,
+but is basically nothing for the moment.
+"""
+
 from dac.core import DataNode, ContextKeyNode
 
 r"""Concepts and principles

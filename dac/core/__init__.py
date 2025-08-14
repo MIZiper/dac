@@ -1,3 +1,8 @@
+"""Core Data Action Context components.
+
+This module defines the base classes for data nodes / contexts, action nodes, and containers.
+"""
+
 from uuid import uuid4
 from collections import defaultdict
 from typing import Any
