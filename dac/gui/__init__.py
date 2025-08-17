@@ -1,3 +1,14 @@
+"""GUI components for the DAC-based applications.
+
+Base components:
+- MainWindow for project loading/saving, and plugin switching
+- Data list
+- Action list
+- And YAML based node editor
+
+Can be inherited for customization.
+"""
+
 import importlib
 import inspect
 import json

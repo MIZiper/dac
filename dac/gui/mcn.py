@@ -1,3 +1,9 @@
+"""Provides multi-canvas navigation and dockable canvas widgets for Matplotlib.
+
+One navigation bar can be shared by several canvas.
+Generic purpose, not used in DAC yet.
+"""
+
 import gc
 
 from PyQt5 import QtCore, QtGui, QtWidgets

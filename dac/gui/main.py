@@ -1,3 +1,6 @@
+"""Main entry point for desktop DAC application.
+"""
+
 import json, sys, click
 from os import path
 

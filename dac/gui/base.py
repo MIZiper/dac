@@ -1,3 +1,8 @@
+"""Base GUI Window with utilities for log, IPython console and thread processing.
+
+This module is generic and can be used for non-DAC applications too.
+"""
+
 import html
 import sys
 import traceback
