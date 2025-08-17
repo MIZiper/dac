@@ -1,3 +1,6 @@
+"""Data structures for NVH (Noise, Vibration, and Harshness) analysis.
+"""
+
 import numpy as np
 from dac.core.data import DataBase
 from . import BinMethod, AverageType
@@ -8,6 +11,8 @@ class ProcessPackage: # bundle channels and ref_channel
     ...
 
 class DataBins(DataBase):
+    """DataBins holds representative values for time window processing.
+    """
     def __init__(self, name: str = None, uuid: str = None, y: np.ndarray=None, y_unit: str = "-") -> None:
         super().__init__(name, uuid)
 
@@ -16,6 +21,17 @@ class DataBins(DataBase):
         self._method = BinMethod.Mean
 
 class FreqDomainData(DataBase):
+    """Represents data in the frequency domain (e.g., a spectrum).
+
+    Parameters
+    ----------
+    y : np.ndarray
+        NumPy array of complex numbers representing the spectrum.
+    df : float
+        Frequency resolution (delta f) in Hz.
+    y_unit : str
+        Unit of the spectral values.
+    """
     def __init__(self, name: str = None, uuid: str = None, y: np.ndarray=None, df: float=1, y_unit: str="-") -> None:
         super().__init__(name, uuid)
     
@@ -33,17 +49,40 @@ class FreqDomainData(DataBase):
 
     @property
     def lines(self):
+        """Number of frequency lines in the spectrum.
+        """
+        
         return len(self.y)
 
     @property
     def phase(self):
+        """Phase of the spectrum in degrees.
+        """
+
         return np.angle(self.y, deg=True)
 
     @property
     def amplitude(self):
+        """Amplitude of the spectrum.
+        """
+
         return np.abs(self.y)
     
     def remove_spec(self, bands: list[tuple[float, float]]):
+        """Zeros out specified frequency bands in the spectrum.
+
+        Parameters
+        ----------
+        bands : list of (f_from, f_to)
+            A list of tuples, where each tuple (ffrom, fto) defines a
+            frequency band to be zeroed out.
+
+        Returns
+        -------
+        FreqDomainData
+            A new FreqDomainData object with the specified bands removed.
+        """
+
         y = self.y.copy()
         x = self.x
 
@@ -59,6 +98,20 @@ class FreqDomainData(DataBase):
         )
     
     def keep_spec(self, bands: list[tuple[float, float]]):
+        """Keeps only specified frequency bands in the spectrum, zeroing others.
+
+        Parameters
+        ----------
+        bands : list of [f_from, f_to]
+            A list of tuples, where each tuple (ffrom, fto) defines a
+            frequency band to be kept.
+
+        Returns
+        -------
+        FreqDomainData
+            A new FreqDomainData object with only the specified bands retained.
+        """
+
         y = np.zeros_like(self.y)
         x = self.x
 
@@ -74,6 +127,22 @@ class FreqDomainData(DataBase):
         )
     
     def integral(self, order: int=1):
+        """Integrates the spectrum in the frequency domain.
+
+        Performs integration by dividing by `(j * 2 * pi * f)^order`.
+
+        Parameters
+        ----------
+        order : int
+            The order of integration.
+
+        Returns
+        -------
+        FreqDomainData
+            A new FreqDomainData object representing the integrated spectrum.
+            The unit is appended with '*s' for each order of integration.
+        """
+
         a = self.x * 1j * 2 * np.pi
         b = np.zeros(self.lines, dtype="complex")
         b[1:] = a[1:]**(-order)
@@ -82,12 +151,44 @@ class FreqDomainData(DataBase):
         return FreqDomainData(name=f"{self.name}-IntF", y=y, df=self.df, y_unit=self.y_unit+f"*{'s'*order}")    
     
     def effective_value(self, fmin=0, fmax=0):
+        """Calculates the effective (RMS) value of the spectrum.
+
+        .. note::
+            The current implementation calculates `sqrt(sum(abs(y)^2))`,
+            which is related to Parseval's theorem but might need adjustment
+            for a calibrated RMS value depending on windowing and scaling factors
+            not present in this method. The `fmin` and `fmax` arguments are
+            defined but not used.
+
+        Parameters
+        ----------
+        fmin : float, [Hz]
+            Minimum frequency for the calculation (currently unused).
+        fmax : float, [Hz]
+            Maximum frequency for the calculation (currently unused).
+
+        Returns
+        -------
+        float
+            The square root of the sum of the squared absolute values of the spectrum.
+        """
         # index = (freq > fmin) & (freq <= fmax)
         # effvalue = sqrt(sum(abs(value(index)*new_factor/orig_factor).^2));
 
         return np.sqrt(np.sum(np.abs(self.y)**2))
     
     def to_timedomain(self):
+        """Converts the frequency domain data back to the time domain using IFFT.
+
+        Assumes the input `self.y` is a single-sided spectrum. It constructs a
+        double-sided spectrum before performing the IFFT.
+
+        Returns
+        -------
+        TimeData
+            A TimeData object representing the time-domain signal.
+        """
+
         single_spec = self.y
         double_spec = np.concatenate([single_spec, np.conjugate(single_spec[self.lines:0:-1])]) / 2
         double_spec[0] *= 2
@@ -97,9 +198,36 @@ class FreqDomainData(DataBase):
         return TimeData(name=self.name, y=y, dt=1/(self.lines*self.df*2), y_unit=self.y_unit)
     
     def as_timedomain(self):
+        """Placeholder for treating spectrum as time domain data.
+        """
         ...
 
     def get_amplitudes_at(self, frequencies: list[float], lines: int=3, width: float=None) -> list[tuple[float, float]]:
+        """Extracts peak amplitudes from the spectrum at or near specified frequencies.
+
+        For each given frequency, it searches for the maximum amplitude within a
+        window defined by `lines` or `width`.
+
+        Parameters
+        ----------
+        frequencies : list[float]
+            A list of frequencies (in Hz) at which to find amplitudes.
+        lines : int, default 3
+            The number of frequency lines to search around each target
+            frequency. Ignored if `width` is provided.
+        width : float, optional
+            The frequency width (in Hz) to search around each target
+            frequency. If provided, `lines` is recalculated based on this,
+            by default None.
+
+        Returns
+        -------
+        list[tuple[float, float] or None]
+            A list of tuples. Each tuple contains (actual_frequency_of_peak, peak_value).
+            If no peak is found in the window for a given frequency (e.g., empty slice),
+            `None` is appended for that frequency.
+        """
+
         if width is not None:
             lines = int(np.ceil(width / self.df))
 
@@ -121,6 +249,23 @@ class FreqDomainData(DataBase):
 
 
 class FreqIntermediateData(DataBase):
+    """Intermediate frequency data, typically from STFT processing,
+    often a 2D array of spectra over reference bins (e.g., time or RPM).
+
+    Parameters
+    ----------
+    z : np.ndarray
+        NumPy array (usually 2D, e.g., batches x window_size) of complex
+        numbers representing multiple spectra.
+    df : float
+        Frequency resolution (delta f) in Hz.
+    z_unit : str
+        Unit of the spectral values.
+    ref_bins : DataBins, optional
+        A DataBins object representing the reference axis (e.g., time
+        or RPM bins) for the `z` data, by default None.
+    """
+
     def __init__(self, name: str = None, uuid: str = None, z: np.ndarray=None, df: float=1, z_unit: str="-", ref_bins: DataBins=None) -> None:
         super().__init__(name, uuid)
 
@@ -131,10 +276,13 @@ class FreqIntermediateData(DataBase):
 
     @property
     def x(self):
+        """The frequency vector for each spectrum in the data.
+        """
         return np.arange(self.lines) * self.df
     
     @property
     def f(self):
+        """Alias for the frequency vector `x`."""
         return self.x
 
     def _bl(self):
@@ -150,15 +298,33 @@ class FreqIntermediateData(DataBase):
 
     @property
     def lines(self):
+        """Number of frequency lines in each spectrum.
+        """
         _, lines = self._bl()
         return lines
     
     @property
     def batches(self):
+        """Number of batches (spectra) in the data.
+        """
         batches, _ = self._bl()
         return batches
     
     def to_powerspectrum(self, average_by: AverageType=AverageType.Energy):
+        """Averages the FreqIntermediateData along the batch axis to a power spectrum.
+
+        Parameters
+        ----------
+        average_by : AverageType, default AverageType.Energy
+            The averaging method. Supports AverageType.Energy
+            (RMS of amplitudes) and AverageType.Linear (mean of
+            amplitudes).
+
+        Returns
+        -------
+        FreqDomainData
+            A FreqDomainData object representing the averaged spectrum.
+        """
         if average_by==AverageType.Energy:
             y = np.sqrt(np.mean(np.abs(self.z)**2, axis=0))
         elif average_by==AverageType.Linear:
@@ -166,6 +332,24 @@ class FreqIntermediateData(DataBase):
         return FreqDomainData(name=self.name, y=y, df=self.df, y_unit=self.z_unit)
     
     def rectify_to(self, x_slice: tuple, y_slice: tuple) -> "FreqIntermediateData":
+        """Resamples or re-bins the FreqIntermediateData to a new grid.
+
+        .. note::
+            The actual implementation is incomplete, currently a `pass` statement
+            within the loops and returns `FreqIntermediateData` class, not an instance.
+
+        Parameters
+        ----------
+        x_slice : tuple
+            Tuple defining the new x-axis (frequency) bins or range.
+        y_slice : tuple
+            Tuple defining the new y-axis (reference) bins or range.
+
+        Returns
+        -------
+        FreqIntermediateData
+            A new FreqIntermediateData object on the rectified grid (intended).
+        """
         ref_bins = self.ref_bins
         ys = ref_bins.y
         idx = np.argsort(ys)
@@ -187,6 +371,24 @@ class FreqIntermediateData(DataBase):
         return FreqIntermediateData
     
     def extract_orderslice(self, orders: "OrderList", line_tol: int=3) -> "OrderSliceData":
+        """Extracts order slices from the FreqIntermediateData.
+
+        For each specified order, it traces the order line across the reference bins
+        and extracts the peak amplitude within a tolerance window at each point.
+
+        Parameters
+        ----------
+        orders : OrderList
+            An OrderList defining the orders to extract.
+        line_tol : int, default 3
+            The number of frequency lines around the theoretical order
+            frequency to search for the peak amplitude.
+
+        Returns
+        -------
+        OrderSliceData
+            An OrderSliceData object containing the extracted slices.
+        """
         xs = self.x # [Hz]
         ys = self.ref_bins.y
         zs = self.z # batch x window
@@ -242,7 +444,6 @@ class FreqIntermediateData(DataBase):
         return FreqIntermediateData(z=data)
     
     def cross_spectrum_with(self, reference: "FreqIntermediateData"):
-        
         # assert shape equals, and df, and etc.
         cross = np.conj(reference.z) * self.z
         data = np.mean(cross, axis=0)
@@ -275,16 +476,39 @@ OrderInfo = namedtuple("OrderInfo", ['name', 'value', 'disp_value'])
     # disp_value: for the case of unit conversion, e.g. 1st order of 1 [rpm] is actually 1/60 [Hz]
 
 class SliceData:
+    """Data sliced along an order in a frequency-reference map.
+
+    Parameters
+    ----------
+    f : np.ndarray
+        NumPy array of frequency values for the slice.
+    ref : np.ndarray
+        NumPy array of reference values (e.g., RPM, time) for the slice.
+    amplitude : np.ndarray
+        NumPy array of amplitude values for the slice.
+    """
     def __init__(self, f: np.ndarray, ref: np.ndarray, amplitude: np.ndarray):
         self.f = np.array(f)
         self.ref = np.array(ref)
         self.amplitude = np.array(amplitude)
 
     def get_aligned_f(self):
+        """Returns the slice data sorted by the frequency array `f`.
+
+        Returns
+        -------
+        tuple[sorted_f_array, corresponding_amplitude_array]
+        """
         idx = np.argsort(self.f)
         return self.f[idx], self.amplitude[idx]
     
     def get_aligned_ref(self):
+        """Returns the slice data sorted by the reference array `ref`.
+
+        Returns
+        -------
+        tuple[sorted_ref_array, corresponding_amplitude_array]
+        """
         idx = np.argsort(self.ref)
         return self.ref[idx], self.amplitude[idx]
 
@@ -294,6 +518,9 @@ class OrderList(DataBase):
         self.orders: list[OrderInfo] = orders or []
 
 class OrderSliceData(DataBase):
+    """Holds multiple order slices, typically extracted from a single FreqIntermediateData object.
+    """
+    
     def __init__(self, name: str = None, uuid: str = None, source: FreqIntermediateData = None) -> None:
         super().__init__(name, uuid)
 
