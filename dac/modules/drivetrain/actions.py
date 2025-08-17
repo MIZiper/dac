@@ -62,7 +62,7 @@ class CreateGearboxWithBearings(ActionBase):
         GearboxDefinition
             A new GearboxDefinition object with the specified stages and bearings.
         """
-        
+
         return GearboxDefinition(
             name="Gearbox with bearings",
             stages=gearbox.stages.copy(),
@@ -73,7 +73,9 @@ class CreateGearboxWithBearings(ActionBase):
 class CreateOrdersOfGearbox(ActionBase):
     CAPTION = "Create orders for gearbox"
     def __call__(self, gearbox: GearboxDefinition, ref_output: bool=True) -> OrderList:
-        """Creates an OrderList for a given GearboxDefinition.
+        """Creates an OrderList for a given GearboxDefinition with reference to input/output shaft.
+
+        The input or output shaft will have an order=1, and calculate other predefined frequencies' orders.
 
         Parameters
         ----------
@@ -90,8 +92,12 @@ class CreateOrdersOfGearbox(ActionBase):
         """
 
         ol = OrderList(f"Orders-{gearbox.name}")
-        for freq, label in gearbox.get_freqs_labels_at(speed=60, speed_on_output=ref_output):
-            # reference shaft has order 1
+        if ref_output:
+            speed = 60 / gearbox.total_ratio
+        else:
+            speed = 60
+        for freq, label in gearbox.get_freqs_labels_at(input_speed=speed):
+            # when speed==60, the freq value is the order value
             ol.orders.append(OrderInfo(label, freq/60, freq))
 
         return ol
@@ -150,14 +156,17 @@ class ShowFreqLinesTime(VAB):
             trans = ax.get_xaxis_text1_transform(0)
             speed = np.abs(np.mean(speed_channel.y)) # if isnumber(speed_channel), just assign
 
-            for freq, label in gearbox.get_freqs_labels_at(speed, speed_on_output, choice_bits=bits):
+            if speed_on_output:
+                speed = speed / gearbox.total_ratio
+
+            for freq, label in gearbox.get_freqs_labels_at(speed, choice_bits=bits):
                 dt = 1 / freq
                 x = moment + dt
 
                 widgets.append( ax.axvline(x, ls="--", lw=1) )
                 widgets.append( ax.text(x, 1, label, transform=trans[0]) )
 
-            format_dict = {label: freq for freq, label in gearbox.get_freqs_labels_at(speed, speed_on_output)}
+            format_dict = {label: freq for freq, label in gearbox.get_freqs_labels_at(speed)}
             for i, fmt_line in enumerate(fmt_lines):
                 label, *freqs = fmt_line.split(",", maxsplit=1)
 
@@ -250,10 +259,12 @@ class ShowFreqLinesFreq(VAB):
 
             trans = ax.get_xaxis_text1_transform(0)
             speed = np.abs(np.mean(speed_channel.y)) # if isnumber(speed_channel), just assign
+            if speed_on_output:
+                speed = speed / gearbox.total_ratio
 
             delta_factors = [1] if not sideband else [1, -1]
 
-            for freq, label in gearbox.get_freqs_labels_at(speed, speed_on_output, choice_bits=bits):
+            for freq, label in gearbox.get_freqs_labels_at(speed, choice_bits=bits):
                 # TODO: based on checkbox
                 # if 'fz' in label:
                 #     continue
@@ -261,7 +272,7 @@ class ShowFreqLinesFreq(VAB):
                     widgets.append(ax.axvline(start_freq+freq*factor, ls="--", lw=1))
                     widgets.append(ax.text(start_freq+freq*factor, 1, label, transform=trans[0]))
 
-            format_dict = {label: freq for freq, label in gearbox.get_freqs_labels_at(speed, speed_on_output)}
+            format_dict = {label: freq for freq, label in gearbox.get_freqs_labels_at(speed)}
             for i, fmt_line in enumerate(fmt_lines):
                 label, *freqs = fmt_line.split(",", maxsplit=1)
 

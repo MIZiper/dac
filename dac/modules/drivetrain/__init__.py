@@ -14,6 +14,7 @@ class GearStage:
         Unknown = 0
         Planetary = 1
         Parallel = 2
+        Virtual = 9
     
     def __init__(self, config: dict):
         self.config = config
@@ -24,6 +25,9 @@ class GearStage:
             case {"Wheel": wheel, "Pinion": pinion}:
                 ratio = wheel / pinion
                 t = GearStage.StageType.Parallel
+            case str():
+                ratio = 1
+                t = GearStage.StageType.Virtual
             case _:
                 ratio = 1
                 t = GearStage.StageType.Unknown
@@ -31,10 +35,10 @@ class GearStage:
         self.ratio = ratio
         self.stage_type = t
 
-    def f(self, input_speed): # order=1
+    def f(self, input_speed: float): # order=1
         return input_speed / 60
 
-    def fz(self, input_speed, order=1):
+    def fz(self, input_speed: float, order=1): # the order matters in non-factorizing planetary case
         if self.stage_type==GearStage.StageType.Planetary:
             n = self.config['NoP']
             z = self.config['RG']*order
@@ -48,9 +52,8 @@ class GearStage:
         
         elif self.stage_type==GearStage.StageType.Parallel:
             return input_speed / 60 * self.config['Wheel']
-
-    def input_speed(self, output_speed):
-        return output_speed / self.ratio
+        else:
+            raise TypeError("Unsupported stage for meshing frequency")
 
     def get_freq_at_order(self, order: str):
         ...
@@ -59,28 +62,34 @@ class GearStage:
         # return the name
         ...
 
-    def get_freqs_labels_at(self, speed: float, speed_on_output: bool=True):
+    def get_freqs_labels_at(self, input_speed: float):
         rst = [
             (
-                self.f( self.input_speed(speed) if speed_on_output else speed ),
+                self.f( input_speed ),
                 "f"
-            ),
-            (
-                self.fz( self.input_speed(speed) if speed_on_output else speed ),
-                "fz"
-            ),
+            )
         ]
-        if self.stage_type==GearStage.StageType.Planetary:
-            NoP = self.config['NoP']
+
+        if self.stage_type in (GearStage.StageType.Planetary, GearStage.StageType.Parallel):
             rst.append(
                 (
-                    NoP * self.f( self.input_speed(speed) if speed_on_output else speed ),
+                    self.fz( input_speed ),
+                    "fz"
+                )
+            )
+        
+        if self.stage_type==GearStage.StageType.Planetary:
+            NoP = self.config['NoP']
+            f = self.f( input_speed )
+            rst.append(
+                (
+                    NoP * f,
                     f"{NoP}pf",
                 )
             )
             rst.append(
                 (
-                    self.f( self.input_speed(speed) if speed_on_output else speed ) * self.config['RG'] / self.config['PG'], # PG rotation speed related to PC
+                    f * self.config['RG'] / self.config['PG'], # PG rotation speed related to PC
                     f"fw",
                 )
             )
@@ -93,6 +102,15 @@ class GearboxDefinition(DataBase):
 
         self.stages = stages or []
         self.bearings = bearings or []
+        self._total_ratio = None
+
+    @property
+    def total_ratio(self):
+        if self._total_ratio is None:
+            self._total_ratio = 1
+            for stg in self.stages:
+                self._total_ratio *= stg.ratio
+        return self._total_ratio
 
     def get_construct_config(self) -> dict:
         if self.stages:
@@ -101,6 +119,7 @@ class GearboxDefinition(DataBase):
             stgs = [
                 {"RG": "<int>", "PG": "<int>", "SU": "<int>", "NoP": "[num of planets]"},
                 {"Wheel": "<int>", "Pinion": "<int>"},
+                "Output",
             ]
 
         return {
@@ -114,46 +133,29 @@ class GearboxDefinition(DataBase):
         for stage in construct_config["stages"]:
             self.stages.append(GearStage(stage))
 
-    def get_freqs_labels_at(self, speed: float, speed_on_output: bool=True, choice_bits: int=-1):
+    def get_freqs_labels_at(self, input_speed: float, choice_bits: int=-1):
         rst = []
         bearing_dict = defaultdict(list[BallBearing])
         for stage, bearing in self.bearings:
             bearing_dict[stage].append(bearing)
 
-        if not speed_on_output:
-            for i, stg in enumerate(self.stages):
-                if (choice_bits==-1) or (choice_bits & (1<<i)):
-                    for freq, lbl in stg.get_freqs_labels_at(speed, speed_on_output):
+        for i, stg in enumerate(self.stages):
+            if (choice_bits==-1) or (choice_bits & (1<<i)):
+                for freq, lbl in stg.get_freqs_labels_at(input_speed):
+                    if stg.stage_type==GearStage.StageType.Virtual:
+                        s = stg.config
+                    else:
+                        s = str(i+1)
+                    rst.append(
+                        (freq, f"{lbl}_{s}",)
+                    )
+
+                for bearing in bearing_dict[i+1]:
+                    for freq, lbl in bearing.get_freqs_labels_at(input_speed):
                         rst.append(
-                            (freq, f"{lbl}_{i+1}",)
+                            (freq, f"{lbl}_{bearing.name}",)
                         )
-
-                    for bearing in bearing_dict[i+1]:
-                        for freq, lbl in bearing.get_freqs_labels_at(speed):
-                            rst.append(
-                                (freq, f"{lbl}_{bearing.name}",)
-                            )
-                speed = speed * stg.ratio
-        else:
-            n = len(self.stages)
-            for i, stg in enumerate(self.stages[::-1]):
-                if (choice_bits==-1) or (choice_bits & (1<<(n-i-1))):
-                    for freq, lbl in stg.get_freqs_labels_at(speed, speed_on_output):
-                        rst.append(
-                            (freq, f"{lbl}_{n-i}",)
-                        )
-                speed = speed / stg.ratio
-
-                # always bearing on input shaft
-                # need to make a virtual 1:1 stage for final output
-                if (choice_bits==-1) or (choice_bits & (1<<(n-i-1))):
-                    for bearing in bearing_dict[n-i]:
-                        for freq, lbl in bearing.get_freqs_labels_at(speed):
-                            rst.append(
-                                (freq, f"{lbl}_{bearing.name}",)
-                            )
-
-        # TODO: force regarding input shaft to simplify code
+            input_speed = input_speed * stg.ratio
 
         return rst
 
@@ -195,4 +197,5 @@ class BallBearing(DataBase):
     def ftf(self):
         # cage defect frequency
         # ~ 0.4
+        # TODO: by default inner race rotating, add an outer race version
         return 1/2*(1-self.D_ball/self.D_pitch*np.cos(np.deg2rad(self.beta)))

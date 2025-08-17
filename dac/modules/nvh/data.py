@@ -472,8 +472,9 @@ class FreqIntermediateData(DataBase):
 
 OrderInfo = namedtuple("OrderInfo", ['name', 'value', 'disp_value'])
     # name: label, e.g. f_1
-    # value: ratio between reference and frequency
-    # disp_value: for the case of unit conversion, e.g. 1st order of 1 [rpm] is actually 1/60 [Hz]
+    # value: actual frequency at that order
+    #        e.g. y-axis is speed, the corresponded frequency is 1/60 of y value
+    # disp_value: the order e.g. 1/2/3/...
 
 class SliceData:
     """Data sliced along an order in a frequency-reference map.
