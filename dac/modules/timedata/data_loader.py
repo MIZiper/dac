@@ -1,3 +1,6 @@
+"""Provides functions for loading and saving TimeData from/to TDMS files.
+"""
+
 from nptdms import TdmsFile, TdmsGroup, TdmsChannel
 from nptdms import TdmsWriter, RootObject, GroupObject, ChannelObject
 
@@ -6,6 +9,23 @@ from . import TimeData
 from datetime import datetime, timedelta, timezone
 
 def load_tdms(fpath) -> list[TimeData]:
+    """Loads data from a TDMS file and converts channels to TimeData objects.
+
+    Iterates through all groups and channels in the TDMS file, extracting
+    data and relevant properties to create TimeData objects.
+
+    Parameters
+    ----------
+    fpath : str
+        The file path to the TDMS file.
+
+    Returns
+    -------
+    list[TimeData]
+        A list of TimeData objects, each representing a channel from
+        the TDMS file.
+    """
+
     r = []
     f = TdmsFile(fpath, read_metadata_only=False, keep_open=False)
     for g in f.groups():
@@ -27,6 +47,26 @@ def load_tdms(fpath) -> list[TimeData]:
     return r
 
 def save_tdms(channels: list[TimeData], fpath: str, start_time: datetime, group_name: str="group_1"):
+    """Saves a list of TimeData objects to a TDMS file.
+
+    Each TimeData object is written as a channel within the specified group
+    in the TDMS file. Includes metadata such as units, start time,
+    and sampling interval (dt).
+
+    Parameters
+    ----------
+    channels : list[TimeData]
+        A list of TimeData objects to save.
+    fpath : str
+        The file path where the TDMS file will be saved.
+    start_time : datetime
+        A datetime object representing the start time of the
+        measurement. The current system timezone is applied to it.
+    group_name : str, default "group_1"
+        The name of the group under which channels will be saved
+        in the TDMS file.
+    """
+    
     current_tz = datetime.now().astimezone().tzinfo
     start_time = start_time.replace(tzinfo=current_tz)
 

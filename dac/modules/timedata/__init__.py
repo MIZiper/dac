@@ -1,3 +1,6 @@
+"""Defines the `TimeData` class mainly for high sample rate measurement data.
+"""
+
 from dac.core.data import DataBase
 import numpy as np
 

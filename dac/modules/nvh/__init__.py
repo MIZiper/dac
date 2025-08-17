@@ -1,3 +1,6 @@
+"""Defines various enumerations for NVH (Noise, Vibration, and Harshness) analysis.
+"""
+
 from enum import Enum
 import numpy as np
 

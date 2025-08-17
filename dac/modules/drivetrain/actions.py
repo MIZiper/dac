@@ -1,3 +1,10 @@
+"""Actions related to drivetrain components for the DAC framework.
+
+This module provides actions for creating bearings and gearboxes, generating
+order lists for gearboxes, and visualizing frequency lines on time-domain
+and frequency-domain plots.
+"""
+
 import numpy as np
 from . import BallBearing, GearboxDefinition, BearingInputStage
 from dac.modules.timedata import TimeData
@@ -10,6 +17,25 @@ from matplotlib.backend_bases import MouseButton, MouseEvent
 class CreateBearing(ActionBase):
     CAPTION = "Make a bearing"
     def __call__(self, N_balls: int=8, D_ball: float=2, D_pitch: float=12, beta: float=15) -> BallBearing:
+        """Creates a BallBearing data node.
+
+        Parameters
+        ----------
+        N_balls : int
+            Number of balls in the bearing.
+        D_ball : float
+            Diameter of a single ball.
+        D_pitch : float
+            Pitch diameter of the bearing.
+        beta : float
+            Contact angle of the bearing in degrees.
+
+        Returns
+        -------
+        BallBearing
+            A BallBearing object initialized with the given parameters.
+        """
+
         return BallBearing(
             name="Ball bearing",
             N_balls=N_balls,
@@ -21,6 +47,22 @@ class CreateBearing(ActionBase):
 class CreateGearboxWithBearings(ActionBase):
     CAPTION = "Make gearbox with bearings"
     def __call__(self, gearbox: GearboxDefinition, bearings: list[tuple[BearingInputStage, BallBearing]]) -> GearboxDefinition:
+        """Creates a GearboxDefinition data node with associated bearings.
+
+        Parameters
+        ----------
+        gearbox : GearboxDefinition
+            The base GearboxDefinition object.
+        bearings : list of (BearingInputStage, BallBearing)
+            The bearing mount info respect to gearbox,
+            bearing is always defined to mount on stage input shaft.
+
+        Returns
+        -------
+        GearboxDefinition
+            A new GearboxDefinition object with the specified stages and bearings.
+        """
+        
         return GearboxDefinition(
             name="Gearbox with bearings",
             stages=gearbox.stages.copy(),
@@ -31,6 +73,22 @@ class CreateGearboxWithBearings(ActionBase):
 class CreateOrdersOfGearbox(ActionBase):
     CAPTION = "Create orders for gearbox"
     def __call__(self, gearbox: GearboxDefinition, ref_output: bool=True) -> OrderList:
+        """Creates an OrderList for a given GearboxDefinition.
+
+        Parameters
+        ----------
+        gearbox : GearboxDefinition
+            The GearboxDefinition to generate orders for.
+        ref_output : bool, default True
+            If True, the reference speed is considered to be on the
+            output shaft; otherwise, it's on the input shaft.
+
+        Returns
+        -------
+        OrderList
+            An OrderList containing OrderInfo objects for the gearbox.
+        """
+
         ol = OrderList(f"Orders-{gearbox.name}")
         for freq, label in gearbox.get_freqs_labels_at(speed=60, speed_on_output=ref_output):
             # reference shaft has order 1
@@ -41,6 +99,31 @@ class CreateOrdersOfGearbox(ActionBase):
 class ShowFreqLinesTime(VAB):
     CAPTION = "Mark frequency lines on time domain"
     def __call__(self, gearbox: GearboxDefinition, speed_channel: TimeData, speed_on_output: bool=True, stages: list[int]=[1, 2], fmt_lines: list[str]=["{f_1}", "{f_2}-{f_1}"]): # bearings: list[tuple[BallBearing, BearingInputStage]]
+        """Marks characteristic frequency lines on a time-domain plot.
+
+        This action allows users to click on a time-domain plot, and lines
+        representing characteristic frequencies of the gearbox (and optionally
+        custom formatted lines) at that time instant's speed will be drawn.
+
+        Parameters
+        ----------
+        gearbox : GearboxDefinition
+            The GearboxDefinition providing the characteristic frequencies.
+        speed_channel : TimeData
+            TimeData representing the speed profile. The mean of
+            this channel is used as the reference speed.
+        speed_on_output : bool, default True
+            If True, speed_channel is considered to be the
+            output shaft speed.
+        stages : list[int], optional
+            A list of stage numbers (1-indexed) to display main predefined frequencies.
+        fmt_lines : list[str], optional
+            A list of strings for custom frequency lines.
+            Each string can be a format string using labels from
+            `gearbox.get_freqs_labels_at` (e.g., "{f_1}", "{fz_2}-{f_1}")
+            or "label,frequency_value" (e.g., "MyFreq, 123.4"),
+        """
+
         if not speed_channel or not gearbox:
             return
         
@@ -97,6 +180,32 @@ class ShowFreqLinesTime(VAB):
 class ShowFreqLinesFreq(VAB):
     CAPTION = "Mark frequency lines on spectrum"
     def __call__(self, gearbox: GearboxDefinition, speed_channel: TimeData, speed_on_output: bool=True, stages: list[int]=[1, 2], fmt_lines: list[str]=["{f_1}", "{f_2}-{f_1}"]):
+        """Marks characteristic frequency lines on a frequency-domain plot (spectrum).
+
+        This action allows users to click on a spectrum.
+        - Left-click: Draws lines relative to the clicked frequency (sidebands).
+        - Right-click: Draws lines from 0 Hz (absolute frequencies).
+        Characteristic frequencies are determined from the gearbox and speed channel.
+
+        Parameters
+        ----------
+        gearbox : GearboxDefinition
+            The GearboxDefinition providing the characteristic frequencies.
+        speed_channel : TimeData
+            TimeData representing the speed profile. The mean of
+            this channel is used as the reference speed.
+        speed_on_output : bool, default True
+            If True, speed_channel is considered to be the
+            output shaft speed.
+        stages : list[int], optional
+            A list of stage numbers (1-indexed) to display main predefined frequencies.
+        fmt_lines : list[str], optional
+            A list of strings for custom frequency lines.
+            Each string can be a format string using labels from
+            `gearbox.get_freqs_labels_at` (e.g., "{f_1}", "{fz_2}-{f_1}")
+            or "label,frequency_value" (e.g., "MyFreq, 123.4").
+        """
+
         if not speed_channel or not gearbox:
             return
         
@@ -117,6 +226,20 @@ class ShowFreqLinesFreq(VAB):
         widgets = [] # it's actually patches
 
         def plot_lines(start_freq: float, sideband: bool=False):
+            """Draws the frequency lines on the spectrum axes.
+
+            Clears previous lines and draws new ones based on the start_freq
+            and whether sidebands are requested.
+
+            Parameters
+            ----------
+            start_freq : float
+                The starting frequency from which to draw lines or sidebands.
+            sideband : bool, default False
+                If True, draws sidebands around `start_freq`. If False, draws
+                lines from 0 Hz.
+            """
+
             for widget in widgets: # widgets from previous press
                 widget.remove()
             widgets.clear()

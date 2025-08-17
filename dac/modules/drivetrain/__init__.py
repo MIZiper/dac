@@ -1,3 +1,9 @@
+"""Data modeling for drivetrain components like gears and bearings.
+
+`GearboxDefinition` to model a complete gearbox with multiple stages (planetary or parallel stage),
+and `BallBearing` to represent ball bearings with their characteristic defect frequencies.
+"""
+
 from enum import Enum
 import numpy as np
 from dac.core.data import DataBase

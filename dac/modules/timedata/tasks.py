@@ -1,3 +1,8 @@
+"""Defines GUI quick tasks related to TimeData for the DAC application.
+
+Quick-task is used to help action node configuration.
+"""
+
 from os import path
 from PyQt5 import QtWidgets, QtCore
 from dac.core.actions import ActionBase
@@ -9,6 +14,14 @@ SET_RECENTDIR = "RecentDir"
 
 class FillFpathsTask(TaskBase):
     def __call__(self, action: ActionBase):
+        """Opens a file dialog for the user to select measurement files.
+
+        Parameters
+        ----------
+        action : ActionBase
+            The ActionBase instance who has key 'fpaths'.
+        """
+
         fpaths, fext = QtWidgets.QFileDialog.getOpenFileNames(
             self.dac_win, caption="Select measurement files",
             directory=APPSETTING.value(SET_RECENTDIR)

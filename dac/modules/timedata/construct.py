@@ -1,3 +1,8 @@
+"""Provides an action for constructing time-series data from cosine components.
+
+A constructor when no real data available, and serves for functionality validation.
+"""
+
 import numpy as np
 from collections import namedtuple
 
@@ -9,27 +14,29 @@ CosineComponent = namedtuple("CosineComponent", ['freq', 'amp', 'phase'])
 class SignalConstructAction(ActionBase):
     CAPTION = "Construct signal with cosines"
     def __call__(self, components: list[CosineComponent], offset: float=0, duration: float=10, fs: int=1000) -> TimeData:
-        r"""Construct time domain data with cosine waves.
+        """Constructs time-domain data from a sum of cosine waves.
 
         Parameters
         ----------
-        components : [(frequency, amplitude, phase)]
-            list of tuples, each tuple contains basic info of the cosine wave
+        components : list[CosineComponent]
+            A list of CosineComponent namedtuples, where each namedtuple
+            (freq, amp, phase) defines a cosine wave.
+            - freq (float): Frequency of the cosine wave in Hz.
+            - amp (float): Amplitude of the cosine wave.
+            - phase (float): Phase of the cosine wave in degrees.
+        offset : float
+            A float representing the DC offset of the signal.
+        duration : float
+            The total duration of the signal in seconds.
+        fs : number
+            The sampling frequency in Hz.
 
-            frequency: float, [Hz]
-
-            amplitude: float
-
-            phase: float, [°]
-
-        fs : int, [Hz]
-            sample rate
-
-        duration : float, [s]
-            sample time
-            
+        Returns
+        -------
+        TimeData
+            A TimeData object representing the generated signal.
         """
-
+        
         t = np.arange(int(duration * fs)) / fs
         y = np.zeros_like(t) + offset
         
