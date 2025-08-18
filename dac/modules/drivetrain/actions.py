@@ -16,7 +16,7 @@ from matplotlib.backend_bases import MouseButton, MouseEvent
 
 class CreateBearing(ActionBase):
     CAPTION = "Make a bearing"
-    def __call__(self, N_balls: int=8, D_ball: float=2, D_pitch: float=12, beta: float=15) -> BallBearing:
+    def __call__(self, N_balls: int=8, D_ball: float=2, D_pitch: float=12, beta: float=15, irr: bool=True) -> BallBearing:
         """Creates a BallBearing data node.
 
         Parameters
@@ -29,6 +29,8 @@ class CreateBearing(ActionBase):
             Pitch diameter of the bearing.
         beta : float
             Contact angle of the bearing in degrees.
+        irr : bool, default True
+            Inner race is rotating element.
 
         Returns
         -------
@@ -42,6 +44,7 @@ class CreateBearing(ActionBase):
             D_ball=D_ball,
             D_pitch=D_pitch,
             beta=beta,
+            irr=irr,
         )
 
 class CreateGearboxWithBearings(ActionBase):

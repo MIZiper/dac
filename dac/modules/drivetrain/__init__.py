@@ -164,12 +164,28 @@ class BearingInputStage(int): # cannot use namedtuple(BallBearing, BearingInputS
     pass
 
 class BallBearing(DataBase):
-    def __init__(self, name: str = None, uuid: str = None, N_balls: int=8, D_ball: float=2, D_pitch: float=12, beta: float=15) -> None:
+    """Ball bearing.
+
+    Parameters
+    ----------
+    N_balls : int
+        Number of balls in the bearing.
+    D_ball : float
+        Diameter of a single ball.
+    D_pitch : float
+        Pitch diameter of the bearing.
+    beta : float
+        Contact angle of the bearing in degrees.
+    irr : bool, default True
+        Whether the inner race is rotating part.
+    """
+    def __init__(self, name: str = None, uuid: str = None, N_balls: int=8, D_ball: float=2, D_pitch: float=12, beta: float=15, irr: bool=True) -> None:
         super().__init__(name, uuid)
         self.N_balls = N_balls
         self.D_ball = D_ball
         self.D_pitch = D_pitch # = (D_IR+D_OR)/2
         self.beta = beta
+        self.irr = irr
 
     def get_freqs_labels_at(self, speed: float):
         freq = speed / 60
@@ -192,10 +208,12 @@ class BallBearing(DataBase):
     
     def bsf(self):
         # ball defect frequency
-        return self.D_pitch/self.D_ball*(1-(self.D_ball/self.D_pitch*np.cos(np.deg2rad(self.beta)))**2)
+        return self.D_pitch/(2*self.D_ball)*(1-(self.D_ball/self.D_pitch*np.cos(np.deg2rad(self.beta)))**2)
     
     def ftf(self):
         # cage defect frequency
         # ~ 0.4
-        # TODO: by default inner race rotating, add an outer race version
-        return 1/2*(1-self.D_ball/self.D_pitch*np.cos(np.deg2rad(self.beta)))
+        if self.irr:
+            return 1/2*(1-self.D_ball/self.D_pitch*np.cos(np.deg2rad(self.beta)))
+        else:
+            return 1/2*(1+self.D_ball/self.D_pitch*np.cos(np.deg2rad(self.beta)))
