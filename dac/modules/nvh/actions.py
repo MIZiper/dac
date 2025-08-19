@@ -602,23 +602,32 @@ class SpectrumToTimeAction(PAB):
         return rst
 
 class SpectrumAsTimeAction(PAB):
-    CAPTION = "Treate frequency spectrum as TimeData"
+    CAPTION = "Treat frequency spectrum as TimeData"
 
 class LoadCaseSpectrumComparison(VAB):
-    def __call__(self, loadcases: list[str], channel_name: str):
+    CAPTION = "Show spectrum across loadcases"
+    def __call__(self, loadcases: list[SimpleDefinition], channel_name: str):
         """Compares spectra of a specific channel across multiple load cases.
-
-        (Note: The actual implementation is missing, currently a `pass` statement)
 
         Parameters
         ----------
-        loadcases : list[str]
-            A list of strings, presumably names or identifiers for
-            different load cases (contexts).
+        loadcases : list[SimpleDefinition]
+            A list of different load cases (contexts).
         channel_name : str
             The name of the FreqDomainData channel to compare.
         """
-        pass
+        fig = self.figure
+        ax = fig.gca()
+        ax.set_title(channel_name)
+        ax.set_xlabel("Frequency [Hz]")
+        ax.set_ylabel("Amplitude")
+
+        for loadcase in loadcases:
+            ctx = self.container.get_context(loadcase)
+            freqdata: FreqDomainData = ctx.get_node_of_type(channel_name, FreqDomainData)
+            ax.plot(freqdata.x, freqdata.amplitude, label=f"{loadcase.name} [{freqdata.y_unit}]")
+
+        ax.legend(loc="upper right")
 
 class LoadCaseFreqIntermediateAverage(VAB):
     def __call__(self, loadcases: list[str], channel_name: str, ref_case: str):

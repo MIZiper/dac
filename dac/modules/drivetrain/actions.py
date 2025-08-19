@@ -72,6 +72,21 @@ class CreateGearboxWithBearings(ActionBase):
             bearings=bearings,
         )
 
+class GenerateOutputOfGearbox(ActionBase):
+    CAPTION = "Convert metric after gearbox"
+    def __call__(self, input: TimeData, gearbox: GearboxDefinition, reduce: bool=False) -> TimeData:
+        """Convert values after the transmission of a gearbox
+        
+        It's just a simple conversion based on total ratio.
+        Users have to specify whether values become larger (`reduce=False`) or smaller (`reduce=True`).
+        Whether the `gearbox` is a reducer or increaser has no impact on the conversion.
+        """
+
+        total_ratio = gearbox.total_ratio
+        if (total_ratio > 1 and reduce) or (total_ratio < 1 and not reduce):
+            total_ratio = 1 / total_ratio
+
+        return TimeData(f"{input.name}-Convert", y=input.y*total_ratio, dt=input.dt, y_unit=input.y_unit)
 
 class CreateOrdersOfGearbox(ActionBase):
     CAPTION = "Create orders for gearbox"
