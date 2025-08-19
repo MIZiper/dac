@@ -69,8 +69,19 @@ class VisualizeActionBase(ActionBase):
         # I have a doubt here, this is not called for SAB.
         # But canvas redrawed, widgets redrawed because of thread ends?
 
+class TableActionBase(ActionBase):
+    def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
+        super().__init__(context_key, name, uuid)
+        self.renderer = None
+
+    def present(self, stats: dict):
+        if self.renderer is None:
+            return
+        self.renderer(stats)
+
 PAB = ProcessActionBase
 VAB = VisualizeActionBase
+TAB = TableActionBase
 
 class SimpleAction(ActionBase):
     CAPTION = "Simple action"

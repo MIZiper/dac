@@ -34,7 +34,7 @@ from PyQt5.QtWidgets import (QMainWindow, QStyle, QTreeWidget, QTreeWidgetItem,
 from importlib.metadata import version
 from dac import APPNAME, PYPI_NAME
 from dac.core import GCK, ActionNode, Container, DataNode, NodeBase, ContextKeyNode
-from dac.core.actions import PAB, VAB, ActionBase
+from dac.core.actions import PAB, VAB, TAB, ActionBase
 from dac.core.thread import ThreadWorker
 from dac.core.plugin import use_plugin
 from dac.gui.base import MainWindowBase
@@ -238,6 +238,35 @@ class MainWindow(MainWindowBase):
         widget.show()
 
         return figure
+    
+    def show_stats(self, stats):
+        """Show a non-modal dialog with a table displaying the provided data.
+
+        stats: dict with keys 'title', 'headers' (dict with 'row' and 'col'), and 'data' (2D list).
+        """
+
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle(stats.get("title", "Stats"))
+        dlg.setWindowModality(Qt.WindowModality.NonModal)
+        table = QtWidgets.QTableWidget(dlg)
+
+        rows = stats.get("headers", {}).get("row", [])
+        cols = stats.get("headers", {}).get("col", [])
+        table.setRowCount(len(rows))
+        table.setColumnCount(len(cols))
+        table.setHorizontalHeaderLabels(cols)
+        table.setVerticalHeaderLabels(rows)
+
+        table_data = stats.get("data", [])
+        for r, row in enumerate(table_data):
+            for c, val in enumerate(row):
+                item = QtWidgets.QTableWidgetItem(str(val))
+                table.setItem(r, c, item)
+
+        layout = QtWidgets.QVBoxLayout(dlg)
+        layout.addWidget(table)
+        dlg.resize(600, 400)
+        dlg.show()
 
     def use_plugin(self, setting_fpath: str, clean: bool=True):
         use_plugin(setting_fpath, clean, dac_win=self)
@@ -560,6 +589,9 @@ class ActionListWidget(QTreeWidget):
 
         if isinstance(action, VAB):
             action.figure = self.dac_win.figure
+
+        if isinstance(action, TAB):
+            action.renderer = self.dac_win.show_stats
 
         if isinstance(action, PAB):
             def fn(p, progress_emitter, logger):

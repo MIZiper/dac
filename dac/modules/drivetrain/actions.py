@@ -8,7 +8,7 @@ and frequency-domain plots.
 import numpy as np
 from . import BallBearing, GearboxDefinition, BearingInputStage
 from dac.modules.timedata import TimeData
-from dac.core.actions import VAB, PAB, SAB, ActionBase
+from dac.core.actions import VAB, PAB, SAB, TAB, ActionBase
 from dac.modules.timedata.actions import ShowTimeDataAction
 from dac.modules.nvh.data import OrderList, OrderInfo
 from dac.modules.nvh.actions import ViewFreqDomainAction
@@ -119,6 +119,34 @@ class CreateOrdersOfGearbox(ActionBase):
             ol.orders.append(OrderInfo(label, freq/60, freq))
 
         return ol
+
+class ViewAllOrders(TAB):
+    CAPTION = "Show drivetrain orders"
+    def __call__(self, ol: OrderList, speed: float=None):
+        N = 3
+        rows = []
+        data = []
+        cols = [f"{i+1}x" for i in range(N)]
+
+        for o in ol.orders:
+            rows.append(o.name)
+            row = []
+            for c in range(N):
+                if speed is None:
+                    row.append(f"{o.disp_value * (c+1):.4f}")
+                else:
+                    row.append(f"{o.value * (c+1) * speed:.2f}")
+            data.append(row)
+
+        stats = {
+            "title": f"({'Order [-]' if speed is None else 'Frequency [Hz]'}) {ol.name}",
+            "headers": {
+                "row": rows,
+                "col": cols,
+            },
+            "data": data
+        }
+        self.present(stats)
 
 class ShowFreqLinesTime(VAB):
     CAPTION = "Mark frequency lines on time domain"
