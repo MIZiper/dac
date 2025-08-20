@@ -6,6 +6,7 @@ from collections import defaultdict
 from matplotlib.gridspec import GridSpec
 from matplotlib.widgets import TextBox, RadioButtons
 from matplotlib.axes import Axes
+from matplotlib.backend_bases import MouseButton, MouseEvent
 
 from dac.core.data import SimpleDefinition
 from dac.core.actions import ActionBase, VAB, PAB, SAB
@@ -324,7 +325,7 @@ class ViewColorPlotAndCheckOrderSlice(ViewFreqIntermediateAction):
         )
         self._widgets.append(order_input)
 
-class MarkOrders(VAB):
+class MarkOrders(VAB): # Mark orders for colorplot, I suppose?
     pass
 
 class ViewColorPlotWithOrderSlice(ViewFreqIntermediateAction): # inherit SAB = ViewColorPlot + MarkOrders
@@ -378,6 +379,144 @@ class CreateOrders(ActionBase):
             ol.orders.append(OrderInfo(name, value, disp_value))
 
         return ol
+    
+class GuessOrdersOnSpectrum(VAB):
+    CAPTION = "Guess orders on spectrum graph"
+    def __call__(self, ol: OrderList, speed: TimeData, tol: float=0.2, max_harm: int=3):
+        """Guess closest orders (characteristic frequencies) based on selection on spectrum graph.
+
+        Use left button to select a range in spectrum graph, and right button to cyclic the harmonic number.
+        A list is shown for the closest orders.
+        
+        Parameters
+        ----------
+        ol : OrderList
+        tol : float
+            Tolerance for the deviations, a ratio between 0-1.
+        max_harmonic : int, default 3
+            Max harmonics for searching when cyclic-ing.
+        """
+
+        fig = self.figure
+        ax = fig.gca()
+        canvas = fig.canvas
+
+        speed = speed.y.mean()
+
+        cur_harm = 1
+        ongoing = False
+        x0 = None
+        x1 = None
+        table_x = 0.0
+        table_y = 0.0
+
+        span = ax.axvspan(0, 0, color='red', alpha=0.5, visible=False)
+        table = None
+
+        def clear_table():
+            nonlocal table
+            if table is not None:
+                table.remove()
+                table = None
+                fig.canvas.draw_idle()
+
+        def show_table(x0, x1, mul, table_x, table_y):
+            nonlocal table
+            if table is not None:
+                table.remove()
+            f_sel = x1-x0
+            rows = []
+            for order in ol.orders:
+                f_order = order.value * mul * speed
+                deviation = abs(f_sel - f_order) / f_order if f_order != 0 else 0
+                if deviation <= tol:
+                    rows.append([
+                        f"{mul}x {order.name}",
+                        f"{f_order:.3f}",
+                        f"{deviation*100:.1f}%"
+                    ])
+            if not rows:
+                rows = [["-", "-", "-"]]
+            # Table position: left bottom, starting from mouse click
+            ax_xlim = ax.get_xlim()
+            ax_ylim = ax.get_ylim()
+            x_frac = (table_x - ax_xlim[0]) / (ax_xlim[1] - ax_xlim[0])
+            y_frac = (table_y - ax_ylim[0]) / (ax_ylim[1] - ax_ylim[0])
+            x_frac = max(0, min(1, x_frac))
+            y_frac = max(0, min(1, y_frac))
+            table = ax.table(
+                rows,
+                colLabels=['Name', 'Value', 'Devi.'],
+                colWidths=[1.5, 0.7, 0.5],
+                cellLoc='right',
+                loc='center',
+                bbox=[x_frac, y_frac, 0.25, 0.05*max(len(rows), 1)],
+            )
+            fig.canvas.draw_idle()
+
+        def drag_start(e: MouseEvent):
+            if fig.canvas.widgetlock.locked():
+                return
+            nonlocal ongoing, x0, x1, cur_harm, table_x, table_y
+            if e.button == MouseButton.LEFT and not ongoing:
+                ongoing = True
+                x0 = e.xdata
+                x1 = e.xdata
+                table_x = e.xdata if e.xdata is not None else 0.0
+                table_y = e.ydata if e.ydata is not None else 0.0
+                span.set_x(x0)
+                span.set_width(0)
+                span.set_visible(True)
+                cur_harm = 1
+                clear_table()
+                fig.canvas.draw_idle()
+
+        def drag_end(e: MouseEvent):
+            if fig.canvas.widgetlock.locked():
+                return
+            nonlocal ongoing, x0, x1
+            if e.button == MouseButton.LEFT and ongoing:
+                ongoing = False
+                x0 = None
+                x1 = None
+                span.set_visible(False)
+                clear_table()
+                fig.canvas.draw_idle()
+
+        def toggle_harmonic(e: MouseEvent):
+            if fig.canvas.widgetlock.locked():
+                return
+            nonlocal cur_harm
+            if ongoing and e.button == MouseButton.RIGHT:
+                cur_harm = (cur_harm % max_harm) + 1
+                if x0 is not None and x1 is not None:
+                    x_min, x_max = sorted([x0, x1])
+                    show_table(x_min, x_max, cur_harm, table_x, table_y)
+                fig.canvas.draw_idle()
+
+        def motion(e: MouseEvent):
+            if fig.canvas.widgetlock.locked():
+                return
+            nonlocal x1, table_x, table_y
+            if ongoing and e.xdata is not None:
+                x1 = e.xdata
+                x_min, x_max = sorted([x0, x1])
+                table_x = e.xdata if e.xdata is not None else 0.0
+                table_y = e.ydata if e.ydata is not None else 0.0
+                span.set_width(x1-x0)
+                span.set_visible(True)
+                show_table(x_min, x_max, cur_harm, table_x, table_y)
+                fig.canvas.draw_idle()
+
+        cid1 = canvas.mpl_connect('button_press_event', drag_start)
+        cid2 = canvas.mpl_connect('button_release_event', drag_end)
+        cid3 = canvas.mpl_connect('button_press_event', toggle_harmonic)
+        cid4 = canvas.mpl_connect('motion_notify_event', motion)
+
+        self._cids.extend([cid1, cid2, cid3, cid4])
+        
+class ShowSpectrumWithGuesser(SAB, seq=[ViewFreqDomainAction, GuessOrdersOnSpectrum]):
+    CAPTION = "Show spectrum with order guesser"
 
 class ExtractOrderSlicesAction(PAB):
     CAPTION = "Extract OrderSlice"

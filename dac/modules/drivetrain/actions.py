@@ -120,7 +120,7 @@ class CreateOrdersOfGearbox(ActionBase):
 
         return ol
 
-class ViewAllOrders(TAB):
+class ViewAllOrders(TAB): # should this under dac.modules.nvh.actions?
     CAPTION = "Show drivetrain orders"
     def __call__(self, ol: OrderList, speed: float=None):
         N = 3
@@ -138,8 +138,13 @@ class ViewAllOrders(TAB):
                     row.append(f"{o.value * (c+1) * speed:.2f}")
             data.append(row)
 
+        if speed is None:
+            title = 'Orders [-]'
+        else:
+            title = f'Frequencies [Hz] at {speed}'
+
         stats = {
-            "title": f"({'Order [-]' if speed is None else 'Frequency [Hz]'}) {ol.name}",
+            "title": f"({ol.name}) {title}",
             "headers": {
                 "row": rows,
                 "col": cols,
