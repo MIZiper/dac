@@ -393,7 +393,7 @@ class GuessOrdersOnSpectrum(VAB):
         ol : OrderList
         tol : float
             Tolerance for the deviations, a ratio between 0-1.
-        max_harmonic : int, default 3
+        max_harm : int, default 3
             Max harmonics for searching when cyclic-ing.
         """
 
@@ -404,7 +404,8 @@ class GuessOrdersOnSpectrum(VAB):
         speed = speed.y.mean()
 
         cur_harm = 1
-        ongoing = False
+        MODE_NONE, MODE_RANGE, MODE_SINGLE = range(3)
+        mode = MODE_NONE
         x0 = None
         x1 = None
         table_x = 0.0
@@ -418,25 +419,25 @@ class GuessOrdersOnSpectrum(VAB):
             if table is not None:
                 table.remove()
                 table = None
-                fig.canvas.draw_idle()
+                canvas.draw_idle()
 
-        def show_table(x0, x1, mul, table_x, table_y):
+        def show_table(x0, x1, harm, table_x, table_y):
             nonlocal table
             if table is not None:
                 table.remove()
-            f_sel = x1-x0
+            f_sel = abs(x1-x0)
             rows = []
             for order in ol.orders:
-                f_order = order.value * mul * speed
+                f_order = order.value * harm * speed
                 deviation = abs(f_sel - f_order) / f_order if f_order != 0 else 0
                 if deviation <= tol:
                     rows.append([
-                        f"{mul}x {order.name}",
+                        f"{harm}x {order.name}",
                         f"{f_order:.3f}",
                         f"{deviation*100:.1f}%"
                     ])
             if not rows:
-                rows = [["-", "-", "-"]]
+                rows = [[f"{harm}x -", "-", "-"]]
             # Table position: left bottom, starting from mouse click
             ax_xlim = ax.get_xlim()
             ax_ylim = ax.get_ylim()
@@ -452,14 +453,14 @@ class GuessOrdersOnSpectrum(VAB):
                 loc='center',
                 bbox=[x_frac, y_frac, 0.25, 0.05*max(len(rows), 1)],
             )
-            fig.canvas.draw_idle()
+            canvas.draw_idle()
 
-        def drag_start(e: MouseEvent):
-            if fig.canvas.widgetlock.locked():
+        def event_start(e: MouseEvent):
+            if canvas.widgetlock.locked():
                 return
-            nonlocal ongoing, x0, x1, cur_harm, table_x, table_y
-            if e.button == MouseButton.LEFT and not ongoing:
-                ongoing = True
+            nonlocal mode, x0, x1, cur_harm, table_x, table_y
+            if e.button == MouseButton.LEFT and mode==MODE_NONE:
+                mode = MODE_RANGE
                 x0 = e.xdata
                 x1 = e.xdata
                 table_x = e.xdata if e.xdata is not None else 0.0
@@ -469,47 +470,55 @@ class GuessOrdersOnSpectrum(VAB):
                 span.set_visible(True)
                 cur_harm = 1
                 clear_table()
-                fig.canvas.draw_idle()
 
-        def drag_end(e: MouseEvent):
-            if fig.canvas.widgetlock.locked():
+            elif e.button == MouseButton.MIDDLE and mode==MODE_NONE:
+                if e.xdata is not None:
+                    mode = MODE_SINGLE
+                    x0 = 0
+                    x1 = e.xdata
+                    table_x = e.xdata
+                    table_y = e.ydata if e.ydata is not None else 0.0
+                    cur_harm = 1
+                    show_table(x0, x1, cur_harm, table_x, table_y)
+
+        def event_end(e: MouseEvent):
+            if canvas.widgetlock.locked():
                 return
-            nonlocal ongoing, x0, x1
-            if e.button == MouseButton.LEFT and ongoing:
-                ongoing = False
+            nonlocal mode, x0, x1
+            if e.button == MouseButton.LEFT and mode==MODE_RANGE:
+                mode = MODE_NONE
                 x0 = None
                 x1 = None
                 span.set_visible(False)
                 clear_table()
-                fig.canvas.draw_idle()
+                
+            elif e.button == MouseButton.MIDDLE and mode==MODE_SINGLE:
+                mode = MODE_NONE
+                x0 = None
+                x1 = None
+                clear_table()
 
         def toggle_harmonic(e: MouseEvent):
-            if fig.canvas.widgetlock.locked():
+            if canvas.widgetlock.locked():
                 return
             nonlocal cur_harm
-            if ongoing and e.button == MouseButton.RIGHT:
+            if e.button == MouseButton.RIGHT and mode!=MODE_NONE:
                 cur_harm = (cur_harm % max_harm) + 1
-                if x0 is not None and x1 is not None:
-                    x_min, x_max = sorted([x0, x1])
-                    show_table(x_min, x_max, cur_harm, table_x, table_y)
-                fig.canvas.draw_idle()
+                show_table(x0, x1, cur_harm, table_x, table_y)
 
         def motion(e: MouseEvent):
-            if fig.canvas.widgetlock.locked():
+            if canvas.widgetlock.locked():
                 return
             nonlocal x1, table_x, table_y
-            if ongoing and e.xdata is not None:
+            if mode==MODE_RANGE and e.xdata is not None:
                 x1 = e.xdata
-                x_min, x_max = sorted([x0, x1])
                 table_x = e.xdata if e.xdata is not None else 0.0
                 table_y = e.ydata if e.ydata is not None else 0.0
                 span.set_width(x1-x0)
-                span.set_visible(True)
-                show_table(x_min, x_max, cur_harm, table_x, table_y)
-                fig.canvas.draw_idle()
+                show_table(x0, x1, cur_harm, table_x, table_y)
 
-        cid1 = canvas.mpl_connect('button_press_event', drag_start)
-        cid2 = canvas.mpl_connect('button_release_event', drag_end)
+        cid1 = canvas.mpl_connect('button_press_event', event_start)
+        cid2 = canvas.mpl_connect('button_release_event', event_end)
         cid3 = canvas.mpl_connect('button_press_event', toggle_harmonic)
         cid4 = canvas.mpl_connect('motion_notify_event', motion)
 
