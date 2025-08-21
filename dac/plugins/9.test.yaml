@@ -16,12 +16,16 @@ actions:
   - /da/A1A2 # SAB action
   - /da/A1A2_2 # SAB of SAB
   - "[<]"
+  - "[OrderSlice]"
+  - /mv/actions.ViewOrderSliceOfMeasurements
   
   /dd/SimpleDefinition:
   - "[Test space>]"
-  - dac.modules.timedata.construct.SignalConstructAction # same as /mt/construct.SignalConstructAction
-  - /mt/actions.TruncAction
   - "[<]"
+  - "[OrderSlice]"
+  - /mv/actions.CreateOrders
+  - /mv/actions.ExtractOrderSlicesAction
+  - /mv/actions.ViewOrderSlice
 
 quick_actions: {}
 

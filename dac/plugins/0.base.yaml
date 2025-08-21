@@ -15,23 +15,22 @@ data:
 actions:
   _: # the actions for global context
   - /da/Separator
-  - dac.modules.drivetrain.actions.ShowFreqLinesTime
-  - /md/actions.ShowFreqLinesFreq
-  - "[OrderSlice]"
-  - /md/actions.CreateOrdersOfGearbox
-  - /mv/actions.ViewOrderSliceOfMeasurements
   - "[Drivetrain]"
   - /md/actions.CreateBearing
   - /md/actions.CreateGearboxWithBearings
+  - /md/actions.CreateOrdersOfGearbox
   
   /dd/SimpleDefinition:
   - /da/Separator
   - "[Time domain]" # section hint
   - /mt/actions.LoadAction
+  - dac.modules.timedata.construct.SignalConstructAction # same as /mt/construct.SignalConstructAction
+  - /mt/actions.ShowTimeDataAction
   - /md/actions.ShowTimeDataWithFreqLines
   - "[Time data>]"
   - /mt/actions.CounterToTachoAction
   - /mt/actions.PulseToAzimuthAction
+  - /mt/actions.TruncAction
   - /mt/actions.FilterAction
   - "[<]"
   - "[Freq domain]"
@@ -39,13 +38,12 @@ actions:
   - /md/actions.ShowSpectrumWithFreqLines
   - /mv/actions.ToFreqIntermediateAction
   - /mv/actions.ViewFreqIntermediateAction
+  - "[Freq data>]"
   - /mv/actions.AverageIntermediateAction
   - /mv/actions.FilterSpectrumAction
   - /mv/actions.SpectrumToTimeAction
-  - "[OrderSlice]"
-  - /mv/actions.CreateOrders
-  - /mv/actions.ExtractOrderSlicesAction
-  - /mv/actions.ViewOrderSlice
+  - "[<]"
+  - /mv/actions.ShowSpectrumWithGuesser
 
 quick_actions: # temporary action creation for immediate run (action take only one parameter)
   /mt/TimeData:
