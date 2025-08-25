@@ -1,7 +1,7 @@
 """GUI components for the DAC-based applications.
 
 Base components:
-- MainWindow for project loading/saving, and plugin switching
+- MainWindow for project loading/saving, and scenario switching
 - Data list
 - Action list
 - And YAML based node editor
@@ -36,7 +36,7 @@ from dac import APPNAME, PYPI_NAME
 from dac.core import GCK, ActionNode, Container, DataNode, NodeBase, ContextKeyNode
 from dac.core.actions import PAB, VAB, TAB, ActionBase
 from dac.core.thread import ThreadWorker
-from dac.core.plugin import use_plugin
+from dac.core.scenario import use_scenario
 from dac.gui.base import MainWindowBase
 from dac.core.snippet import exec_script
 
@@ -268,25 +268,25 @@ class MainWindow(MainWindowBase):
         dlg.resize(600, 400)
         dlg.show()
 
-    def use_plugin(self, setting_fpath: str, clean: bool=True):
-        use_plugin(setting_fpath, clean, dac_win=self)
-        self._plugin_menu.setTitle(f"Plugins: {path.basename(setting_fpath)}")
+    def use_scenario(self, setting_fpath: str, clean: bool=True):
+        use_scenario(setting_fpath, clean, dac_win=self)
+        self._scenario_menu.setTitle(f"Scenario: {path.basename(setting_fpath)}")
 
-    def use_plugins_dir(self, setting_dpath: str, default: str=None):
+    def use_scenarios_dir(self, setting_dpath: str, default: str=None):
         menubar = self.menuBar()
-        self._plugin_menu = plugin_menu = menubar.addMenu("Plugins") # TODO: make it about-to-open style, so search files everytime
+        self._scenario_menu = scenario_menu = menubar.addMenu("Scenarios") # TODO: make it about-to-open style, so search files everytime
 
-        def apply_plugin_file_gen(f):
-            def apply_plugin_file():
-                self.use_plugin(f, clean=True)
-            return apply_plugin_file
+        def apply_scenario_file_gen(f):
+            def apply_scenario_file():
+                self.use_scenario(f, clean=True)
+            return apply_scenario_file
         
         for f in glob(path.join(setting_dpath, "*.yaml")):
-            act = plugin_menu.addAction(path.basename(f))
-            act.triggered.connect(apply_plugin_file_gen(f))
+            act = scenario_menu.addAction(path.basename(f))
+            act.triggered.connect(apply_scenario_file_gen(f))
 
         if default:
-            self.use_plugin(path.join(setting_dpath, default))
+            self.use_scenario(path.join(setting_dpath, default))
 
     def apply_config(self, config: dict):
         if self.project_config_fpath:
@@ -884,6 +884,6 @@ class MultipleItemsDialog(QtWidgets.QDialog):
 if __name__=="__main__":
     app = QtWidgets.QApplication(sys.argv)
     win = MainWindow()
-    win.use_plugins_dir(path.join(path.dirname(__file__), "../plugins"), default="0.base.yaml")
+    win.use_scenarios_dir(path.join(path.dirname(__file__), "../scenarios"), default="0.base.yaml")
     win.show()
     app.exit(app.exec())

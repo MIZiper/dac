@@ -22,4 +22,4 @@ dac-bin = "dac.gui.main:main"
 
 [tool.setuptools.package-data]
 "dac.gui.resources" = ["*.png"]
-"dac.plugins" = ["*.yaml"]
+"dac.scenarios" = ["*.yaml"]

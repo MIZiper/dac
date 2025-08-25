@@ -8,22 +8,22 @@ from PyQt5 import QtWidgets
 from dac.gui import MainWindow
 
 @click.command()
-@click.option("--config-file", help="Configuration file to load")
-@click.option("--plugin-file", help="YAML file for plugins")
-def main(config_file: str, plugin_file: str):
+@click.option("--project-file", help="Project file to load")
+@click.option("--scenario-file", help="YAML file for scenarios")
+def main(project_file: str, scenario_file: str):
     app = QtWidgets.QApplication(sys.argv)
     win = MainWindow()
 
     # add splash progress for module loading
 
-    if config_file is not None:
-        with open(config_file, mode="r") as fp:
+    if project_file is not None:
+        with open(project_file, mode="r") as fp:
             config = json.load(fp)
             win.apply_config(config)
 
-    # setting_fpath = path.join(path.dirname(__file__), "..", "plugins/0.base.yaml")
-    # win.use_plugin(setting_fpath)
-    win.use_plugins_dir(path.join(path.dirname(__file__), "../plugins"), default="0.base.yaml")
+    # setting_fpath = path.join(path.dirname(__file__), "..", "scenarios/0.base.yaml")
+    # win.use_scenario(setting_fpath)
+    win.use_scenarios_dir(path.join(path.dirname(__file__), "../scenarios"), default="0.base.yaml")
 
     win.show()
     app.exit(app.exec())

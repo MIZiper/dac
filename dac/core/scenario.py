@@ -1,19 +1,17 @@
-"""Handles plugin loading, and register data types / action available for context.
+"""Handles scenario loading, and register data types / action available for context.
 
-Plugin use YAML files to define what data types can be added as contexts,
+Scenario use YAML files to define what data types can be added as contexts,
 and the available actions can be used under corresponding context.
 
 The Data and Action are defined under individual modules.
-Plugin is just a layout definition, any action types can be added to context if you know the path.
-
-Maybe I should rename "plugin" to "scenario".
+Scenario is just a layout definition, any action types can be added to context if you know the path.
 """
 
 import re, yaml
 from os import path
 from dac.core import Container, NodeBase
 
-def use_plugin(setting_fpath: str, clean: bool=True, dac_win=None):
+def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
     alias_pattern = re.compile("^/(?P<alias_name>.+)/(?P<rest>.+)")
     def get_node_type(cls_path: str) -> str | type[NodeBase]:
         if cls_path[0]=="[" and cls_path[-1]=="]":
@@ -38,7 +36,7 @@ def use_plugin(setting_fpath: str, clean: bool=True, dac_win=None):
         if not setting: return
 
         if (inherit_rel_path:=setting.get('inherit')) is not None:
-            use_plugin(path.join(path.dirname(setting_fpath), inherit_rel_path), clean=False, dac_win=dac_win)
+            use_scenario(path.join(path.dirname(setting_fpath), inherit_rel_path), clean=False, dac_win=dac_win)
 
         alias = setting.get('alias', {})
 
