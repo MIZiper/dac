@@ -90,7 +90,7 @@ class GenerateOutputOfGearbox(ActionBase):
 
 class CreateOrdersOfGearbox(ActionBase):
     CAPTION = "Create orders for gearbox"
-    def __call__(self, gearbox: GearboxDefinition, ref_output: bool=True) -> OrderList:
+    def __call__(self, gearbox: GearboxDefinition, ref_output: bool=True, ref2speed: bool=False) -> OrderList:
         """Creates an OrderList for a given GearboxDefinition with reference to input/output shaft.
 
         The input or output shaft will have an order=1, and calculate other predefined frequencies' orders.
@@ -100,8 +100,11 @@ class CreateOrdersOfGearbox(ActionBase):
         gearbox : GearboxDefinition
             The GearboxDefinition to generate orders for.
         ref_output : bool, default True
-            If True, the reference speed is considered to be on the
+            If True, the reference is considered to be on the
             output shaft; otherwise, it's on the input shaft.
+        ref2speed : bool, default False
+            If True, the `order.value` is reference to speed, which is used for order slice with y-axis (ref_bins) in rpm.
+            If False, the `order.value` is reference to frequency.
 
         Returns
         -------
@@ -110,13 +113,17 @@ class CreateOrdersOfGearbox(ActionBase):
         """
 
         ol = OrderList(f"Orders-{gearbox.name}")
+
+        speed = 1 if ref2speed else 60
+
         if ref_output:
-            speed = 60 / gearbox.total_ratio
+            ispeed = speed / gearbox.total_ratio
         else:
-            speed = 60
-        for freq, label in gearbox.get_freqs_labels_at(input_speed=speed):
+            ispeed = speed
+
+        for freq, label in gearbox.get_freqs_labels_at(input_speed=ispeed):
             # when speed==60, the freq value is the order value
-            ol.orders.append(OrderInfo(label, freq/60, freq))
+            ol.orders.append(OrderInfo(label, freq))
 
         return ol
 
@@ -133,9 +140,9 @@ class ViewAllOrders(TAB): # should this under dac.modules.nvh.actions?
             row = []
             for c in range(N):
                 if speed is None:
-                    row.append(f"{o.disp_value * (c+1):.4f}")
+                    row.append(f"{o.value * (c+1):.4f}")
                 else:
-                    row.append(f"{o.value * (c+1) * speed:.2f}")
+                    row.append(f"{o.value * (c+1) * speed/60:.2f}")
             data.append(row)
 
         if speed is None:

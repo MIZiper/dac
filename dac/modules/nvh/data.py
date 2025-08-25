@@ -380,6 +380,7 @@ class FreqIntermediateData(DataBase):
         ----------
         orders : OrderList
             An OrderList defining the orders to extract.
+            Be sure that `order.value` translates `ref_bins` to x (frequency).
         line_tol : int, default 3
             The number of frequency lines around the theoretical order
             frequency to search for the peak amplitude.
@@ -470,11 +471,7 @@ class FreqIntermediateData(DataBase):
             FreqDomainData(y=frfH2)
         )
 
-OrderInfo = namedtuple("OrderInfo", ['name', 'value', 'disp_value'])
-    # name: label, e.g. f_1
-    # value: actual frequency at that order
-    #        e.g. y-axis is speed, the corresponded frequency is 1/60 of y value
-    # disp_value: the order e.g. 1/2/3/...
+OrderInfo = namedtuple("OrderInfo", ['name', 'value'])
 
 class SliceData:
     """Data sliced along an order in a frequency-reference map.

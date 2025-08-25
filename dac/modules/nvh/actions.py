@@ -361,10 +361,9 @@ class CreateOrders(ActionBase):
         ----------
         infos : list[OrderInfo]
             A list where each item defines an order.
-            Each item should be a tuple (name, value, display_value).
+            Each item should be a tuple (name, value).
             `name` is the label (e.g., "f_1").
-            `value` is the ratio to reference.
-            `disp_value` is used when there is conversion between speed and frequency.
+            `value` is the order, normally reference to frequency.
 
         Returns
         -------
@@ -373,10 +372,8 @@ class CreateOrders(ActionBase):
         """
         ol = OrderList(name="Orders")
 
-        for name, value, disp_value in infos:
-            if disp_value is None:
-                disp_value = value
-            ol.orders.append(OrderInfo(name, value, disp_value))
+        for name, value in infos:
+            ol.orders.append(OrderInfo(name, value))
 
         return ol
     
@@ -428,7 +425,7 @@ class GuessOrdersOnSpectrum(VAB):
             f_sel = abs(x1-x0)
             rows = []
             for order in ol.orders:
-                f_order = order.value * harm * speed
+                f_order = order.value * harm * speed/60
                 deviation = abs(f_sel - f_order) / f_order if f_order != 0 else 0
                 if deviation <= tol:
                     rows.append([
