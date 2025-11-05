@@ -164,7 +164,31 @@ class AverageIntermediateAction(ActionBase):
         for channel in channels:
             rst.append(channel.to_powerspectrum(average_by=average_by))
         return rst
-    
+
+class IntegrateFreqDomainAction(PAB):
+    CAPTION = "Integrate FFT spectrum"
+
+    def __call__(self, channels: list[FreqDomainData], order: int=1) -> list[FreqDomainData]:
+        """Integrates the FFT spectrum over the frequency axis.
+
+        Parameters
+        ----------
+        channels : list[FreqDomainData]
+            A list of FreqDomainData objects to integrate.
+        order : int, default 1
+            The order of integration to perform.
+
+        Returns
+        -------
+        list[FreqDomainData]
+            A list of integrated channels as FreqDomainData.
+        """
+
+        rst = []
+        for channel in channels:
+            rst.append(channel.integral(order=order))
+        return rst
+
 class ViewFreqDomainAction(VAB):
     CAPTION = "Show FFT spectrum"
 

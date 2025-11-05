@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from matplotlib.widgets import Button, RadioButtons
 import numpy as np
 import re
 from scipy import signal
@@ -225,6 +227,127 @@ class ShowTimeDataAction(VAB):
             ax.plot(x, y, label=f"{channel.name} [{channel.y_unit}]")
         
         ax.legend(loc="upper right")
+
+@dataclass
+class Point:
+    x: float = 0
+    y: float = 0
+
+class ScalePanMatchAction(VAB):
+    CAPTION = "Scale or pan to match channels"
+    def __call__(self, channels: list[TimeData]):
+        """Visualization to scale in x-axis and pan to check if channels are matching.
+
+        This action is intended to help visually align multiple TimeData channels
+        by allowing the user to select a channel and interactively scale (zoom)
+        and pan the view.
+
+        For the need that channels are sampled at different rotational speeds, when x-axis scales however Δy are same (but can still with offset due to sensor installation).
+
+        """
+
+        fig = self.figure
+        fig.suptitle("Scale/Pan to match channels")
+        canvas = fig.canvas
+        self.channels = channels
+
+        ax = fig.gca()
+        self._ax = ax
+        ax.set_xlabel("Time [s]")
+        bb = ax.get_position()
+        rax = fig.add_axes([0.02, 0.4, bb.xmin-0.02, 0.2])
+
+        self._start_point = None
+        self._lines = lines = []
+        self._labels = labels = ["N/A"]
+        self._selected = 0
+        self._xys = xys = []
+        self._muls = muls = []
+
+        for channel in channels:
+            x = channel.x.copy()
+            y = channel.y.copy()
+            xys.append( (x, y) )
+            muls.append(1)
+            line, = ax.plot(x, y, label=f"{channel.name} [{channel.y_unit}]")
+            lines.append(line)
+            labels.append(channel.name)
+        ax.legend(loc="upper right")
+
+        radiobtn = RadioButtons(rax, labels)
+        self._widgets.append(radiobtn)
+
+        # reset_button = Button(ax, "Reset")
+        # reset_button.on_clicked(lambda event: self.reset_view(ax))
+        # self._widgets.append(reset_button)
+
+        radiobtn.on_clicked(self.oncheck)
+        self._cids.append(canvas.mpl_connect("button_press_event", self.onpress))
+        self._cids.append(canvas.mpl_connect("button_release_event", self.onrelease))
+        self._cids.append(canvas.mpl_connect("motion_notify_event", self.onmove))
+        self._cids.append(canvas.mpl_connect("scroll_event", self.onscroll))
+
+    def onpress(self, event):
+        if event.inaxes is self._ax and self.figure.canvas.widgetlock.available(self) and self._selected!=0:
+            self._start_point = Point(event.xdata, event.ydata)
+
+    def onrelease(self, event):
+        start_point = self._start_point
+        if event.inaxes is not self._ax or start_point is None or self._selected==0:
+            return
+        dx = event.xdata - start_point.x
+        dy = event.ydata - start_point.y
+
+        x, y = self._xys[self._selected-1]
+        x += dx
+        y += dy
+
+        # no update lines, since `onmove` should be triggered
+
+        self.canvas.draw_idle()
+        self._start_point = None
+
+    def onmove(self, event):
+        start_point = self._start_point
+        if event.inaxes is not self._ax or start_point is None or self._selected==0:
+            return
+        dx = event.xdata - start_point.x
+        dy = event.ydata - start_point.y
+
+        x, y = self._xys[self._selected-1]
+        line = self._lines[self._selected-1]
+
+        line.set_data(x+dx, y+dy)
+        self.canvas.draw_idle()
+
+    def onscroll(self, event):
+        if event.inaxes is not self._ax or self._selected==0:
+            return
+
+        x, y = self._xys[self._selected-1]
+        mul = self._muls[self._selected-1]
+        channel = self.channels[self._selected-1]
+        if event.key == "control":
+            mul += event.step * 0.01
+        else:
+            mul += event.step * 0.1
+        self._muls[self._selected-1] = mul
+        new_dt = mul * channel.dt
+
+        line = self._lines[self._selected-1]
+
+        x_a = event.xdata
+        anchor_idx = np.searchsorted(x, x_a)
+        left_x = x_a - np.arange(anchor_idx, 0, -1) * new_dt
+        right_x = x_a + np.arange(1, len(x) - anchor_idx + 1) * new_dt
+        new_x = np.concatenate([left_x, right_x])
+
+        line.set_data(new_x, y)
+        self._xys[self._selected-1] = (new_x, y)
+        self.canvas.draw_idle()
+
+    def oncheck(self, label):
+        self._selected = self._labels.index(label)
 
 class CounterToTachoAction(ActionBase):
     CAPTION = "Encoder counter to tacho"

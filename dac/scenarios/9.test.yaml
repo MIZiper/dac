@@ -21,6 +21,7 @@ actions:
   
   /dd/SimpleDefinition:
   - "[Test space>]"
+  - /mt/actions.ScalePanMatchAction
   - "[<]"
   - "[OrderSlice]"
   - /mv/actions.CreateOrders
