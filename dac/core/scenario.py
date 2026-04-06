@@ -11,6 +11,9 @@ import re, yaml
 from os import path
 from dac.core import Container, NodeBase
 
+def get_nodetype_path(node_type: type[NodeBase]):
+    return f"{node_type.__module__}.{node_type.__qualname__}"
+
 def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
     alias_pattern = re.compile("^/(?P<alias_name>.+)/(?P<rest>.+)")
     def get_node_type(cls_path: str) -> str | type[NodeBase]:
@@ -57,7 +60,22 @@ def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
                     if action_type: Container.RegisterContextAction(data_type, action_type)
 
         if not hasattr(dac_win, "show"): # web-based cannot use PyQt5 and the tasks
-            return
+            # return flat quick_actions
+            quick_actions = []
+            for dts, ass in setting.get("quick_actions", {}).items():
+                data_type = get_node_type(dts)
+                if not data_type: continue
+                for ats, dpn, opd in ass:
+                    action_type = get_node_type(ats)
+                    if not action_type: continue
+                    quick_actions.append((
+                        get_nodetype_path(data_type), # str
+                        get_nodetype_path(action_type), # str
+                        action_type.CAPTION, # str
+                        dpn, # str
+                        opd, # dict
+                    ))
+            return quick_actions
 
         for ats, tss in setting.get("quick_tasks", {}).items(): # action_type_string, task_string_s
             action_type = get_node_type(ats)
