@@ -21,15 +21,13 @@ from os import path
 
 import yaml
 from matplotlib.backend_bases import key_press_handler
-from matplotlib.backends.backend_qt5agg import (FigureCanvasQTAgg,
-                                                NavigationToolbar2QT)
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.Qsci import QsciLexerPython, QsciLexerYAML, QsciScintilla
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QCloseEvent, QMouseEvent
-from PyQt5.QtWidgets import (QMainWindow, QStyle, QTreeWidget, QTreeWidgetItem,
-                             QWidget)
+from PyQt5.QtWidgets import QMainWindow, QStyle, QTreeWidget, QTreeWidgetItem, QWidget
 
 from importlib.metadata import version
 from dac import APPNAME, PYPI_NAME
@@ -44,7 +42,6 @@ NAME, TYPE, REMARK = range(3)
 SET_RECENTDIR = "RecentDir"
 
 
-
 class TaskBase:
     def __init__(self, dac_win: "MainWindow", name: str, *args):
         self.dac_win = dac_win
@@ -55,6 +52,7 @@ class TaskBase:
 
     def __call__(self, action: ActionBase):
         pass
+
 
 class MainWindow(MainWindowBase):
     APPTITLE = APPNAME
@@ -75,7 +73,7 @@ class MainWindow(MainWindowBase):
         self.project_config_fpath: str = None
         self.exec_script: str = ""
         self.apply_config({})
-        
+
     def _create_ui(self):
         super()._create_ui()
 
@@ -95,7 +93,9 @@ class MainWindow(MainWindowBase):
         self.canvas = canvas = FigureCanvasQTAgg(figure)
         self.navibar = navibar = NavigationToolbar2QT(canvas, self)
 
-        canvas.mpl_connect("key_press_event", lambda event: key_press_handler(event, canvas, navibar))
+        canvas.mpl_connect(
+            "key_press_event", lambda event: key_press_handler(event, canvas, navibar)
+        )
         canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         center_widget = QtWidgets.QWidget(self)
@@ -106,11 +106,13 @@ class MainWindow(MainWindowBase):
         self.setCentralWidget(center_widget)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, data_list_docker)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, node_editor_docker)
-        self.splitDockWidget(data_list_docker, action_list_docker, Qt.Orientation.Horizontal)
-    
+        self.splitDockWidget(
+            data_list_docker, action_list_docker, Qt.Orientation.Horizontal
+        )
+
     def _create_menu(self):
         super()._create_menu()
-        
+
         menubar = self.menuBar()
         app_menu = menubar.addMenu("&App")
 
@@ -127,6 +129,7 @@ class MainWindow(MainWindowBase):
             self.project_config_fpath = None
             self.apply_config({})
             self.message("New project created")
+
         def action_save():
             config_fpath = self.project_config_fpath
             if config_fpath is None:
@@ -136,10 +139,13 @@ class MainWindow(MainWindowBase):
                 config = self.get_config()
                 json.dump(config, fp, indent=2)
                 self.message(f"Save project to {config_fpath}")
+
         def action_saveas():
             fpath, fext = QtWidgets.QFileDialog.getSaveFileName(
-                parent=self, caption="Save project configuration", filter="DAC config (*.dac.json);;All(*.*)",
-                directory=self.APPSETTING.value(SET_RECENTDIR)
+                parent=self,
+                caption="Save project configuration",
+                filter="DAC config (*.dac.json);;All(*.*)",
+                directory=self.APPSETTING.value(SET_RECENTDIR),
             )
             if not fpath:
                 return
@@ -147,10 +153,13 @@ class MainWindow(MainWindowBase):
             self.project_config_fpath = fpath
             action_save()
             self.setWindowTitle(f"{path.basename(fpath)} | {self.APPTITLE}")
+
         def action_load_project():
             fpath, fext = QtWidgets.QFileDialog.getOpenFileName(
-                parent=self, caption="Open project configuration", filter="DAC config (*.json);;All (*.*)",
-                directory=self.APPSETTING.value(SET_RECENTDIR)
+                parent=self,
+                caption="Open project configuration",
+                filter="DAC config (*.json);;All (*.*)",
+                directory=self.APPSETTING.value(SET_RECENTDIR),
             )
             if not fpath:
                 return
@@ -160,9 +169,13 @@ class MainWindow(MainWindowBase):
             self.project_config_fpath = fpath
             self.apply_config(config)
             self.message(f"Project loaded from {fpath}")
+
         def action_edit_exec():
             script, ok = QtWidgets.QInputDialog.getMultiLineText(
-                self, "Edit exec script", "Input Python snippet to be executed.\nThe defined classes reside under module `dac.core.snippet`", self.exec_script
+                self,
+                "Edit exec script",
+                "Input Python snippet to be executed.\nThe defined classes reside under module `dac.core.snippet`",
+                self.exec_script,
             )
             if not ok:
                 return
@@ -179,18 +192,24 @@ class MainWindow(MainWindowBase):
         tool_menu = self._dac_menu
         copy_action = tool_menu.addAction("Copy figure", self.action_copy_figure)
         tool_menu.insertAction(tool_menu.actions()[0], copy_action)
-        tool_menu.addAction("Reload modules", self.action_reload_modules, shortcut=Qt.CTRL+Qt.Key_R)
+        tool_menu.addAction(
+            "Reload modules", self.action_reload_modules, shortcut=Qt.CTRL + Qt.Key_R
+        )
 
         # TODO: debug mode {no thread; show action code; send data to ipy; reload modules}
 
         menubar.addMenu(self._dac_menu)
-    
+
     def _create_status(self):
         return super()._create_status()
 
     def _route_signals(self):
-        self.data_list_widget.sig_edit_data_requested.connect(self.node_editor.edit_node)
-        self.action_list_widget.sig_edit_action_requested.connect(self.node_editor.edit_node)
+        self.data_list_widget.sig_edit_data_requested.connect(
+            self.node_editor.edit_node
+        )
+        self.action_list_widget.sig_edit_action_requested.connect(
+            self.node_editor.edit_node
+        )
         self.data_list_widget.sig_action_update_requested.connect(
             self.action_list_widget.refresh
         )
@@ -200,19 +219,29 @@ class MainWindow(MainWindowBase):
         self.action_list_widget.sig_data_update_requested.connect(
             self.data_list_widget.refresh
         )
-        self.node_editor.sig_return_node.connect(self.data_list_widget.action_apply_node_config)
-        self.node_editor.sig_return_node.connect(self.action_list_widget.action_apply_node_config)
-        
+        self.node_editor.sig_return_node.connect(
+            self.data_list_widget.action_apply_node_config
+        )
+        self.node_editor.sig_return_node.connect(
+            self.action_list_widget.action_apply_node_config
+        )
+
     def action_copy_figure(self):
         if self.figure is None:
             return
         with BytesIO() as buf:
             self.figure.savefig(buf)
-            QtWidgets.QApplication.clipboard().setImage(QtGui.QImage.fromData(buf.getvalue()))
+            QtWidgets.QApplication.clipboard().setImage(
+                QtGui.QImage.fromData(buf.getvalue())
+            )
 
     def action_reload_modules(self):
-        dlg = MultipleItemsDialog(self, sorted([mod.__name__ for mod in Container._modules]),
-                                  caption="Reload modules", label="Select modules which need reloaded. \nFor function dev purpose. \nIn some cases, reloading project is required to make the change effect.")
+        dlg = MultipleItemsDialog(
+            self,
+            sorted([mod.__name__ for mod in Container._modules]),
+            caption="Reload modules",
+            label="Select modules which need reloaded. \nFor function dev purpose. \nIn some cases, reloading project is required to make the change effect.",
+        )
         dlg.exec()
         if dlg.result() and (itms := dlg.get_result()):
             for mod_name in itms:
@@ -225,7 +254,9 @@ class MainWindow(MainWindowBase):
         canvas = FigureCanvasQTAgg(figure)
         navibar = NavigationToolbar2QT(canvas, self)
 
-        canvas.mpl_connect("key_press_event", lambda event: key_press_handler(event, canvas, navibar))
+        canvas.mpl_connect(
+            "key_press_event", lambda event: key_press_handler(event, canvas, navibar)
+        )
         canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         widget = QtWidgets.QWidget(self, flags=Qt.WindowType.Tool)
@@ -238,7 +269,7 @@ class MainWindow(MainWindowBase):
         widget.show()
 
         return figure
-    
+
     def show_stats(self, stats):
         """Show a non-modal dialog with a table displaying the provided data.
 
@@ -268,19 +299,22 @@ class MainWindow(MainWindowBase):
         dlg.resize(600, 400)
         dlg.show()
 
-    def use_scenario(self, setting_fpath: str, clean: bool=True):
+    def use_scenario(self, setting_fpath: str, clean: bool = True):
         use_scenario(setting_fpath, clean, dac_win=self)
         self._scenario_menu.setTitle(f"Scenario: {path.basename(setting_fpath)}")
 
-    def use_scenarios_dir(self, setting_dpath: str, default: str=None):
+    def use_scenarios_dir(self, setting_dpath: str, default: str = None):
         menubar = self.menuBar()
-        self._scenario_menu = scenario_menu = menubar.addMenu("Scenarios") # TODO: make it about-to-open style, so search files everytime
+        self._scenario_menu = scenario_menu = menubar.addMenu(
+            "Scenarios"
+        )  # TODO: make it about-to-open style, so search files everytime
 
         def apply_scenario_file_gen(f):
             def apply_scenario_file():
                 self.use_scenario(f, clean=True)
+
             return apply_scenario_file
-        
+
         for f in glob(path.join(setting_dpath, "*.yaml")):
             act = scenario_menu.addAction(path.basename(f))
             act.triggered.connect(apply_scenario_file_gen(f))
@@ -290,7 +324,9 @@ class MainWindow(MainWindowBase):
 
     def apply_config(self, config: dict):
         if self.project_config_fpath:
-            self.setWindowTitle(f"{path.basename(self.project_config_fpath)} | {self.APPTITLE}")
+            self.setWindowTitle(
+                f"{path.basename(self.project_config_fpath)} | {self.APPTITLE}"
+            )
         else:
             self.setWindowTitle(f"[New project] | {self.APPTITLE}")
 
@@ -298,8 +334,10 @@ class MainWindow(MainWindowBase):
         self.exec_script = script = dac_config.get("exec", "")
         if script:
             _, ok = QtWidgets.QInputDialog.getMultiLineText(
-                self, "Embedded exec script found", "Following snippet found, are you sure to execute it?\nPlease make sure the codes are safe.",
-                script
+                self,
+                "Embedded exec script found",
+                "Following snippet found, are you sure to execute it?\nPlease make sure the codes are safe.",
+                script,
             )
             if ok:
                 exec_script(script)
@@ -308,21 +346,24 @@ class MainWindow(MainWindowBase):
         self.action_list_widget.refresh(container)
 
     def get_config(self):
-        container_config = {} if self.container is None else self.container.get_save_config()
+        container_config = (
+            {} if self.container is None else self.container.get_save_config()
+        )
 
         return {
             "dac": {
                 "_": {"version": version(PYPI_NAME)},
-                "exec": self.exec_script, # don't add it by default
+                "exec": self.exec_script,  # don't add it by default
                 **container_config,
             }
         }
+
 
 class DataListWidget(QTreeWidget):
     sig_edit_data_requested = QtCore.pyqtSignal(DataNode)
     sig_action_update_requested = QtCore.pyqtSignal()
     sig_action_runall_requested = QtCore.pyqtSignal()
-    
+
     def __init__(self, parent: MainWindow) -> None:
         super().__init__(parent)
         self._STYLE = self.style()
@@ -339,7 +380,7 @@ class DataListWidget(QTreeWidget):
         self.itemClicked.connect(self.action_item_clicked)
         self.itemDoubleClicked.connect(self.action_item_dblclicked)
 
-    def refresh(self, container: Container=None):
+    def refresh(self, container: Container = None):
         self.clear()
         if container is None:
             container = self._container
@@ -359,7 +400,9 @@ class DataListWidget(QTreeWidget):
             itm.setText(REMARK, node_object.uuid)
             itm.setData(NAME, Qt.ItemDataRole.UserRole, node_object)
             if container.current_key is node_object:
-                itm.setIcon(NAME, self._STYLE.standardIcon(QStyle.StandardPixmap.SP_CommandLink))
+                itm.setIcon(
+                    NAME, self._STYLE.standardIcon(QStyle.StandardPixmap.SP_CommandLink)
+                )
         context_item.setExpanded(True)
 
         data_item = QtWidgets.QTreeWidgetItem(self)
@@ -382,7 +425,7 @@ class DataListWidget(QTreeWidget):
 
         if (not itm) or not (node_object := itm.data(NAME, Qt.ItemDataRole.UserRole)):
             return
-        
+
         if getattr(node_object, "QUICK_ACTIONS", []):
             nodes = []
             for i in self.selectedItems():
@@ -391,8 +434,11 @@ class DataListWidget(QTreeWidget):
                 #     nodes.append(node)
                 nodes.append(node)
 
-            def cb_quickaction_gen(qat: tuple[type[ActionBase], str, dict], data_nodes: list[DataNode]):
+            def cb_quickaction_gen(
+                qat: tuple[type[ActionBase], str, dict], data_nodes: list[DataNode]
+            ):
                 act_type, data_param_name, other_params = qat
+
                 def cb_quickaction():
                     params = {data_param_name: data_nodes, **other_params}
                     act = act_type(context_key=container.current_key)
@@ -402,12 +448,15 @@ class DataListWidget(QTreeWidget):
                     act.pre_run()
                     act(**params)
                     act.post_run()
+
                 return cb_quickaction
-            
+
             for qat in node_object.QUICK_ACTIONS:
                 qat: tuple[type[ActionBase], str, dict]
                 act_type, data_param_name, other_params = qat
-                menu.addAction(act_type.CAPTION).triggered.connect(cb_quickaction_gen(qat, nodes))
+                menu.addAction(act_type.CAPTION).triggered.connect(
+                    cb_quickaction_gen(qat, nodes)
+                )
             menu.addSeparator()
 
         def cb_pushnode_gen(key_object):
@@ -415,47 +464,60 @@ class DataListWidget(QTreeWidget):
                 self.dac_win.action_toggle_ipy_widget(dac_node=key_object)
 
             return cb_pushnode
-        
-        if (uneditable:=itm.data(TYPE, Qt.ItemDataRole.UserRole)): # data nodes in local context
-            menu.addAction("Push to IPy").triggered.connect(cb_pushnode_gen(node_object))
+
+        if uneditable := itm.data(
+            TYPE, Qt.ItemDataRole.UserRole
+        ):  # data nodes in local context
+            menu.addAction("Push to IPy").triggered.connect(
+                cb_pushnode_gen(node_object)
+            )
             # TODO: enable delete local object
             menu.exec(self.viewport().mapToGlobal(pos))
-            return # stop here, no activate / delete
-        
+            return  # stop here, no activate / delete
+
         if node_object is GCK:
+
             def cb_creation_gen(n_t: type[DataNode]):
                 def cb_creation():
                     new_node = n_t(name="[New node]")
                     container.context_keys.add_node(new_node)
                     self.refresh()
                     self.sig_edit_data_requested.emit(new_node)
+
                 return cb_creation
-            
+
             for n_t in Container.GetGlobalDataTypes():
                 if isinstance(n_t, str):
                     menu.addAction(n_t).setEnabled(False)
                 else:
                     menu.addAction(n_t.__name__).triggered.connect(cb_creation_gen(n_t))
         else:
+
             def cb_activate_gen(key_object):
                 def cb_activate():
                     container.activate_context(key_object)
                     self.sig_action_update_requested.emit()
                     self.refresh()
+
                 return cb_activate
-            
+
             def cb_activaterun_gen(key_object):
                 def cb_activaterun():
                     cb_activate_gen(key_object)()
                     self.sig_action_runall_requested.emit()
+
                 return cb_activaterun
 
-            menu.addAction("Activate and Run-all").triggered.connect(cb_activaterun_gen(node_object))
-            
+            menu.addAction("Activate and Run-all").triggered.connect(
+                cb_activaterun_gen(node_object)
+            )
+
             if node_object is container.current_key:
                 menu.addAction("De-activate").triggered.connect(cb_activate_gen(GCK))
             else:
-                menu.addAction("Activate").triggered.connect(cb_activate_gen(node_object))
+                menu.addAction("Activate").triggered.connect(
+                    cb_activate_gen(node_object)
+                )
 
             def cb_del_gen(key_object):
                 def cb_del():
@@ -467,27 +529,35 @@ class DataListWidget(QTreeWidget):
                     self.refresh()
 
                 return cb_del
-            
+
             menu.addSeparator()
-            menu.addAction("Push to IPy").triggered.connect(cb_pushnode_gen(node_object))
+            menu.addAction("Push to IPy").triggered.connect(
+                cb_pushnode_gen(node_object)
+            )
             menu.addAction("Delete").triggered.connect(cb_del_gen(node_object))
 
         menu.exec(self.viewport().mapToGlobal(pos))
 
     def action_item_clicked(self, item: QTreeWidgetItem, col: int):
         data = item.data(NAME, Qt.ItemDataRole.UserRole)
-        uneditable = False # item.data(TYPE, Qt.ItemDataRole.UserRole)
+        uneditable = False  # item.data(TYPE, Qt.ItemDataRole.UserRole)
 
-        if uneditable or not isinstance(data, DataNode) or data is GCK: # GCK not edit-able
+        if (
+            uneditable or not isinstance(data, DataNode) or data is GCK
+        ):  # GCK not edit-able
             return
         self.sig_edit_data_requested.emit(data)
 
     def action_item_dblclicked(self, item: QTreeWidgetItem, col: int):
         uneditable = item.data(TYPE, Qt.ItemDataRole.UserRole)
 
-        if uneditable or (container := self._container) is None or not (node_object := item.data(NAME, Qt.ItemDataRole.UserRole)):
+        if (
+            uneditable
+            or (container := self._container) is None
+            or not (node_object := item.data(NAME, Qt.ItemDataRole.UserRole))
+        ):
             return
-        
+
         def cb_activate(key_object):
             container.activate_context(key_object)
             self.sig_action_update_requested.emit()
@@ -500,25 +570,30 @@ class DataListWidget(QTreeWidget):
 
     def mousePressEvent(self, e: QMouseEvent) -> None:
         # mid-btn-click => copy name. mid-button-click won't trigger 'itemClicked'
-        if (e.button()==Qt.MouseButton.MidButton) and (itm := self.itemAt(e.pos())):
+        if (e.button() == Qt.MouseButton.MidButton) and (itm := self.itemAt(e.pos())):
             name = itm.text(NAME)
             QtWidgets.QApplication.clipboard().setText(name)
         return super().mousePressEvent(e)
-    
-    def action_apply_node_config(self, node: DataNode, config: dict, fire: bool=False):
+
+    def action_apply_node_config(
+        self, node: DataNode, config: dict, fire: bool = False
+    ):
         if not isinstance(node, DataNode):
             return
-        
+
         # if node from previous container, seems works too
-        if (new_name:=config.get("name")) and new_name!=node.name:
-            self._container.context_keys.rename_node_to(node, new_name) # NOTE: error when applying from local nodes
+        if (new_name := config.get("name")) and new_name != node.name:
+            self._container.context_keys.rename_node_to(
+                node, new_name
+            )  # NOTE: error when applying from local nodes
         node.apply_construct_config(config)
         self.refresh()
+
 
 class ActionListWidget(QTreeWidget):
     sig_edit_action_requested = QtCore.pyqtSignal(ActionNode)
     sig_data_update_requested = QtCore.pyqtSignal()
-    
+
     PIXMAP = {
         ActionNode.ActionStatus.INIT: QStyle.StandardPixmap.SP_FileIcon,
         ActionNode.ActionStatus.CONFIGURED: QStyle.StandardPixmap.SP_FileDialogContentsView,
@@ -542,7 +617,7 @@ class ActionListWidget(QTreeWidget):
         self.itemClicked.connect(self.action_item_clicked)
         self.itemDoubleClicked.connect(self.action_item_dblclicked)
 
-    def refresh(self, container: Container=None):
+    def refresh(self, container: Container = None):
         self.clear()
         if container is None:
             container = self._container
@@ -558,28 +633,32 @@ class ActionListWidget(QTreeWidget):
             if action.out_name is not None:
                 itm.setText(TYPE, action.out_name)
 
-            itm.setIcon(NAME, self._STYLE.standardIcon(ActionListWidget.PIXMAP[action.status]))
+            itm.setIcon(
+                NAME, self._STYLE.standardIcon(ActionListWidget.PIXMAP[action.status])
+            )
 
-    def run_action(self, action: ActionNode, complete_cb: callable=None):
+    def run_action(self, action: ActionNode, complete_cb: callable = None):
         if (container := self._container) is None:
             return
-        params = container.prepare_params_for_action(action._SIGNATURE, action._construct_config)
+        params = container.prepare_params_for_action(
+            action._SIGNATURE, action._construct_config
+        )
 
         def completed(rst):
             current_context = container.CurrentContext
             if isinstance(rst, DataNode):
-                rst.name = action.out_name # what if out_name is None?
+                rst.name = action.out_name  # what if out_name is None?
                 current_context.add_node(rst)
                 self.sig_data_update_requested.emit()
             elif isinstance(rst, list):
                 for e_rst in rst:
-                    e_rst: DataNode # cautious if e_rst is not DataNode
+                    e_rst: DataNode  # cautious if e_rst is not DataNode
                     current_context.add_node(e_rst)
                 self.sig_data_update_requested.emit()
             else:
-                pass # no output or other type_of_data
+                pass  # no output or other type_of_data
 
-            action.status = ActionNode.ActionStatus.COMPLETE # TODO: update accordingly
+            action.status = ActionNode.ActionStatus.COMPLETE  # TODO: update accordingly
             self.refresh()
             if callable(complete_cb):
                 complete_cb()
@@ -594,6 +673,7 @@ class ActionListWidget(QTreeWidget):
             action.renderer = self.dac_win.show_stats
 
         if isinstance(action, PAB):
+
             def fn(p, progress_emitter, logger):
                 action._progress = progress_emitter
                 action._message = logger
@@ -601,6 +681,7 @@ class ActionListWidget(QTreeWidget):
                 rst = action(**p)
                 action.post_run()
                 return rst
+
             worker = ThreadWorker(fn=fn, caption=action.name, p=params)
             worker.signals.result.connect(completed)
             self.dac_win.start_thread_worker(worker)
@@ -610,10 +691,12 @@ class ActionListWidget(QTreeWidget):
             action.post_run()
             completed(rst)
 
-    def run_all_actions(self): # both `container.get_node_of_type` and `current_context.add_node(rst)` need current context
+    def run_all_actions(
+        self,
+    ):  # both `container.get_node_of_type` and `current_context.add_node(rst)` need current context
         if (container := self._container) is None:
             return
-        
+
         def action_yield():
             for action in container.ActionsInCurrentContext:
                 if isinstance(action, VAB):
@@ -621,7 +704,7 @@ class ActionListWidget(QTreeWidget):
                 yield action
 
         action_yielder = action_yield()
-        
+
         def run_next_action():
             try:
                 action = next(action_yielder)
@@ -630,21 +713,22 @@ class ActionListWidget(QTreeWidget):
                 pass
 
         run_next_action()
-        
+
     def action_context_requested(self, pos: QtCore.QPoint):
         if (container := self._container) is None:
             return
         itms = self.selectedItems()
         menu = QtWidgets.QMenu("ActionMenu")
 
-        def add_new_actions(menu: QtWidgets.QMenu, index: int=None):
+        def add_new_actions(menu: QtWidgets.QMenu, index: int = None):
             menu_stack = []
+
             def cb_creation_gen(a_t: type[ActionNode]):
                 def cb_creation():
                     a: ActionBase = a_t(context_key=container.current_key)
                     if (task := a.DEFAULT_TASK) is not None:
                         task: TaskBase
-                        task(a) # no `request_update_action` needed
+                        task(a)  # no `request_update_action` needed
 
                     if index is None:
                         container.actions.append(a)
@@ -652,8 +736,9 @@ class ActionListWidget(QTreeWidget):
                         container.actions.insert(index, a)
                     self.refresh()
                     self.sig_edit_action_requested.emit(a)
+
                 return cb_creation
-            
+
             for a_t in container.ActionTypesInCurrentContext:
                 if isinstance(a_t, str):
                     if a_t.endswith(">]"):
@@ -665,22 +750,30 @@ class ActionListWidget(QTreeWidget):
                         menu.addAction(a_t).setEnabled(False)
                 else:
                     menu.addAction(a_t.CAPTION).triggered.connect(cb_creation_gen(a_t))
-                    
+
             modifiers = QtWidgets.QApplication.keyboardModifiers()
             if modifiers & QtCore.Qt.KeyboardModifier.ShiftModifier:
+
                 def custom_callback():
-                    cls_path, ok = QtWidgets.QInputDialog.getText(self, "Custom input", "Input custom 'lib.module.action' to create action.")
+                    cls_path, ok = QtWidgets.QInputDialog.getText(
+                        self,
+                        "Custom input",
+                        "Input custom 'lib.module.action' to create action.",
+                    )
                     if not ok:
                         return
                     a_t = Container.GetClass(cls_path)
                     cb_creation_gen(a_t=a_t)()
+
                 menu.addAction(">> Custom input <<").triggered.connect(custom_callback)
+
         if not itms:
             add_new_actions(menu)
         else:
             acts = [itm.data(NAME, Qt.ItemDataRole.UserRole) for itm in itms]
 
-            if len(acts)==1:
+            if len(acts) == 1:
+
                 def cb_task_gen(task, act):
                     def request_update_action():
                         self.sig_edit_action_requested.emit(act)
@@ -689,7 +782,9 @@ class ActionListWidget(QTreeWidget):
                         task.request_update_action = request_update_action
                         task(act)
                         request_update_action()
+
                     return cb_task
+
                 act: ActionBase = acts[0]
                 for task in act.QUICK_TASKS:
                     task: TaskBase
@@ -711,17 +806,17 @@ class ActionListWidget(QTreeWidget):
                         container.actions.append(a)
 
                     if context_key is container.current_key:
-                        self.refresh() # if not copy to self, no need to refresh
+                        self.refresh()  # if not copy to self, no need to refresh
 
                 return cb_cp2
-            
+
             def cb_mvaft_gen(aa: list[ActionNode], a: ActionNode):
                 def cb_mvaft():
                     for oa in aa:
                         container.actions.remove(oa)
                     idx = container.actions.index(a)
-                    
-                    container.actions[idx+1:idx+1] = aa
+
+                    container.actions[idx + 1 : idx + 1] = aa
 
                     self.refresh()
 
@@ -732,9 +827,9 @@ class ActionListWidget(QTreeWidget):
                     for a in aa:
                         container.actions.remove(a)
                     self.refresh()
-                    
+
                 return cb_del
-            
+
             if container.current_key is not GCK:
                 cp2menu = menu.addMenu("Copy to")
                 current_type = type(container.current_key)
@@ -748,15 +843,17 @@ class ActionListWidget(QTreeWidget):
             mvb4menu = menu.addMenu("Move after")
             for oa in container.actions:
                 if oa.context_key is container.current_key and oa not in acts:
-                    mvb4menu.addAction(oa.name).triggered.connect(cb_mvaft_gen(acts, oa))
+                    mvb4menu.addAction(oa.name).triggered.connect(
+                        cb_mvaft_gen(acts, oa)
+                    )
 
             # TODO: change to drag&drop, mime data using indexes
-                    
+
             def cb_showcode_gen(a: ActionNode):
                 def cb_showcode():
                     try:
                         src = inspect.getsource(a.__class__)
-                    except ModuleNotFoundError: # in compiled program, no src code
+                    except ModuleNotFoundError:  # in compiled program, no src code
                         self.dac_win.message("No src code available", log=False)
                         return
                     editor = QsciScintilla(self.dac_win)
@@ -776,14 +873,15 @@ class ActionListWidget(QTreeWidget):
                     editor.setWindowTitle(a.name)
                     editor.setText(src)
                     editor.show()
+
                 return cb_showcode
-            
+
             menu.addSeparator()
             menu.addAction("Show code").triggered.connect(cb_showcode_gen(acts[0]))
             menu.addAction("Delete").triggered.connect(cb_del_gen(acts))
 
         menu.exec(self.viewport().mapToGlobal(pos))
-    
+
     def action_item_clicked(self, item: QTreeWidgetItem, col: int):
         act = item.data(NAME, Qt.ItemDataRole.UserRole)
         # if not isinstance(act, ActionNode):
@@ -791,12 +889,14 @@ class ActionListWidget(QTreeWidget):
         self.sig_edit_action_requested.emit(act)
 
     def action_item_dblclicked(self, item: QTreeWidgetItem, col: int):
-        self.run_action( item.data(NAME, Qt.ItemDataRole.UserRole) )
+        self.run_action(item.data(NAME, Qt.ItemDataRole.UserRole))
 
-    def action_apply_node_config(self, node: ActionNode, config: dict, fire: bool=False):
+    def action_apply_node_config(
+        self, node: ActionNode, config: dict, fire: bool = False
+    ):
         if not isinstance(node, ActionNode):
             return
-        
+
         # if node from previous container, seems works too
         node.apply_construct_config(config)
 
@@ -806,6 +906,7 @@ class ActionListWidget(QTreeWidget):
             # refresh included in `run_action`
         else:
             self.refresh()
+
 
 class NodeEditorWidget(QWidget):
     sig_return_node = QtCore.pyqtSignal(NodeBase, dict, bool)
@@ -859,7 +960,9 @@ class NodeEditorWidget(QWidget):
 
 
 class MultipleItemsDialog(QtWidgets.QDialog):
-    def __init__(self, parent: QWidget, items: list[str], caption: str, label: str) -> None:
+    def __init__(
+        self, parent: QWidget, items: list[str], caption: str, label: str
+    ) -> None:
         super().__init__(parent)
         self._items = items
 
@@ -872,7 +975,9 @@ class MultipleItemsDialog(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(cap_label)
         layout.addWidget(item_list)
-        btn_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self)
+        btn_box = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self
+        )
         layout.addWidget(btn_box)
 
         btn_box.accepted.connect(self.accept)
@@ -881,9 +986,12 @@ class MultipleItemsDialog(QtWidgets.QDialog):
     def get_result(self):
         return [itm.text() for itm in self.item_list.selectedItems()]
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     win = MainWindow()
-    win.use_scenarios_dir(path.join(path.dirname(__file__), "../scenarios"), default="0.base.yaml")
+    win.use_scenarios_dir(
+        path.join(path.dirname(__file__), "../scenarios"), default="0.base.yaml"
+    )
     win.show()
     app.exit(app.exec())
