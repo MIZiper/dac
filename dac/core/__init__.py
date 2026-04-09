@@ -52,6 +52,52 @@ class NodeNotFoundError(Exception):
 
 class DataNode(NodeBase):
     BASICTYPES = (int, float, str, bool)
+
+    def __init__(
+        self, name: str = None, uuid: str = None, parent: "DataNode" = None
+    ) -> None:
+        super().__init__(name, uuid)
+        self._parent = parent
+        self._children: list[DataNode] = []
+
+    @property
+    def parent(self) -> "DataNode":
+        return self._parent
+
+    @property
+    def children(self) -> list[DataNode]:
+        return self._children
+
+    def add_child(self, child: "DataNode"):
+        child._parent = self
+        self._children.append(child)
+
+    def get_child(self, name: str) -> "DataNode":
+        for child in self._children:
+            if child.name == name:
+                return child
+        return None
+
+    def remove_child(self, name: str) -> "DataNode":
+        for i, child in enumerate(self._children):
+            if child.name == name:
+                child._parent = None
+                return self._children.pop(i)
+        return None
+
+    def parent_until[T: "DataNode"](self, node_type: type[T]) -> T:
+        current = self._parent
+        while current:
+            if isinstance(current, node_type):
+                return current
+            current = current._parent
+        return None
+
+    def iter_all(self):
+        yield self
+        for child in self._children:
+            yield from child.iter_all()
+
     @staticmethod
     def Value2BasicTypes(v):
         if (
@@ -84,7 +130,7 @@ class DataNode(NodeBase):
         return {
             k: DataNode.Value2BasicTypes(v)
             for k, v in self.__dict__.items()
-            if not k.startswith("_")
+            if not k.startswith("_") and k != "children"
         }
 
     def apply_construct_config(self, construct_config: dict):
@@ -207,7 +253,8 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
     def __init__(self, container: "Container") -> None:
         super().__init__()
         self._container = container
-        self._uuid_dict = {} # {uuid: (node_type, name)} # don't store object to avoid ref
+        self._uuid_dict = {}  # {uuid: (node_type, name)} # don't store object to avoid ref
+        self._name_index: dict[tuple[type, str], DataNode] = {}  # {(type, name): node}
 
     @property
     def NodeIter(self) -> list[tuple[type[DataNode], str, DataNode]]:
@@ -215,23 +262,33 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
             for node_name, node in nodes.items():
                 yield (node_type, node_name, node)
 
+    def _index_node(self, node: DataNode):
+        self._name_index[(type(node), node.name)] = node
+        for child in node.children:
+            self._index_node(child)
+
     def add_node(self, node: NodeBase):
         node_type = type(node)
         if node_type in self:
-            self[node_type][node.name] = node # in global context, should delete original node related actions (potential error)
+            self[node_type][node.name] = node
         else:
             self[node_type] = {node.name: node}
         self._uuid_dict[node.uuid] = (node_type, node.name)
+        self._index_node(node)
 
     def get_node_of_type(self, node_name: str, node_type: type[NodeBase]) -> NodeBase:
-        try:
+        if node_type in self and node_name in self[node_type]:
             return self[node_type][node_name]
-        except KeyError:
-            return None
-        
+        return self._name_index.get((node_type, node_name))
+
     def rename_node_to(self, node: NodeBase, new_name: str):
+        node_type = type(node)
         try:
-            del self[type(node)][node.name]
+            del self._name_index[(node_type, node.name)]
+        except:
+            pass
+        try:
+            del self[node_type][node.name]
         except:
             pass
         node.name = new_name
@@ -240,6 +297,7 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
     def get_node_by_uuid(self, uuid: str) -> NodeBase:
         node_type, node_name = self._uuid_dict[uuid]
         return self[node_type][node_name]
+
 
 class Container:
     _key_types = []  # [ type[context_key_node] ]

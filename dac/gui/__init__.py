@@ -408,13 +408,25 @@ class DataListWidget(QTreeWidget):
         data_item = QtWidgets.QTreeWidgetItem(self)
         data_item.setText(NAME, container.current_key.name)
         data_item.setText(TYPE, "Data")
+
+        def add_tree_items(parent_item: QtWidgets.QTreeWidgetItem, node: DataNode):
+            for child_node in node.children:
+                itm = QtWidgets.QTreeWidgetItem(parent_item)
+                itm.setText(NAME, child_node.name)
+                itm.setText(TYPE, type(child_node).__name__)
+                itm.setText(REMARK, child_node.uuid)
+                itm.setData(NAME, Qt.ItemDataRole.UserRole, child_node)
+                itm.setData(TYPE, Qt.ItemDataRole.UserRole, True)
+                add_tree_items(itm, child_node)
+
         for node_type, node_name, node_object in container.CurrentContext.NodeIter:
             itm = QtWidgets.QTreeWidgetItem(data_item)
             itm.setText(NAME, node_name)
             itm.setText(TYPE, node_type.__name__)
             itm.setText(REMARK, node_object.uuid)
             itm.setData(NAME, Qt.ItemDataRole.UserRole, node_object)
-            itm.setData(TYPE, Qt.ItemDataRole.UserRole, True) # mark as un-editable
+            itm.setData(TYPE, Qt.ItemDataRole.UserRole, True)
+            add_tree_items(itm, node_object)
         data_item.setExpanded(True)
 
     def action_context_requested(self, pos: QtCore.QPoint):
