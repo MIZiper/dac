@@ -20,6 +20,10 @@ class DataBase(DataNode):
     # the actions to be performed on individual data node
     # equal to `ActionBase(win, fig, ...)(DataBase())`
 
+class DataWrapper(DataBase):
+    # only wraps data in `_children`, to collapse data list
+    pass
+
 class SimpleDefinition(ContextKeyNode):
     pass
 

@@ -65,7 +65,7 @@ class DataNode(NodeBase):
         return self._parent
 
     @property
-    def children(self) -> list[DataNode]:
+    def children(self) -> list["DataNode"]:
         return self._children
 
     def add_child(self, child: "DataNode"):
@@ -165,6 +165,7 @@ class ActionNode(NodeBase):
 
     @staticmethod
     def Annotation2Config(ann: type | GenericAlias | UnionType):
+        # TODO: support dataclass?
         if hasattr(ann, "_fields"):  # namedtuple
             return [f"[{f}]" for f in ann._fields]
         elif isinstance(ann, GenericAlias):  # ok: list[], tuple[]; nok: dict[], type[]
@@ -361,6 +362,7 @@ class Container:
     def _get_value_of_annotation(
         self, ann: type | GenericAlias | UnionType, pre_value: Any
     ):
+        # TODO: support dataclass?
         if pre_value is None:
             return None
         elif isinstance(

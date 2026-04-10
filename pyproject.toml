@@ -1,8 +1,8 @@
 [project]
 name = "miz-dac"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = ["click", "numpy", "scipy", "matplotlib", "pyyaml", "nptdms"]
-requires-python = ">=3.10" # `|` used for types union
+requires-python = ">=3.12" # [T] used for TypeVar
 authors = [{ name = "MIZiper", email = "miziper@163.com" }]
 description = "Minimal measurement data analysis frame with nodes and container."
 readme = "README.md"
