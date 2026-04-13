@@ -59,22 +59,26 @@ def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
                     action_type = get_node_type(cats)
                     if action_type: Container.RegisterContextAction(data_type, action_type)
 
+        quick_actions = []
+        for dts, ass in setting.get("quick_actions", {}).items(): # data_type_string, action_string_s
+            data_type = get_node_type(dts)
+            if not data_type: continue
+            data_type.QUICK_ACTIONS = []
+            idx = -1
+            for ats, dpn, opd in ass: # action_type_string, data_param_name, other_params_dict
+                action_type = get_node_type(ats)
+                if not action_type: continue
+                idx += 1
+                data_type.QUICK_ACTIONS.append((action_type, dpn, opd))
+                quick_actions.append((
+                    get_nodetype_path(data_type), # str
+                    get_nodetype_path(action_type), # str # this is actually optional?
+                    action_type.CAPTION, # str
+                    idx, # int
+                ))
+
         if not hasattr(dac_win, "show"): # web-based cannot use PyQt5 and the tasks
             # return flat quick_actions
-            quick_actions = []
-            for dts, ass in setting.get("quick_actions", {}).items():
-                data_type = get_node_type(dts)
-                if not data_type: continue
-                for ats, dpn, opd in ass:
-                    action_type = get_node_type(ats)
-                    if not action_type: continue
-                    quick_actions.append((
-                        get_nodetype_path(data_type), # str
-                        get_nodetype_path(action_type), # str
-                        action_type.CAPTION, # str
-                        dpn, # str
-                        opd, # dict
-                    ))
             return quick_actions
 
         for ats, tss in setting.get("quick_tasks", {}).items(): # action_type_string, task_string_s
@@ -95,12 +99,3 @@ def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
             if not task_type: continue
             task = task_type(dac_win=dac_win, name=name, *rest)
             action_type.DEFAULT_TASK = task
-
-        for dts, ass in setting.get("quick_actions", {}).items(): # data_type_string, action_string_s
-            data_type = get_node_type(dts)
-            if not data_type: continue
-            data_type.QUICK_ACTIONS = []
-            for ats, dpn, opd in ass: # action_type_string, data_param_name, other_params_dict
-                action_type = get_node_type(ats)
-                if not action_type: continue
-                data_type.QUICK_ACTIONS.append((action_type, dpn, opd))
