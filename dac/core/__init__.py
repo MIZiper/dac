@@ -5,7 +5,7 @@ This module defines the base classes for data nodes / contexts, action nodes, an
 
 from uuid import uuid4
 from collections import defaultdict
-from typing import Any, Optional
+from typing import Any, Optional, get_origin, get_args, Union
 from types import GenericAlias, UnionType
 import inspect, importlib
 from enum import IntEnum, Enum
@@ -165,18 +165,80 @@ class ActionNode(NodeBase):
 
     @staticmethod
     def Annotation2Config(ann: type | GenericAlias | UnionType):
-        # TODO: support dataclass?
-        if hasattr(ann, "_fields"):  # namedtuple
+        # Provide a user-readable construct-hint for many annotation varieties.
+        # Supports: namedtuple, typing generics (list/tuple/dict/set), Union/Optional,
+        # built-in generics (PEP585 GenericAlias), Enums, DataNode subclasses and Any.
+        from typing import Any as _Any
+
+        # namedtuple-like
+        if hasattr(ann, "_fields"):
             return [f"[{f}]" for f in ann._fields]
-        elif isinstance(ann, GenericAlias):  # ok: list[], tuple[]; nok: dict[], type[] # TODO: dict
-            return [ActionNode.Annotation2Config(t) for t in ann.__args__]
-        elif isinstance(ann, UnionType):
-            return " | ".join(
-                [ActionNode.Annotation2Config(t) for t in ann.__args__]
-            )  # error when `... | list[...]`
-            # return f"<{ann}>"
-        else:
+
+        origin = get_origin(ann)
+        args = get_args(ann)
+
+        # PEP585 / GenericAlias and typing generics
+        if origin is list or isinstance(ann, GenericAlias) and getattr(ann, "__name__", None) == "list":
+            if args:
+                return [ActionNode.Annotation2Config(args[0])]
+            return ["<Any>"]
+        if origin is tuple or (isinstance(ann, GenericAlias) and getattr(ann, "__name__", None) == "tuple"):
+            if args:
+                return [ActionNode.Annotation2Config(a) for a in args]
+            return ["<Any>"]
+        if origin is set or (isinstance(ann, GenericAlias) and getattr(ann, "__name__", None) == "set"):
+            if args:
+                return [ActionNode.Annotation2Config(args[0])]
+            return ["<Any>"]
+        if origin is dict or (isinstance(ann, GenericAlias) and getattr(ann, "__name__", None) == "dict"):
+            if len(args) == 2:
+                return {ActionNode.Annotation2Config(args[0]): ActionNode.Annotation2Config(args[1])}
+            return {"<Any>": "<Any>"}
+
+        # typing.Union / PEP604 unions
+        if origin is None and isinstance(ann, UnionType) or origin is None and getattr(ann, "__module__", None) == "typing" and getattr(ann, "__origin__", None) is None and getattr(ann, "__args__", None):
+            # fallback for older UnionType handling
+            try:
+                args = ann.__args__
+            except Exception:
+                args = ()
+
+        if origin is not None and origin is Union or isinstance(ann, UnionType) or (getattr(ann, "__args__", None) and (origin is None and isinstance(ann, type(get_args(ann))))):
+            union_args = args if args else getattr(ann, "__args__", ())
+            return " | ".join([ActionNode.Annotation2Config(t) for t in union_args])
+
+        # Callable - show signature hint
+        if origin is not None and origin is callable or getattr(ann, "__origin__", None) is None and str(ann).startswith('typing.Callable'):
+            if args and len(args) == 2:
+                params_hint = (
+                    [ActionNode.Annotation2Config(a) for a in args[0]] if isinstance(args[0], (list, tuple)) else "..."
+                )
+                return {"callable": {"params": params_hint, "return": ActionNode.Annotation2Config(args[1])}}
+            return "<callable>"
+
+        # Any
+        if ann is _Any:
+            return "<Any>"
+
+        # Enum
+        try:
+            if issubclass(ann, Enum):
+                return f"<{ann.__name__}>"
+        except Exception:
+            pass
+
+        # DataNode subclasses
+        try:
+            if issubclass(ann, DataNode):
+                return f"<{ann.__name__}>"
+        except Exception:
+            pass
+
+        # Fallback: simple type
+        try:
             return f"<{ann.__name__}>"
+        except Exception:
+            return str(ann)
 
     def __init__(
         self, context_key: DataNode, name: str = None, uuid: str = None
@@ -370,67 +432,95 @@ class Container:
     def _get_value_of_annotation(
         self, ann: type | GenericAlias | UnionType, pre_value: Any
     ):
-        # TODO: support dataclass?
+        # Support many typing annotation variants and convert `pre_value` accordingly.
+        from typing import Any as _Any
+
         if pre_value is None:
             return None
-        elif isinstance(
-            ann, GenericAlias
-        ):  # move before `issubclass`, otherwise error `ann` is not type
-            if ann.__name__ == "list" and len(ann.__args__) == 1:
-                # for list, partial_nodes-not-found is allowed
-                value = []
-                for c in pre_value:
-                    try:
-                        v = self._get_value_of_annotation(ann.__args__[0], c)
-                    except NodeNotFoundError:
-                        continue
-                    value.append(v)
-            elif ann.__name__ == "tuple":
-                # for tuple, every element should be valid
-                value = [
-                    self._get_value_of_annotation(a, c)
-                    for a, c in zip(ann.__args__, pre_value)
-                ]
-            else:
-                raise NotImplementedError # TODO: dict[support]
 
+        origin = get_origin(ann)
+        args = get_args(ann)
+
+        # list[...] - allow partial node resolution (skip missing)
+        if origin is list or (isinstance(ann, GenericAlias) and getattr(ann, "__name__", None) == "list"):
+            elem_type = args[0] if args else _Any
+            value = []
+            for c in pre_value:
+                try:
+                    v = self._get_value_of_annotation(elem_type, c)
+                except NodeNotFoundError:
+                    continue
+                value.append(v)
             return value
-        elif isinstance(ann, UnionType):
-            # not a good design, incomplete
-            # and for regular number, you have to specify `int | float` explicitly
-            # support only simple union, union of GenericAlias not allowed
-            for t in ann.__args__:
-                if isinstance(pre_value, t):
+
+        # tuple[...] - positional types, require matching
+        if origin is tuple or (isinstance(ann, GenericAlias) and getattr(ann, "__name__", None) == "tuple"):
+            if not args:
+                return tuple(pre_value)
+            return [self._get_value_of_annotation(a, c) for a, c in zip(args, pre_value)]
+
+        # set[...] - convert elements
+        if origin is set or (isinstance(ann, GenericAlias) and getattr(ann, "__name__", None) == "set"):
+            elem_type = args[0] if args else _Any
+            return set(self._get_value_of_annotation(elem_type, c) for c in pre_value)
+
+        # dict[key_type, value_type]
+        if origin is dict or (isinstance(ann, GenericAlias) and getattr(ann, "__name__", None) == "dict"):
+            key_t, val_t = (args + (_Any, _Any))[:2]
+            return {self._get_value_of_annotation(key_t, k): self._get_value_of_annotation(val_t, v) for k, v in pre_value.items()}
+
+        # Union / Optional
+        if origin is Union or isinstance(ann, UnionType) or (getattr(ann, "__args__", None) and origin is None):
+            union_args = args if args else getattr(ann, "__args__", ())
+            for t in union_args:
+                if t is type(None):
+                    if pre_value is None:
+                        return None
+                    continue
+                try:
+                    if isinstance(pre_value, t):
+                        return pre_value
+                    new_value = self._get_value_of_annotation(t, pre_value)
+                    if new_value != pre_value:
+                        return new_value
+                except NodeNotFoundError:
+                    # propagate node-not-found only if no union option matches
+                    continue
+                except Exception:
+                    continue
+            raise TypeError(f"Value '{pre_value}' not in the union types '{ann}'.")
+
+        # Enum
+        try:
+            if issubclass(ann, Enum):
+                if isinstance(pre_value, Enum):
                     return pre_value
-                else:
-                    try:
-                        new_value = self._get_value_of_annotation(t, pre_value)
-                        if new_value != pre_value:
-                            # some conversion happened
-                            return new_value
-
-                            # but list[BaseType]: new_value==pre_value
-                    except:
-                        # not the type
-                        pass
-            raise TypeError(f"Value '{pre_value}' not in the types '{ann}'.")
-        elif issubclass(ann, Enum):
-            if isinstance(pre_value, Enum):  # from default
-                return pre_value
-            else:  # str
                 return ann[pre_value]
-        elif issubclass(ann, DataNode):  # and isinstance(pre_value, str)
-            if (
-                value := self.get_node_of_type(node_name=pre_value, node_type=ann)
-            ) is None:
-                raise NodeNotFoundError(
-                    f"Node '{pre_value}' of '{ann.__name__}' not found."
-                )
-            return value
-        elif ann in Container._type_agencies:
+        except Exception:
+            pass
+
+        # DataNode lookup
+        try:
+            if issubclass(ann, DataNode):
+                if (value := self.get_node_of_type(node_name=pre_value, node_type=ann)) is None:
+                    raise NodeNotFoundError(f"Node '{pre_value}' of '{ann.__name__}' not found.")
+                return value
+        except Exception:
+            # if issubclass check failed because ann wasn't a class, ignore
+            pass
+
+        # Registered type agency
+        if ann in Container._type_agencies:
             return Container._type_agencies[ann](pre_value)
-        else:
-            return pre_value
+
+        # Fallback: if annotation is Any or unhandled type, return pre_value
+        try:
+            if ann is _Any:
+                return pre_value
+        except Exception:
+            pass
+
+        return pre_value
 
     def prepare_params_for_action(
         self, signature: inspect.Signature | dict, construct_config: dict
