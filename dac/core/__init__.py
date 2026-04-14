@@ -5,14 +5,14 @@ This module defines the base classes for data nodes / contexts, action nodes, an
 
 from uuid import uuid4
 from collections import defaultdict
-from typing import Any
+from typing import Any, Optional
 from types import GenericAlias, UnionType
 import inspect, importlib
 from enum import IntEnum, Enum
 
 
 class NodeBase:
-    def __init__(self, name: str = None, uuid: str = None) -> None:
+    def __init__(self, name: Optional[str] = None, uuid: Optional[str] = None) -> None:
         self._hash = None
         self._construct_config = {}
 
@@ -54,14 +54,14 @@ class DataNode(NodeBase):
     BASICTYPES = (int, float, str, bool)
 
     def __init__(
-        self, name: str = None, uuid: str = None, parent: "DataNode" = None
+        self, name: Optional[str] = None, uuid: Optional[str] = None, parent: Optional["DataNode"] = None
     ) -> None:
         super().__init__(name, uuid)
         self._parent = parent
         self._children: list[DataNode] = []
 
     @property
-    def parent(self) -> "DataNode":
+    def parent(self) -> Optional["DataNode"]:
         return self._parent
 
     @property
@@ -72,13 +72,13 @@ class DataNode(NodeBase):
         child._parent = self
         self._children.append(child)
 
-    def get_child(self, name: str) -> "DataNode":
+    def get_child(self, name: str) -> Optional["DataNode"]:
         for child in self._children:
             if child.name == name:
                 return child
         return None
 
-    def remove_child(self, name: str) -> "DataNode":
+    def remove_child(self, name: str) -> Optional["DataNode"]:
         for i, child in enumerate(self._children):
             if child.name == name:
                 child._parent = None
@@ -91,7 +91,7 @@ class DataNode(NodeBase):
             if isinstance(current, node_type):
                 return current
             current = current._parent
-        return None
+        raise Exception(f"Didn't find a parent of <{node_type}>")
 
     def iter_all(self):
         yield self
@@ -168,7 +168,7 @@ class ActionNode(NodeBase):
         # TODO: support dataclass?
         if hasattr(ann, "_fields"):  # namedtuple
             return [f"[{f}]" for f in ann._fields]
-        elif isinstance(ann, GenericAlias):  # ok: list[], tuple[]; nok: dict[], type[]
+        elif isinstance(ann, GenericAlias):  # ok: list[], tuple[]; nok: dict[], type[] # TODO: dict
             return [ActionNode.Annotation2Config(t) for t in ann.__args__]
         elif isinstance(ann, UnionType):
             return " | ".join(
@@ -264,7 +264,9 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
                 yield (node_type, node_name, node)
 
     def _index_node(self, node: DataNode):
-        self._name_index[(type(node), node.name)] = node
+        node_type = type(node)
+        self._name_index[(node_type, node.name)] = node
+        self._uuid_dict[node.uuid] = (node_type, node.name)
         for child in node.children:
             self._index_node(child)
 
@@ -274,7 +276,6 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
             self[node_type][node.name] = node
         else:
             self[node_type] = {node.name: node}
-        self._uuid_dict[node.uuid] = (node_type, node.name)
         self._index_node(node)
 
     def get_node_of_type(self, node_name: str, node_type: type[NodeBase]) -> NodeBase:
@@ -292,12 +293,19 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
             del self[node_type][node.name]
         except:
             pass
+        try:
+            orig_node = self._name_index.get((node_type, new_name))
+            del self._uuid_dict[orig_node.uuid]
+            # potential issue when renaming root node to a child_node?
+            # it will be presented but not accessible?
+        except:
+            pass
         node.name = new_name
         self.add_node(node)
 
     def get_node_by_uuid(self, uuid: str) -> NodeBase:
         node_type, node_name = self._uuid_dict[uuid]
-        return self[node_type][node_name]
+        return self._name_index.get((node_type, node_name))
 
 
 class Container:
@@ -384,7 +392,7 @@ class Container:
                     for a, c in zip(ann.__args__, pre_value)
                 ]
             else:
-                raise NotImplementedError
+                raise NotImplementedError # TODO: dict[support]
 
             return value
         elif isinstance(ann, UnionType):
