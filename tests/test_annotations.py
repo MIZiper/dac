@@ -20,7 +20,7 @@ def test_annotation2config_basic_and_collections():
     # tuple[int,str] -> ['<int>','<str>']
     assert ActionNode.Annotation2Config(tuple[int, str]) == ["<int>", "<str>"]
 
-    # dict[str,int] -> {'key': '<str>', 'value': '<int>'}
+    # dict[str,int] -> {'<str>': '<int>'}
     assert ActionNode.Annotation2Config(dict[str, int]) == {"<str>": "<int>"}
 
     # set[float]
@@ -29,19 +29,25 @@ def test_annotation2config_basic_and_collections():
     # Union/Optional
     u = ActionNode.Annotation2Config(Union[int, str])
     assert "<int>" in u and "<str>" in u
+    u = ActionNode.Annotation2Config(int | str)
+    assert "<int>" in u and "<str>" in u
 
     opt = ActionNode.Annotation2Config(Optional[int])
     assert "<int>" in opt and "None" in opt or "NoneType" in opt
 
-    # Enum
-    assert ActionNode.Annotation2Config(Color) == "<Color>"
+    # Enum -> [key1 | key2 | ...]
+    e = ActionNode.Annotation2Config(Color)
+    for k in Color:
+        assert k.name in e
 
+def test_annotation2config_more():
+    assert ActionNode.Annotation2Config(list) == "<list>"
 
-def test_annotation2config_callable_and_any():
-    c = ActionNode.Annotation2Config(Callable[[int, str], bool])
-    assert isinstance(c, dict) and "callable" in c or "return" in str(c)
+    class MyNode(DataNode):
+        pass
 
-    assert ActionNode.Annotation2Config(object) == "<object>" or isinstance(ActionNode.Annotation2Config(object), str)
+    assert ActionNode.Annotation2Config(MyNode) == "<MyNode>"
+    assert ActionNode.Annotation2Config(list[MyNode]) == ["<MyNode>"]
 
 
 def test_container_get_value_of_annotation_basic_conversion_and_collections():

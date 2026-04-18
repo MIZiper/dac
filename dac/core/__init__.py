@@ -207,14 +207,14 @@ class ActionNode(NodeBase):
             union_args = args if args else getattr(ann, "__args__", ())
             return " | ".join([ActionNode.Annotation2Config(t) for t in union_args])
 
-        # Callable - show signature hint
-        if origin is not None and origin is callable or getattr(ann, "__origin__", None) is None and str(ann).startswith('typing.Callable'):
-            if args and len(args) == 2:
-                params_hint = (
-                    [ActionNode.Annotation2Config(a) for a in args[0]] if isinstance(args[0], (list, tuple)) else "..."
-                )
-                return {"callable": {"params": params_hint, "return": ActionNode.Annotation2Config(args[1])}}
-            return "<callable>"
+        # # Callable - show signature hint
+        # if origin is not None and origin is callable or getattr(ann, "__origin__", None) is None and str(ann).startswith('typing.Callable'):
+        #     if args and len(args) == 2:
+        #         params_hint = (
+        #             [ActionNode.Annotation2Config(a) for a in args[0]] if isinstance(args[0], (list, tuple)) else "..."
+        #         )
+        #         return {"callable": {"params": params_hint, "return": ActionNode.Annotation2Config(args[1])}}
+        #     return "<callable>"
 
         # Any
         if ann is _Any:
@@ -223,7 +223,8 @@ class ActionNode(NodeBase):
         # Enum
         try:
             if issubclass(ann, Enum):
-                return f"<{ann.__name__}>"
+                keys = [k.name for k in ann]
+                return f"[{' | '.join(keys)}]"
         except Exception:
             pass
 
@@ -265,6 +266,8 @@ class ActionNode(NodeBase):
                 elif param.default is not inspect._empty:
                     if isinstance(param.default, Enum):
                         cfg[key] = param.default.name
+                    elif isinstance(param.default, tuple):
+                        cfg[key] = list(param.default)
                     else:
                         cfg[key] = param.default
                 elif param.annotation is not inspect._empty:
