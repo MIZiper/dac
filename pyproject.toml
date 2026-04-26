@@ -1,6 +1,6 @@
 [project]
 name = "miz-dac"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = ["click", "numpy", "scipy", "matplotlib", "pyyaml", "nptdms"]
 requires-python = ">=3.12" # [T] used for TypeVar
 authors = [{ name = "MIZiper", email = "miziper@163.com" }]
