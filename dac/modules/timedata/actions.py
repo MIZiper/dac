@@ -5,6 +5,7 @@ import re
 from scipy import signal
 
 from dac.core.actions import ActionBase, VAB, PAB, SAB
+from dac.core.exceptions import ActionExecutionError
 from . import TimeData
 from .data_loader import load_tdms
 from ..nvh import FilterType
@@ -550,5 +551,8 @@ class OpAction(ActionBase):
         
         # assert same dt and same length
         ys = [channel.y for channel in channels]
-        y = eval(re.sub(r"{(\d+)}", r"ys[\1]", op_str))
+        try:
+            y = eval(re.sub(r"{(\d+)}", r"ys[\1]", op_str))
+        except Exception as e:
+            raise ActionExecutionError(f"Failed to evaluate operation '{op_str}': {e}") from e
         return TimeData("Channel-Op_ed", y=y, dt=channels[0].dt, y_unit=y_unit)

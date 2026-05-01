@@ -8,5 +8,13 @@ So the analysis is also defined inside configuration file, under config['dac']['
 The defined class will reside under this module `dac.core.snippet`.
 """
 
+from dac.core.exceptions import SnippetError
+
+
 def exec_script(script: str):
-    exec(script, globals=globals())
+    if not script:
+        return
+    try:
+        exec(script, globals=globals())
+    except Exception as e:
+        raise SnippetError(f"Failed to execute snippet: {e}") from e

@@ -135,10 +135,13 @@ class MainWindow(MainWindowBase):
             if config_fpath is None:
                 action_saveas()
                 return
-            with open(config_fpath, mode="w", encoding="utf8") as fp:
-                config = self.get_config()
-                json.dump(config, fp, indent=2)
-                self.message(f"Save project to {config_fpath}")
+            try:
+                with open(config_fpath, mode="w", encoding="utf8") as fp:
+                    config = self.get_config()
+                    json.dump(config, fp, indent=2)
+                    self.message(f"Save project to {config_fpath}")
+            except OSError as e:
+                self.message(f"Failed to save project: {e}")
 
         def action_saveas():
             fpath, fext = QtWidgets.QFileDialog.getSaveFileName(
@@ -164,11 +167,14 @@ class MainWindow(MainWindowBase):
             if not fpath:
                 return
             self.APPSETTING.setValue(SET_RECENTDIR, path.dirname(fpath))
-            with open(fpath, mode="r", encoding="utf8") as fp:
-                config = json.load(fp)
-            self.project_config_fpath = fpath
-            self.apply_config(config)
-            self.message(f"Project loaded from {fpath}")
+            try:
+                with open(fpath, mode="r", encoding="utf8") as fp:
+                    config = json.load(fp)
+                self.project_config_fpath = fpath
+                self.apply_config(config)
+                self.message(f"Project loaded from {fpath}")
+            except (FileNotFoundError, json.JSONDecodeError) as e:
+                self.message(f"Failed to load project: {e}")
 
         def action_edit_exec():
             script, ok = QtWidgets.QInputDialog.getMultiLineText(
@@ -340,8 +346,16 @@ class MainWindow(MainWindowBase):
                 script,
             )
             if ok:
-                exec_script(script)
-        self.container = container = Container.parse_save_config(dac_config)
+                try:
+                    exec_script(script)
+                except Exception as e:
+                    self.message(f"Failed to execute snippet: {e}")
+        try:
+            self.container = container = Container.parse_save_config(dac_config)
+        except Exception as e:
+            self.message(f"Failed to parse project config: {e}")
+            self.container = Container()
+            return
         self.data_list_widget.refresh(container)
         self.action_list_widget.refresh(container)
 
@@ -349,11 +363,15 @@ class MainWindow(MainWindowBase):
         container_config = (
             {} if self.container is None else self.container.get_save_config()
         )
+        try:
+            app_version = version(PYPI_NAME)
+        except Exception:
+            app_version = "unknown"
 
         return {
             "dac": {
-                "_": {"version": version(PYPI_NAME)},
-                "exec": self.exec_script,  # don't add it by default
+                "_": {"version": app_version},
+                "exec": self.exec_script,
                 **container_config,
             }
         }
@@ -670,7 +688,13 @@ class ActionListWidget(QTreeWidget):
             else:
                 pass  # no output or other type_of_data
 
-            action.status = ActionNode.ActionStatus.COMPLETE  # TODO: update accordingly
+            action.status = ActionNode.ActionStatus.COMPLETE
+            self.refresh()
+            if callable(complete_cb):
+                complete_cb()
+
+        def failed(etype, evalue, traceback_obj):
+            action.status = ActionNode.ActionStatus.FAILED
             self.refresh()
             if callable(complete_cb):
                 complete_cb()
@@ -696,6 +720,7 @@ class ActionListWidget(QTreeWidget):
 
             worker = ThreadWorker(fn=fn, caption=action.name, p=params)
             worker.signals.result.connect(completed)
+            worker.signals.error.connect(failed)
             self.dac_win.start_thread_worker(worker)
         else:
             action.pre_run()
@@ -967,7 +992,13 @@ class NodeEditorWidget(QWidget):
     def action_apply(self, fire=True):
         if self._current_node is None:
             return
-        config = yaml.load(StringIO(self.editor.text()), Loader=yaml.FullLoader)
+        try:
+            config = yaml.load(StringIO(self.editor.text()), Loader=yaml.FullLoader)
+        except yaml.YAMLError as e:
+            parent = self.window()
+            if hasattr(parent, "message"):
+                parent.message(f"Invalid YAML: {e}")
+            return
         self.sig_return_node.emit(self._current_node, config, fire)
 
 

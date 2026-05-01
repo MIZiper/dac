@@ -4,6 +4,8 @@ __pycache__/
 *$py.class
 
 test/
+AGENTS.md
+uv.lock
 
 # C extensions
 *.so

@@ -66,9 +66,9 @@ class ThreadWorker(QRunnable):
             self.signals.started.emit()
             
             result = self.fn(*self.args, **self.kwargs)
-        except:
-            # traceback.print_exc()
-            # exctype, value, tb = sys.exc_info()
+        except BaseException as e:
+            if isinstance(e, (KeyboardInterrupt, SystemExit)):
+                raise
             self.signals.error.emit(*sys.exc_info())
         else:
             self.signals.result.emit(result)  # Return the result of the processing

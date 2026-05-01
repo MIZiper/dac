@@ -10,6 +10,18 @@ from types import GenericAlias, UnionType
 import inspect, importlib
 from enum import IntEnum, Enum
 
+from dac.core.exceptions import (
+    NodeNotFoundError,
+    ActionConfigError,
+    ContainerError,
+    ClassNotFoundError,
+    ContextError,
+    TypeAgencyError,
+)
+from dac.core.logging import get_logger
+
+_logger = get_logger("core")
+
 
 class NodeBase:
     def __init__(self, name: Optional[str] = None, uuid: Optional[str] = None) -> None:
@@ -44,10 +56,6 @@ class NodeBase:
             "_class_": f"{cls.__module__}.{cls.__qualname__}",
             **self.get_construct_config(),
         }
-
-
-class NodeNotFoundError(Exception):
-    pass
 
 
 class DataNode(NodeBase):
@@ -91,7 +99,7 @@ class DataNode(NodeBase):
             if isinstance(current, node_type):
                 return current
             current = current._parent
-        raise Exception(f"Didn't find a parent of <{node_type}>")
+        raise NodeNotFoundError(f"Didn't find a parent of <{node_type}>")
 
     def iter_all(self):
         yield self
@@ -291,16 +299,24 @@ class ActionNode(NodeBase):
     def apply_construct_config(self, construct_config: dict):
         if "name" in construct_config:
             self.name = construct_config["name"]
-            # del construct_config["name"]
         if "out_name" in construct_config:
             self.out_name = construct_config["out_name"]
-            # del construct_config["out_name"]
 
-        # TODO: validate the construct_config
+        valid_keys = self._validate_config_keys(construct_config)
         self._construct_config = construct_config
 
-        # if self.status==ActionNode.ActionStatus.INIT:
         self.status = ActionNode.ActionStatus.CONFIGURED
+
+    def _validate_config_keys(self, construct_config: dict) -> None:
+        if isinstance(self._SIGNATURE, inspect.Signature):
+            sig_params = set(self._SIGNATURE.parameters.keys())
+            sig_params -= {"self"}
+            invalid = {k for k in construct_config if k != "name" and k != "out_name"} - sig_params
+        else:
+            sig_params = set(self._SIGNATURE.keys())
+            invalid = {k for k in construct_config if k != "name" and k != "out_name"} - sig_params
+        if invalid:
+            raise ActionConfigError(f"Unknown parameter(s): {', '.join(invalid)}")
 
     def get_save_config(self) -> dict:
         cfg = super().get_save_config()
@@ -350,21 +366,21 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
 
     def rename_node_to(self, node: NodeBase, new_name: str):
         node_type = type(node)
-        try:
-            del self._name_index[(node_type, node.name)]
-        except:
-            pass
-        try:
-            del self[node_type][node.name]
-        except:
-            pass
-        try:
-            orig_node = self._name_index.get((node_type, new_name))
-            del self._uuid_dict[orig_node.uuid]
-            # potential issue when renaming root node to a child_node?
-            # it will be presented but not accessible?
-        except:
-            pass
+        if node_type == type(node):
+            try:
+                del self._name_index[(node_type, node.name)]
+            except KeyError:
+                pass
+            try:
+                del self[node_type][node.name]
+            except KeyError:
+                pass
+            try:
+                orig_node = self._name_index.get((node_type, new_name))
+                if orig_node is not None:
+                    del self._uuid_dict[orig_node.uuid]
+            except KeyError:
+                pass
         node.name = new_name
         self.add_node(node)
 
@@ -499,7 +515,7 @@ class Container:
                 if isinstance(pre_value, Enum):
                     return pre_value
                 return ann[pre_value]
-        except Exception:
+        except TypeError:
             pass
 
         # DataNode lookup
@@ -508,13 +524,16 @@ class Container:
                 if (value := self.get_node_of_type(node_name=pre_value, node_type=ann)) is None:
                     raise NodeNotFoundError(f"Node '{pre_value}' of '{ann.__name__}' not found.")
                 return value
-        except Exception:
+        except TypeError:
             # if issubclass check failed because ann wasn't a class, ignore
             pass
 
         # Registered type agency
         if ann in Container._type_agencies:
-            return Container._type_agencies[ann](pre_value)
+            try:
+                return Container._type_agencies[ann](pre_value)
+            except Exception as e:
+                raise TypeAgencyError(f"Type agency for '{ann}' failed: {e}") from e
 
         # Fallback: if annotation is Any or unhandled type, return pre_value
         try:
@@ -536,7 +555,7 @@ class Container:
                 value = construct_config.get(key, param.default)
                 if value is inspect._empty:
                     # not provided and no default
-                    raise Exception(f"Parameter '{key}' not provided.")
+                    raise ActionConfigError(f"Parameter '{key}' not provided.")
 
                 params[key] = self._get_value_of_annotation(param.annotation, value)
         else:  # signature is a dict, SAB
@@ -572,8 +591,9 @@ class Container:
 
             try:
                 data_class: type[DataNode] = Container.GetClass(cls_path)
-            except AttributeError:  # not found
-                continue  # TODO: log
+            except (AttributeError, ModuleNotFoundError) as e:
+                _logger.warning("Failed to load data class '%s': %s", cls_path, e)
+                continue
             data_node = data_class(name="[Default]", uuid=uuid)
             data_node.apply_construct_config(data_config)
 
@@ -590,11 +610,13 @@ class Container:
 
             try:
                 act_class: type[ActionNode] = Container.GetClass(cls_path)
-            except AttributeError:
-                continue  # TODO: log
+            except (AttributeError, ModuleNotFoundError) as e:
+                _logger.warning("Failed to load action class '%s': %s", cls_path, e)
+                continue
 
             if "_context_" in act_config:
                 if act_config["_context_"] not in nodes:
+                    _logger.warning("Context node '%s' not found for action '%s', skipping", act_config["_context_"], act_config.get("name", cls_path))
                     continue
                 context_key = nodes[act_config["_context_"]]
                 del act_config["_context_"]

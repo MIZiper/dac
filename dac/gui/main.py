@@ -17,9 +17,12 @@ def main(project_file: str, scenario_file: str):
     # add splash progress for module loading
 
     if project_file is not None:
-        with open(project_file, mode="r") as fp:
-            config = json.load(fp)
-            win.apply_config(config)
+        try:
+            with open(project_file, mode="r") as fp:
+                config = json.load(fp)
+                win.apply_config(config)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Error loading project file: {e}", file=sys.stderr)
 
     # setting_fpath = path.join(path.dirname(__file__), "..", "scenarios/0.base.yaml")
     # win.use_scenario(setting_fpath)

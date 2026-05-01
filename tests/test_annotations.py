@@ -2,7 +2,17 @@ import pytest
 from typing import Union, Optional, Callable, Dict
 from enum import Enum
 
-from dac.core import ActionNode, Container, DataNode
+from dac.core import ActionNode, Container, DataNode, DataContext, ContextKeyNode
+from dac.core.exceptions import (
+    NodeNotFoundError,
+    ActionConfigError,
+    ContainerError,
+    ClassNotFoundError,
+    ContextError,
+    TypeAgencyError,
+    ActionExecutionError,
+    SnippetError,
+)
 
 
 class Color(Enum):
@@ -110,3 +120,123 @@ def test_container_registered_type_agency():
     Container.RegisterNodeTypeAgency(Custom, agency)
     res = c._get_value_of_annotation(Custom, "123")
     assert res == 123
+
+
+# ---- New error handling tests ----
+
+
+def test_node_not_found_error_is_typed():
+    with pytest.raises(NodeNotFoundError):
+        class MyNode(DataNode):
+            pass
+        node = MyNode(name="test")
+        node.parent_until(ContextKeyNode)
+
+
+def test_rename_node_to_keyerror():
+    ctx = DataContext(Container())
+    node = DataNode(name="test")
+    ctx.add_node(node)
+
+    ctx.rename_node_to(node, "renamed")
+
+    assert node.name == "renamed"
+    renamed = ctx.get_node_of_type("renamed", DataNode)
+    assert renamed is node
+
+
+def test_action_apply_config_validation():
+    class TestAction(ActionNode):
+        CAPTION = "Test"
+        def __call__(self, a: int, b: str = "default"):
+            pass
+
+    from dac.core import GCK
+    action = TestAction(context_key=GCK)
+    action.apply_construct_config({"a": 1})
+    assert action.status == ActionNode.ActionStatus.CONFIGURED
+
+    action2 = TestAction(context_key=GCK)
+    with pytest.raises(ActionConfigError):
+        action2.apply_construct_config({"unknown_param": 42})
+
+
+def test_prepare_params_raises_config_error():
+    class TestAction(ActionNode):
+        CAPTION = "Test"
+        def __call__(self, required_param: int, optional: str = "default"):
+            pass
+
+    from dac.core import GCK
+    action = TestAction(context_key=GCK)
+    container = Container()
+
+    with pytest.raises(ActionConfigError):
+        container.prepare_params_for_action(action._SIGNATURE, {})
+
+
+def test_type_agency_error_propagation():
+    c = Container()
+
+    class Custom:
+        pass
+
+    def failing_agency(x):
+        raise ValueError("Agency failed")
+
+    Container.RegisterNodeTypeAgency(Custom, failing_agency)
+
+    with pytest.raises(TypeAgencyError):
+        c._get_value_of_annotation(Custom, "test")
+
+
+def test_datanode_lookup_raises_node_not_found():
+    c = Container()
+
+    class MyNode(DataNode):
+        pass
+
+    with pytest.raises(NodeNotFoundError):
+        c._get_value_of_annotation(MyNode, "nonexistent")
+
+
+def test_action_status_failed_enum():
+    assert ActionNode.ActionStatus.FAILED == -1
+    assert ActionNode.ActionStatus.FAILED.name == "FAILED"
+
+
+def test_exception_hierarchy():
+    err = NodeNotFoundError("test")
+    assert isinstance(err, Exception)
+    assert isinstance(err, NodeNotFoundError)
+
+    err = ActionConfigError("test")
+    assert isinstance(err, ActionConfigError)
+
+    err = TypeAgencyError("test")
+    assert isinstance(err, TypeAgencyError)
+
+
+def test_snippet_exec_error():
+    with pytest.raises(SnippetError):
+        from dac.core.snippet import exec_script
+        exec_script("1 / 0")
+
+
+def test_snippet_none_or_empty():
+    from dac.core.snippet import exec_script
+    exec_script("")
+    exec_script(None)
+
+
+def test_apply_config_validates_unknown_params():
+    class TestAction(ActionNode):
+        CAPTION = "Test"
+        def __call__(self, x: float = 1.0):
+            pass
+
+    from dac.core import GCK
+    action = TestAction(context_key=GCK)
+
+    with pytest.raises(ActionConfigError):
+        action.apply_construct_config({"name": "ok", "out_name": "ok", "y": 2.0})

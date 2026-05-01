@@ -10,6 +10,10 @@ Scenario is just a layout definition, any action types can be added to context i
 import re, yaml
 from os import path
 from dac.core import Container, NodeBase
+from dac.core.exceptions import ScenarioError
+from dac.core.logging import get_logger
+
+_logger = get_logger("scenario")
 
 def get_nodetype_path(node_type: type[NodeBase]):
     return f"{node_type.__module__}.{node_type.__qualname__}"
@@ -25,8 +29,11 @@ def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
 
         try:
             return Container.GetClass(cls_path)
-        except AttributeError:
-            dac_win.message(f"Module `{cls_path}` not found")
+        except (AttributeError, ModuleNotFoundError) as e:
+            if dac_win:
+                dac_win.message(f"Module `{cls_path}` not found: {e}")
+            else:
+                _logger.warning("Module `%s` not found: %s", cls_path, e)
             return None
         
     if clean:
@@ -34,68 +41,83 @@ def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
         Container._key_types.clear()
         # quick_tasks and quick_actions are always overwritten
 
-    with open(setting_fpath, mode="r", encoding="utf8") as fp:
-        setting: dict = yaml.load(fp, Loader=yaml.FullLoader)
-        if not setting: return
+    try:
+        with open(setting_fpath, mode="r", encoding="utf8") as fp:
+            setting: dict = yaml.load(fp, Loader=yaml.FullLoader)
+    except FileNotFoundError:
+        msg = f"Scenario file not found: {setting_fpath}"
+        _logger.error(msg)
+        if dac_win:
+            dac_win.message(msg)
+        return
+    except yaml.YAMLError as e:
+        msg = f"Invalid YAML in scenario file '{setting_fpath}': {e}"
+        _logger.error(msg)
+        if dac_win:
+            dac_win.message(msg)
+        return
 
-        if (inherit_rel_path:=setting.get('inherit')) is not None:
-            use_scenario(path.join(path.dirname(setting_fpath), inherit_rel_path), clean=False, dac_win=dac_win)
+    if not setting:
+        return
 
-        alias = setting.get('alias', {})
+    if (inherit_rel_path:=setting.get('inherit')) is not None:
+        use_scenario(path.join(path.dirname(setting_fpath), inherit_rel_path), clean=False, dac_win=dac_win)
 
-        for gdts in setting.get('data', {}).get("_", []): # global_data_type_string
-            node_type = get_node_type(gdts)
-            if node_type: Container.RegisterGlobalDataType(node_type)
+    alias = setting.get('alias', {})
 
-        for dts, catss in setting.get('actions', {}).items(): #  data_type_string, context_action_type_string_s
-            if dts=="_": # global_context
-                for cats in catss:
-                    node_type = get_node_type(cats)
-                    if node_type: Container.RegisterGlobalContextAction(node_type)
-            else:
-                data_type = get_node_type(dts)
-                if not data_type: continue
-                for cats in catss:
-                    action_type = get_node_type(cats)
-                    if action_type: Container.RegisterContextAction(data_type, action_type)
+    for gdts in setting.get('data', {}).get("_", []): # global_data_type_string
+        node_type = get_node_type(gdts)
+        if node_type: Container.RegisterGlobalDataType(node_type)
 
-        quick_actions = []
-        for dts, ass in setting.get("quick_actions", {}).items(): # data_type_string, action_string_s
+    for dts, catss in setting.get('actions', {}).items(): #  data_type_string, context_action_type_string_s
+        if dts=="_": # global_context
+            for cats in catss:
+                node_type = get_node_type(cats)
+                if node_type: Container.RegisterGlobalContextAction(node_type)
+        else:
             data_type = get_node_type(dts)
             if not data_type: continue
-            data_type.QUICK_ACTIONS = []
-            idx = -1
-            for ats, dpn, opd in ass: # action_type_string, data_param_name, other_params_dict
-                action_type = get_node_type(ats)
-                if not action_type: continue
-                idx += 1
-                data_type.QUICK_ACTIONS.append((action_type, dpn, opd))
-                quick_actions.append((
-                    get_nodetype_path(data_type), # str
-                    get_nodetype_path(action_type), # str # this is actually optional?
-                    action_type.CAPTION, # str
-                    idx, # int
-                ))
+            for cats in catss:
+                action_type = get_node_type(cats)
+                if action_type: Container.RegisterContextAction(data_type, action_type)
 
-        if not hasattr(dac_win, "show"): # web-based cannot use PyQt5 and the tasks
-            # return flat quick_actions
-            return quick_actions
-
-        for ats, tss in setting.get("quick_tasks", {}).items(): # action_type_string, task_string_s
+    quick_actions = []
+    for dts, ass in setting.get("quick_actions", {}).items(): # data_type_string, action_string_s
+        data_type = get_node_type(dts)
+        if not data_type: continue
+        data_type.QUICK_ACTIONS = []
+        idx = -1
+        for ats, dpn, opd in ass: # action_type_string, data_param_name, other_params_dict
             action_type = get_node_type(ats)
             if not action_type: continue
-            action_type.QUICK_TASKS = [] # make superclass.QUICK_TASKS hidden
-            for tts, name, *rest in tss: # task_type_string, name, *rest
-                task_type = get_node_type(tts)
-                if not task_type: continue
-                task = task_type(dac_win=dac_win, name=name, *rest)
-                action_type.QUICK_TASKS.append(task)
+            idx += 1
+            data_type.QUICK_ACTIONS.append((action_type, dpn, opd))
+            quick_actions.append((
+                get_nodetype_path(data_type), # str
+                get_nodetype_path(action_type), # str # this is actually optional?
+                action_type.CAPTION, # str
+                idx, # int
+            ))
 
-        for ats, (tts, name, *rest) in setting.get("default_task", {}).items(): # action_type_string, task_type_string
-            action_type = get_node_type(ats)
-            if not action_type: continue
-            action_type.DEFAULT_TASK = None
+    if not hasattr(dac_win, "show"): # web-based cannot use PyQt5 and the tasks
+        # return flat quick_actions
+        return quick_actions
+
+    for ats, tss in setting.get("quick_tasks", {}).items(): # action_type_string, task_string_s
+        action_type = get_node_type(ats)
+        if not action_type: continue
+        action_type.QUICK_TASKS = [] # make superclass.QUICK_TASKS hidden
+        for tts, name, *rest in tss: # task_type_string, name, *rest
             task_type = get_node_type(tts)
             if not task_type: continue
             task = task_type(dac_win=dac_win, name=name, *rest)
-            action_type.DEFAULT_TASK = task
+            action_type.QUICK_TASKS.append(task)
+
+    for ats, (tts, name, *rest) in setting.get("default_task", {}).items(): # action_type_string, task_type_string
+        action_type = get_node_type(ats)
+        if not action_type: continue
+        action_type.DEFAULT_TASK = None
+        task_type = get_node_type(tts)
+        if not task_type: continue
+        task = task_type(dac_win=dac_win, name=name, *rest)
+        action_type.DEFAULT_TASK = task
