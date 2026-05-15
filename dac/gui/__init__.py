@@ -36,6 +36,7 @@ from dac.core.actions import PAB, VAB, TAB, ActionBase
 from dac.core.thread import ThreadWorker
 from dac.core.scenario import use_scenario
 from dac.gui.base import MainWindowBase
+from dac.gui.remote import DacWebDialog
 from dac.core.snippet import exec_script
 
 NAME, TYPE, REMARK = range(3)
@@ -72,6 +73,8 @@ class MainWindow(MainWindowBase):
         self.container: Container = None
         self.project_config_fpath: str = None
         self.exec_script: str = ""
+        self._remote_dialog: DacWebDialog = None
+        self._remote_project_id: str = None
         self.apply_config({})
 
     def _create_ui(self):
@@ -122,6 +125,11 @@ class MainWindow(MainWindowBase):
         saveas_project_action = app_menu.addAction("Save as ...")
         load_project_action = app_menu.addAction("&Load project")
         edit_exec_action = app_menu.addAction("&Edit exec script")
+        app_menu.addSeparator()
+        connect_remote_action = app_menu.addAction("&Connect to DAC Web...")
+        push_remote_action = app_menu.addAction("&Push config to Web")
+        push_remote_action.setEnabled(False)
+        self._push_remote_action = push_remote_action
         app_menu.addSeparator()
         exit_action = app_menu.addAction("E&xit")
 
@@ -193,6 +201,16 @@ class MainWindow(MainWindowBase):
         saveas_project_action.triggered.connect(action_saveas)
         load_project_action.triggered.connect(action_load_project)
         edit_exec_action.triggered.connect(action_edit_exec)
+
+        def action_connect_remote():
+            self._action_connect_remote()
+
+        def action_push_to_web():
+            self._action_push_to_web()
+
+        connect_remote_action.triggered.connect(action_connect_remote)
+        push_remote_action.triggered.connect(action_push_to_web)
+
         exit_action.triggered.connect(self.close)
 
         tool_menu = self._dac_menu
@@ -375,6 +393,77 @@ class MainWindow(MainWindowBase):
                 **container_config,
             }
         }
+
+    def _action_connect_remote(self):
+        url, ok = QtWidgets.QInputDialog.getText(
+            self, "Connect to DAC Web",
+            "Enter dac_web server URL:",
+            text="http://localhost:8000",
+        )
+        if not ok or not url.strip():
+            return
+        self._connect_remote(url.strip())
+
+    def _connect_remote(self, url: str):
+        backend = self._remote_detect_backend()
+        if backend is None:
+            QtWidgets.QMessageBox.warning(
+                self, "DAC Web",
+                "No web view backend available.\n\n"
+                "Install pywebview:\n    pip install pywebview\n\n"
+                "(requires a GUI backend: GTK on Linux, Cocoa on macOS)"
+            )
+            return
+        if backend == "qt":
+            import PyQt5.QtWebEngineWidgets  # noqa: F401
+
+        if self._remote_dialog is not None:
+            self._remote_dialog.close()
+        self._remote_dialog = DacWebDialog(url, parent=self)
+        self._remote_dialog.config_loaded.connect(self._on_remote_config_loaded)
+        self._remote_dialog.show()
+        self.message(f"Connected to {url}")
+
+    @staticmethod
+    def _remote_detect_backend():
+        from dac.gui.remote.bridge import BridgeFactory
+        return (BridgeFactory.available_backends() or [None])[0]
+
+    def _on_remote_config_loaded(self, config: dict, project_id: str):
+        if self.container is not None and any(True for _ in self.container.CurrentContext.NodeIter):
+            reply = QtWidgets.QMessageBox.question(
+                self, "Replace Project",
+                "A project is currently open. Replace with the remote project?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No,
+            )
+            if reply != QtWidgets.QMessageBox.Yes:
+                return
+        self._remote_project_id = project_id
+        self.project_config_fpath = None
+        self._push_remote_action.setEnabled(True)
+        self.apply_config({"dac": config})
+        self.message(f"Loaded remote project: {project_id}")
+
+    def _action_push_to_web(self):
+        if self._remote_dialog is None:
+            self.message("Not connected to dac_web")
+            return
+        if self.container is None:
+            self.message("No project open")
+            return
+        config = self.get_config()
+        title = self.windowTitle().split(" | ")[0]
+        self._remote_dialog.send_current_config(title, config)
+        self._remote_dialog.raise_()
+        self.message(
+            "Config pushed to web. Click 'Save Back to Server' in the web view."
+        )
+
+    def closeEvent(self, a0: QCloseEvent) -> None:
+        if self._remote_dialog is not None:
+            self._remote_dialog.close()
+        return super().closeEvent(a0)
 
 
 class DataListWidget(QTreeWidget):

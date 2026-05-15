@@ -12,6 +12,7 @@ keywords = ["data", "context", "analysis"]
 [project.optional-dependencies]
 gui = ["pyqt5", "qscintilla"]
 ipy = ["pyqt5", "qscintilla", "qtconsole"]
+remote = ["pyqt5", "qscintilla", "pywebview"]
 
 [project.urls]
 Homepage = "http://mizip.net/"
