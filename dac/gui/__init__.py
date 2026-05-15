@@ -477,6 +477,12 @@ class MainWindow(MainWindowBase):
                 self.message("Invalid config JSON received from web")
                 return
 
+            dac_web_meta = config.get("dac_web", {}) if isinstance(config, dict) else {}
+            if dac_web_meta:
+                self._remote_project_title = (
+                    dac_web_meta.get("title") or self._remote_project_title
+                )
+
             if self.container is not None and any(True for _ in self.container.CurrentContext.NodeIter):
                 reply = QtWidgets.QMessageBox.question(
                     self, "Replace Project",
@@ -489,7 +495,7 @@ class MainWindow(MainWindowBase):
 
             self.project_config_fpath = None
             self._push_remote_action.setEnabled(True)
-            self.apply_config({"dac": config})
+            self.apply_config(config)
             self.message(f"Loaded remote project: {self._remote_project_title}")
         elif msg.msg_type == "bridgeError":
             err = msg.data.get("message", "Unknown bridge error")
@@ -509,8 +515,7 @@ class MainWindow(MainWindowBase):
             return
         config = self.get_config()
         title = self.windowTitle().split(" | ")[0]
-        dac_config = config.get("dac", config)
-        config_json = json.dumps(dac_config, ensure_ascii=False)
+        config_json = json.dumps(config, ensure_ascii=False)
         self._remote_bridge.send_to_web("receiveConfig", {
             "title": title,
             "configJson": config_json,
