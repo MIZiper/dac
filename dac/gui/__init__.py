@@ -36,11 +36,26 @@ from dac.core.actions import PAB, VAB, TAB, ActionBase
 from dac.core.thread import ThreadWorker
 from dac.core.scenario import use_scenario
 from dac.gui.base import MainWindowBase
-from dac.gui.remote import DacWebDialog
+from dac.gui.remote.bridge import BridgeFactory, BridgeMessage
+from dac.gui.remote.pywebview_bridge import PyWebViewBridge
 from dac.core.snippet import exec_script
 
 NAME, TYPE, REMARK = range(3)
 SET_RECENTDIR = "RecentDir"
+
+
+class _RemoteBridgeHandler(QtCore.QObject):
+    """Thread-safe wrapper: bridge callbacks arrive from daemon threads
+    (stdout reader) but must update PyQt widgets on the main thread."""
+
+    message_received = QtCore.pyqtSignal(object)
+    bridge_closed = QtCore.pyqtSignal()
+
+    def on_message(self, msg: BridgeMessage):
+        self.message_received.emit(msg)
+
+    def on_closed(self):
+        self.bridge_closed.emit()
 
 
 class TaskBase:
@@ -73,8 +88,10 @@ class MainWindow(MainWindowBase):
         self.container: Container = None
         self.project_config_fpath: str = None
         self.exec_script: str = ""
-        self._remote_dialog: DacWebDialog = None
+        self._remote_bridge: PyWebViewBridge = None
+        self._remote_bridge_handler: _RemoteBridgeHandler = None
         self._remote_project_id: str = None
+        self._remote_project_title: str = ""
         self.apply_config({})
 
     def _create_ui(self):
@@ -130,6 +147,9 @@ class MainWindow(MainWindowBase):
         push_remote_action = app_menu.addAction("&Push config to Web")
         push_remote_action.setEnabled(False)
         self._push_remote_action = push_remote_action
+        disconnect_remote_action = app_menu.addAction("&Disconnect from DAC Web")
+        disconnect_remote_action.setEnabled(False)
+        self._disconnect_remote_action = disconnect_remote_action
         app_menu.addSeparator()
         exit_action = app_menu.addAction("E&xit")
 
@@ -208,8 +228,12 @@ class MainWindow(MainWindowBase):
         def action_push_to_web():
             self._action_push_to_web()
 
+        def action_disconnect_remote():
+            self._action_disconnect_remote()
+
         connect_remote_action.triggered.connect(action_connect_remote)
         push_remote_action.triggered.connect(action_push_to_web)
+        disconnect_remote_action.triggered.connect(action_disconnect_remote)
 
         exit_action.triggered.connect(self.close)
 
@@ -414,39 +438,70 @@ class MainWindow(MainWindowBase):
                 "(requires a GUI backend: GTK on Linux, Cocoa on macOS)"
             )
             return
-        if backend == "qt":
-            import PyQt5.QtWebEngineWidgets  # noqa: F401
 
-        if self._remote_dialog is not None:
-            self._remote_dialog.close()
-        self._remote_dialog = DacWebDialog(url, parent=self)
-        self._remote_dialog.config_loaded.connect(self._on_remote_config_loaded)
-        self._remote_dialog.show()
-        self.message(f"Connected to {url}")
+        self._disconnect_remote()
+
+        self._remote_bridge_handler = _RemoteBridgeHandler()
+        self._remote_bridge_handler.message_received.connect(
+            self._on_bridge_message
+        )
+        self._remote_bridge_handler.bridge_closed.connect(
+            self._on_bridge_closed
+        )
+
+        self._remote_bridge = PyWebViewBridge(
+            on_message=self._remote_bridge_handler.on_message,
+            on_closed=self._remote_bridge_handler.on_closed,
+        )
+
+        desktop_url = f"{url.rstrip('/')}/desktop"
+        self._remote_bridge.start(desktop_url, title=f"DAC Web — {url}",
+                                  width=900, height=650)
+        self._push_remote_action.setEnabled(False)
+        self._disconnect_remote_action.setEnabled(True)
+        self.message(f"Connected to {url} — web view opens in a separate window")
 
     @staticmethod
     def _remote_detect_backend():
-        from dac.gui.remote.bridge import BridgeFactory
         return (BridgeFactory.available_backends() or [None])[0]
 
-    def _on_remote_config_loaded(self, config: dict, project_id: str):
-        if self.container is not None and any(True for _ in self.container.CurrentContext.NodeIter):
-            reply = QtWidgets.QMessageBox.question(
-                self, "Replace Project",
-                "A project is currently open. Replace with the remote project?",
-                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-                QtWidgets.QMessageBox.No,
-            )
-            if reply != QtWidgets.QMessageBox.Yes:
+    def _on_bridge_message(self, msg: BridgeMessage):
+        if msg.msg_type == "loadConfig":
+            data = msg.data
+            config_json = data.get("configJson", "{}")
+            self._remote_project_id = data.get("projectId", "")
+            self._remote_project_title = data.get("title", "")
+            try:
+                config = json.loads(config_json)
+            except json.JSONDecodeError:
+                self.message("Invalid config JSON received from web")
                 return
-        self._remote_project_id = project_id
-        self.project_config_fpath = None
-        self._push_remote_action.setEnabled(True)
-        self.apply_config({"dac": config})
-        self.message(f"Loaded remote project: {project_id}")
+
+            if self.container is not None and any(True for _ in self.container.CurrentContext.NodeIter):
+                reply = QtWidgets.QMessageBox.question(
+                    self, "Replace Project",
+                    "A project is currently open. Replace with the remote project?",
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                    QtWidgets.QMessageBox.No,
+                )
+                if reply != QtWidgets.QMessageBox.Yes:
+                    return
+
+            self.project_config_fpath = None
+            self._push_remote_action.setEnabled(True)
+            self.apply_config({"dac": config})
+            self.message(f"Loaded remote project: {self._remote_project_title}")
+        elif msg.msg_type == "bridgeError":
+            err = msg.data.get("message", "Unknown bridge error")
+            self.message(f"Bridge error: {err}")
+
+    def _on_bridge_closed(self):
+        self.message("Web view disconnected")
+        self._push_remote_action.setEnabled(False)
+        self._disconnect_remote_action.setEnabled(False)
 
     def _action_push_to_web(self):
-        if self._remote_dialog is None:
+        if self._remote_bridge is None:
             self.message("Not connected to dac_web")
             return
         if self.container is None:
@@ -454,15 +509,32 @@ class MainWindow(MainWindowBase):
             return
         config = self.get_config()
         title = self.windowTitle().split(" | ")[0]
-        self._remote_dialog.send_current_config(title, config)
-        self._remote_dialog.raise_()
+        dac_config = config.get("dac", config)
+        config_json = json.dumps(dac_config, ensure_ascii=False)
+        self._remote_bridge.send_to_web("receiveConfig", {
+            "title": title,
+            "configJson": config_json,
+        })
+        self._remote_bridge.show_window()
         self.message(
             "Config pushed to web. Click 'Save Back to Server' in the web view."
         )
 
+    def _action_disconnect_remote(self):
+        self._disconnect_remote()
+        self.message("Disconnected from dac_web")
+
+    def _disconnect_remote(self):
+        if self._remote_bridge is not None:
+            self._remote_bridge.close()
+            self._remote_bridge = None
+            self._remote_bridge_handler = None
+        self._remote_project_id = None
+        self._push_remote_action.setEnabled(False)
+        self._disconnect_remote_action.setEnabled(False)
+
     def closeEvent(self, a0: QCloseEvent) -> None:
-        if self._remote_dialog is not None:
-            self._remote_dialog.close()
+        self._disconnect_remote()
         return super().closeEvent(a0)
 
 
