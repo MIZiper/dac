@@ -419,6 +419,10 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
         node_type, node_name = self._uuid_dict[uuid]
         return self._name_index.get((node_type, node_name))
 
+    def get_qualified_name(self, node: DataNode) -> str:
+        _, name = self._uuid_dict.get(node.uuid, (None, node.name))
+        return name
+
 
 class Container:
     _key_types = []  # [ type[context_key_node] ]

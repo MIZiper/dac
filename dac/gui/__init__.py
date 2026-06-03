@@ -42,6 +42,7 @@ from dac.gui.remote.pywebview_bridge import PyWebViewBridge
 from dac.core.snippet import exec_script
 
 NAME, TYPE, REMARK = range(3)
+QUALIFIED_NAME_ROLE = Qt.ItemDataRole.UserRole + 1
 SET_RECENTDIR = "RecentDir"
 
 
@@ -602,6 +603,8 @@ class DataListWidget(QTreeWidget):
                 itm.setText(REMARK, child_node.uuid)
                 itm.setData(NAME, Qt.ItemDataRole.UserRole, child_node)
                 itm.setData(TYPE, Qt.ItemDataRole.UserRole, True)
+                itm.setData(NAME, QUALIFIED_NAME_ROLE,
+                    container.CurrentContext.get_qualified_name(child_node))
                 add_tree_items(itm, child_node)
 
         for node_type, node_name, node_object in container.CurrentContext.NodeIter:
@@ -611,6 +614,8 @@ class DataListWidget(QTreeWidget):
             itm.setText(REMARK, node_object.uuid)
             itm.setData(NAME, Qt.ItemDataRole.UserRole, node_object)
             itm.setData(TYPE, Qt.ItemDataRole.UserRole, True)
+            itm.setData(NAME, QUALIFIED_NAME_ROLE,
+                container.CurrentContext.get_qualified_name(node_object))
             add_tree_items(itm, node_object)
         data_item.setExpanded(True)
 
@@ -661,7 +666,7 @@ class DataListWidget(QTreeWidget):
 
                 def _value_to_persistable(v):
                     if isinstance(v, DataNode):
-                        return v.name
+                        return container.CurrentContext.get_qualified_name(v)
                     if isinstance(v, list):
                         return [_value_to_persistable(x) for x in v]
                     return v
@@ -802,9 +807,8 @@ class DataListWidget(QTreeWidget):
             cb_activate(node_object)
 
     def mousePressEvent(self, e: QMouseEvent) -> None:
-        # mid-btn-click => copy name. mid-button-click won't trigger 'itemClicked'
         if (e.button() == Qt.MouseButton.MidButton) and (itm := self.itemAt(e.pos())):
-            name = itm.text(NAME)
+            name = itm.data(NAME, QUALIFIED_NAME_ROLE) or itm.text(NAME)
             QtWidgets.QApplication.clipboard().setText(name)
         return super().mousePressEvent(e)
 

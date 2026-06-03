@@ -140,3 +140,17 @@ def test_qualified_name_rename_mid_level():
 
     assert ctx.get_node_of_type("root/new_mid/leaf", DataNode) is leaf
     assert ctx.get_node_of_type("root/old_mid/leaf", DataNode) is None
+
+
+def test_get_qualified_name():
+    ctx = DataContext(Container())
+    root = DataNode(name="root")
+    mid = DataNode(name="mid")
+    leaf = DataNode(name="leaf")
+    mid.add_child(leaf)
+    root.add_child(mid)
+    ctx.add_node(root)
+
+    assert ctx.get_qualified_name(root) == "root"
+    assert ctx.get_qualified_name(mid) == "root/mid"
+    assert ctx.get_qualified_name(leaf) == "root/mid/leaf"
