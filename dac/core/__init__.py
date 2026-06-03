@@ -354,12 +354,21 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
                         yield (type(child_node), child_node.name, child_node)
                 yield (node_type, node_name, node)
 
-    def _index_node(self, node: DataNode):
+    def _index_node(self, node: DataNode, prefix: str = ""):
         node_type = type(node)
-        self._name_index[(node_type, node.name)] = node
-        self._uuid_dict[node.uuid] = (node_type, node.name)
+        indexed_name = f"{prefix}/{node.name}" if prefix else node.name
+        self._name_index[(node_type, indexed_name)] = node
+        self._uuid_dict[node.uuid] = (node_type, indexed_name)
         for child in node.children:
-            self._index_node(child)
+            self._index_node(child, indexed_name)
+
+    def _unindex_node(self, node: DataNode, prefix: str = ""):
+        node_type = type(node)
+        indexed_name = f"{prefix}/{node.name}" if prefix else node.name
+        self._name_index.pop((node_type, indexed_name), None)
+        self._uuid_dict.pop(node.uuid, None)
+        for child in node.children:
+            self._unindex_node(child, indexed_name)
 
     def add_node(self, node: NodeBase):
         node_type = type(node)
@@ -377,22 +386,34 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
     def rename_node_to(self, node: NodeBase, new_name: str):
         node_type = type(node)
         if node_type == type(node):
-            try:
-                del self._name_index[(node_type, node.name)]
-            except KeyError:
-                pass
-            try:
-                del self[node_type][node.name]
-            except KeyError:
-                pass
-            try:
-                orig_node = self._name_index.get((node_type, new_name))
-                if orig_node is not None:
-                    del self._uuid_dict[orig_node.uuid]
-            except KeyError:
-                pass
-        node.name = new_name
-        self.add_node(node)
+            _, indexed_name = self._uuid_dict.get(node.uuid, (None, node.name))
+            prefix = indexed_name.rsplit("/", 1)[0] if "/" in indexed_name else ""
+            is_top_level = not prefix
+
+            self._unindex_node(node, prefix)
+
+            if is_top_level:
+                try:
+                    del self[node_type][node.name]
+                except KeyError:
+                    pass
+                try:
+                    orig_node = self._name_index.get((node_type, new_name))
+                    if orig_node is not None:
+                        del self._uuid_dict[orig_node.uuid]
+                except KeyError:
+                    pass
+
+            node.name = new_name
+
+            if is_top_level:
+                self.add_node(node)
+            else:
+                new_indexed_name = f"{prefix}/{new_name}"
+                self._name_index[(node_type, new_indexed_name)] = node
+                self._uuid_dict[node.uuid] = (node_type, new_indexed_name)
+                for child in node.children:
+                    self._index_node(child, new_indexed_name)
 
     def get_node_by_uuid(self, uuid: str) -> NodeBase:
         node_type, node_name = self._uuid_dict[uuid]
