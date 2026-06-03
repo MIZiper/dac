@@ -931,6 +931,8 @@ class ActionListWidget(QTreeWidget):
                     a: ActionBase = a_t(context_key=container.current_key)
                     if (task := a.DEFAULT_TASK) is not None:
                         task: TaskBase
+                        a.get_construct_config() # force init so out_name appear, the normal action creation get inited by `sig_edit_action_requested` signal below
+                        a.container = container
                         task(a)  # no `request_update_action` needed
 
                     if index is None:
