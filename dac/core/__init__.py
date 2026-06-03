@@ -5,7 +5,7 @@ This module defines the base classes for data nodes / contexts, action nodes, an
 
 from uuid import uuid4
 from collections import defaultdict
-from typing import Any, Optional, get_origin, get_args, Union, Generator
+from typing import Any, Optional, get_origin, get_args, Union, Iterator
 from types import GenericAlias, UnionType
 import inspect, importlib
 from enum import IntEnum, Enum
@@ -339,13 +339,13 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
         self._name_index: dict[tuple[type, str], DataNode] = {}  # {(type, name): node}
 
     @property
-    def NodeIter(self) -> Generator[tuple[type[DataNode], str, DataNode]]:
+    def NodeIter(self) -> Iterator[tuple[type[DataNode], str, DataNode]]:
         for node_type, nodes in self.items():
             for node_name, node in nodes.items():
                 yield (node_type, node_name, node)
 
     @property
-    def DeepNodeIter(self) -> Generator[tuple[type[DataNode], str, DataNode]]:
+    def DeepNodeIter(self) -> Iterator[tuple[type[DataNode], str, DataNode]]:
         # can be changed to return_nodes_of_type
         for node_type, nodes in self.items():
             for node_name, node in nodes.items():

@@ -18,6 +18,7 @@ from functools import partial
 from glob import glob
 from io import BytesIO, StringIO
 from os import path
+from typing import Union as _Union, get_origin, get_args
 
 import yaml
 from matplotlib.backend_bases import key_press_handler
@@ -635,8 +636,29 @@ class DataListWidget(QTreeWidget):
             ):
                 act_type, data_param_name, other_params = qat
 
+                def _is_list_annotation(ann):
+                    if ann is inspect._empty:
+                        return False
+                    origin = get_origin(ann)
+                    if origin is list:
+                        return True
+                    if origin is _Union:
+                        for t in get_args(ann):
+                            if t is type(None):
+                                continue
+                            if _is_list_annotation(t):
+                                return True
+                    return False
+
+                param = act_type._SIGNATURE.parameters.get(data_param_name)
+                is_list = (
+                    param is not None
+                    and _is_list_annotation(param.annotation)
+                )
+                value = data_nodes if is_list else (data_nodes[0] if data_nodes else None)
+
                 def cb_quickaction():
-                    params = {data_param_name: data_nodes, **other_params}
+                    params = {data_param_name: value, **other_params}
                     act = act_type(context_key=container.current_key)
                     act.container = container
                     if isinstance(act, VAB):
