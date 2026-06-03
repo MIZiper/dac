@@ -632,9 +632,11 @@ class DataListWidget(QTreeWidget):
                 nodes.append(node)
 
             def cb_quickaction_gen(
-                qat: tuple[type[ActionBase], str, dict], data_nodes: list[DataNode]
+                qat: tuple[type[ActionBase], str, dict] | tuple[type[ActionBase], str, dict, bool],
+                data_nodes: list[DataNode],
             ):
-                act_type, data_param_name, other_params = qat
+                act_type, data_param_name, other_params = qat[:3]
+                save = qat[3] if len(qat) > 3 else False
 
                 def _is_list_annotation(ann):
                     if ann is inspect._empty:
@@ -657,6 +659,13 @@ class DataListWidget(QTreeWidget):
                 )
                 value = data_nodes if is_list else (data_nodes[0] if data_nodes else None)
 
+                def _value_to_persistable(v):
+                    if isinstance(v, DataNode):
+                        return v.name
+                    if isinstance(v, list):
+                        return [_value_to_persistable(x) for x in v]
+                    return v
+
                 def cb_quickaction():
                     params = {data_param_name: value, **other_params}
                     act = act_type(context_key=container.current_key)
@@ -666,12 +675,18 @@ class DataListWidget(QTreeWidget):
                     act.pre_run()
                     act(**params)
                     act.post_run()
+                    if save:
+                        persist_params = {k: _value_to_persistable(v) for k, v in params.items()}
+                        act.apply_construct_config(persist_params)
+                        act.container.actions.append(act)
+                        self.sig_action_update_requested.emit()
 
                 return cb_quickaction
 
             for qat in node_object.QUICK_ACTIONS:
                 qat: tuple[type[ActionBase], str, dict]
-                act_type, data_param_name, other_params = qat
+                act_type = qat[0]
+                data_param_name = qat[1]
                 menu.addAction(act_type.CAPTION).triggered.connect(
                     cb_quickaction_gen(qat, nodes)
                 )

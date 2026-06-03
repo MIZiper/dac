@@ -87,11 +87,12 @@ def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
         if not data_type: continue
         data_type.QUICK_ACTIONS = []
         idx = -1
-        for ats, dpn, opd in ass: # action_type_string, data_param_name, other_params_dict
+        for ats, dpn, opd, *rest in ass: # action_type_string, data_param_name, other_params_dict[, save]
             action_type = get_node_type(ats)
             if not action_type: continue
             idx += 1
-            data_type.QUICK_ACTIONS.append((action_type, dpn, opd))
+            save = rest[0] if rest else False
+            data_type.QUICK_ACTIONS.append((action_type, dpn, opd, save))
             quick_actions.append((
                 get_nodetype_path(data_type), # str
                 get_nodetype_path(action_type), # str # this is actually optional?

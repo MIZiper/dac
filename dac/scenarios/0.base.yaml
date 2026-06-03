@@ -45,7 +45,8 @@ actions:
   - "[<]"
   - /mv/actions.ShowSpectrumWithGuesser
 
-quick_actions: # temporary action creation for immediate run (action take only one parameter)
+quick_actions: # [action_type, data_param_name, other_params, save?]
+  # 4th optional bool: if true, action persists in the action list after execution
   /mt/TimeData:
   - [/mt/actions.ShowTimeDataAction, channels, {}]
   /mv/data.FreqDomainData:
