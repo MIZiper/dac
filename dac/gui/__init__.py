@@ -659,7 +659,19 @@ class DataListWidget(QTreeWidget):
                                 return True
                     return False
 
-                param = act_type._SIGNATURE.parameters.get(data_param_name)
+                is_sab = isinstance(act_type._SIGNATURE, dict)
+                sub_names_with_param = []
+                if is_sab:
+                    for sub_type in act_type._SEQUENCE:
+                        if data_param_name in sub_type._SIGNATURE.parameters:
+                            sub_names_with_param.append(sub_type.__name__)
+                    param = None
+                    for sub_type in act_type._SEQUENCE:
+                        if (p := sub_type._SIGNATURE.parameters.get(data_param_name)):
+                            param = p
+                            break
+                else:
+                    param = act_type._SIGNATURE.parameters.get(data_param_name)
                 is_list = (
                     param is not None
                     and _is_list_annotation(param.annotation)
@@ -671,10 +683,18 @@ class DataListWidget(QTreeWidget):
                         return container.CurrentContext.get_qualified_name(v)
                     if isinstance(v, list):
                         return [_value_to_persistable(x) for x in v]
+                    if isinstance(v, dict):
+                        return {k: _value_to_persistable(x) for k, x in v.items()}
                     return v
 
                 def cb_quickaction():
-                    params = {data_param_name: value, **other_params}
+                    if is_sab:
+                        params = dict(other_params)
+                        for sub_name in sub_names_with_param:
+                            sub_cfg = params.setdefault(sub_name, {})
+                            sub_cfg[data_param_name] = value
+                    else:
+                        params = {data_param_name: value, **other_params}
                     act = act_type(context_key=container.current_key)
                     act.container = container
                     if isinstance(act, VAB):
