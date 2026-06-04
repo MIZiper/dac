@@ -637,11 +637,13 @@ class DataListWidget(QTreeWidget):
                 nodes.append(node)
 
             def cb_quickaction_gen(
-                qat: tuple[type[ActionBase], str, dict] | tuple[type[ActionBase], str, dict, bool],
+                qat: tuple,
                 data_nodes: list[DataNode],
             ):
                 act_type, data_param_name, other_params = qat[:3]
-                save = qat[3] if len(qat) > 3 else False
+                mode = qat[3] if len(qat) > 3 else False
+                do_run = mode != "create"
+                do_save = mode is True or mode == "create"
 
                 def _is_list_annotation(ann):
                     if ann is inspect._empty:
@@ -677,22 +679,24 @@ class DataListWidget(QTreeWidget):
                     act.container = container
                     if isinstance(act, VAB):
                         act.figure = self.dac_win.figure
-                    act.pre_run()
-                    act(**params)
-                    act.post_run()
-                    if save:
+                    if do_save:
                         persist_params = {k: _value_to_persistable(v) for k, v in params.items()}
                         act.apply_construct_config(persist_params)
                         act.container.actions.append(act)
                         self.sig_action_update_requested.emit()
+                    if do_run:
+                        act.pre_run()
+                        act(**params)
+                        act.post_run()
 
                 return cb_quickaction
 
             for qat in node_object.QUICK_ACTIONS:
                 qat: tuple[type[ActionBase], str, dict]
                 act_type = qat[0]
-                data_param_name = qat[1]
-                menu.addAction(act_type.CAPTION).triggered.connect(
+                mode = qat[3] if len(qat) > 3 else False
+                caption = f"+ {act_type.CAPTION}" if mode == "create" else act_type.CAPTION
+                menu.addAction(caption).triggered.connect(
                     cb_quickaction_gen(qat, nodes)
                 )
             menu.addSeparator()

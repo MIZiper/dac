@@ -45,8 +45,10 @@ actions:
   - "[<]"
   - /mv/actions.ShowSpectrumWithGuesser
 
-quick_actions: # [action_type, data_param_name, other_params, save?]
-  # 4th optional bool: if true, action persists in the action list after execution
+quick_actions: # [action_type, data_param_name, other_params, mode?]
+  # mode: false (default) → run only
+  #       true            → run + save to action list
+  #       "create"        → save to action list, don't run
   /mt/TimeData:
   - [/mt/actions.ShowTimeDataAction, channels, {}]
   /mv/data.FreqDomainData:
