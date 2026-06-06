@@ -279,6 +279,9 @@ class MainWindow(MainWindowBase):
         self.data_list_widget.sig_action_runall_requested.connect(
             self.action_list_widget.run_all_actions
         )
+        self.data_list_widget.sig_quick_action_requested.connect(
+            self.action_list_widget.run_quick_action
+        )
         self.action_list_widget.sig_data_update_requested.connect(
             self.data_list_widget.refresh
         )
@@ -562,6 +565,8 @@ class DataListWidget(QTreeWidget):
     sig_edit_data_requested = QtCore.pyqtSignal(DataNode)
     sig_action_update_requested = QtCore.pyqtSignal()
     sig_action_runall_requested = QtCore.pyqtSignal()
+    sig_quick_action_requested = QtCore.pyqtSignal(object, object, object)
+    # (action, params, mode)
 
     def __init__(self, parent: MainWindow) -> None:
         super().__init__(parent)
@@ -653,11 +658,8 @@ class DataListWidget(QTreeWidget):
                 qat: tuple,
                 data_nodes: list[DataNode],
             ):
-                # TODO: should move main logic to be handled by ActionListWidget
                 act_type, data_param_name, other_params = qat[:3]
                 mode = qat[3] if len(qat) > 3 else False
-                do_run = mode != "create"
-                do_save = mode is True or mode == "create"
 
                 def _is_list_annotation(ann):
                     if ann is inspect._empty:
@@ -692,16 +694,8 @@ class DataListWidget(QTreeWidget):
                 )
                 value = data_nodes if is_list else (data_nodes[0] if data_nodes else None)
 
-                def _value_to_persistable(v):
-                    if isinstance(v, DataNode):
-                        return container.CurrentContext.get_qualified_name(v)
-                    if isinstance(v, list):
-                        return [_value_to_persistable(x) for x in v]
-                    if isinstance(v, dict):
-                        return {k: _value_to_persistable(x) for k, x in v.items()}
-                    return v
-
                 def cb_quickaction():
+                    act = act_type(context_key=container.current_key)
                     if is_sab:
                         params = dict(other_params)
                         for sub_name in sub_names_with_param:
@@ -709,23 +703,7 @@ class DataListWidget(QTreeWidget):
                             sub_cfg[data_param_name] = value
                     else:
                         params = {data_param_name: value, **other_params}
-                    act = act_type(context_key=container.current_key)
-                    
-                    if isinstance(act, VAB):
-                        act.figure = self.dac_win.figure
-                    if isinstance(act, TAB):
-                        act.renderer = self.dac_win.show_stats
-
-                    if do_save:
-                        persist_params = {k: _value_to_persistable(v) for k, v in params.items()}
-                        act.get_construct_config() # force update
-                        act._construct_config.update(persist_params)
-                        container.actions.append(act)
-                        self.sig_action_update_requested.emit()
-                    if do_run:
-                        act.pre_run()
-                        act(**params)
-                        act.post_run()
+                    self.sig_quick_action_requested.emit(act, params, mode)
 
                 return cb_quickaction
 
@@ -916,12 +894,13 @@ class ActionListWidget(QTreeWidget):
                 NAME, self._STYLE.standardIcon(ActionListWidget.PIXMAP[action.status])
             )
 
-    def run_action(self, action: ActionNode, complete_cb: callable = None):
+    def run_action(self, action: ActionNode, complete_cb: callable = None, params: dict = None):
         if (container := self._container) is None:
             return
-        params = container.prepare_params_for_action(
-            action._SIGNATURE, action._construct_config
-        )
+        if params is None:
+            params = container.prepare_params_for_action(
+                action._SIGNATURE, action._construct_config
+            )
 
         def completed(rst):
             current_context = container.CurrentContext
@@ -999,6 +978,34 @@ class ActionListWidget(QTreeWidget):
                 pass
 
         run_next_action()
+
+    def run_quick_action(self, act, params, mode):
+        if (container := self._container) is None:
+            return
+
+        do_run = mode != "create"
+        do_save = mode is True or mode == "create"
+
+        def _value_to_persistable(v):
+            if isinstance(v, DataNode):
+                return container.CurrentContext.get_qualified_name(v)
+            if isinstance(v, list):
+                return [_value_to_persistable(x) for x in v]
+            if isinstance(v, dict):
+                return {k: _value_to_persistable(x) for k, x in v.items()}
+            return v
+
+        if do_save:
+            act.get_construct_config()
+            act._construct_config.update(
+                {k: _value_to_persistable(v) for k, v in params.items()}
+            )
+            container.actions.append(act)
+            self.refresh()
+            self.sig_edit_action_requested.emit(act)
+
+        if do_run:
+            self.run_action(act, params=params)
 
     def action_context_requested(self, pos: QtCore.QPoint):
         if (container := self._container) is None:
