@@ -18,7 +18,7 @@ from functools import partial
 from glob import glob
 from io import BytesIO, StringIO
 from os import path
-from typing import Union as _Union, get_origin, get_args
+from typing import Union as _Union, get_origin, get_args, Optional
 
 import yaml
 from matplotlib.backend_bases import key_press_handler
@@ -32,8 +32,8 @@ from PyQt5.QtWidgets import QMainWindow, QStyle, QTreeWidget, QTreeWidgetItem, Q
 
 from importlib.metadata import version
 from dac import APPNAME, PYPI_NAME
-from dac.core import GCK, ActionNode, Container, DataNode, NodeBase, ContextKeyNode
-from dac.core.actions import PAB, VAB, TAB, ActionBase
+from dac.core import GCK, ActionNode, Container, DataNode, NodeBase, ContextKeyNode, DataContext
+from dac.core.actions import PAB, VAB, TAB, ActionBase, Stat
 from dac.core.thread import ThreadWorker
 from dac.core.scenario import use_scenario
 from dac.gui.base import MainWindowBase
@@ -65,8 +65,21 @@ class TaskBase:
         self.dac_win = dac_win
         self.name = name
 
+        self.current_context: Optional[DataContext] = None
+
     def request_update_action(self):
         pass
+
+    def require_nodes_of_type(self, node_type: type[DataNode]) -> list[DataNode]:
+        if self.current_context is None:
+            return []
+        
+        rs = []
+        for nt, nn, node in self.current_context.DeepNodeIter:
+            if issubclass(nt, node_type):
+                rs.append(node)
+
+        return rs
 
     def __call__(self, action: ActionBase):
         pass
@@ -320,7 +333,7 @@ class MainWindow(MainWindowBase):
 
         return figure
 
-    def show_stats(self, stats):
+    def show_stats(self, stats: Stat):
         """Show a non-modal dialog with a table displaying the provided data.
 
         stats: dict with keys 'title', 'headers' (dict with 'row' and 'col'), and 'data' (2D list).
@@ -640,6 +653,7 @@ class DataListWidget(QTreeWidget):
                 qat: tuple,
                 data_nodes: list[DataNode],
             ):
+                # TODO: should move main logic to be handled by ActionListWidget
                 act_type, data_param_name, other_params = qat[:3]
                 mode = qat[3] if len(qat) > 3 else False
                 do_run = mode != "create"
@@ -696,13 +710,17 @@ class DataListWidget(QTreeWidget):
                     else:
                         params = {data_param_name: value, **other_params}
                     act = act_type(context_key=container.current_key)
-                    act.container = container
+                    
                     if isinstance(act, VAB):
                         act.figure = self.dac_win.figure
+                    if isinstance(act, TAB):
+                        act.renderer = self.dac_win.show_stats
+
                     if do_save:
                         persist_params = {k: _value_to_persistable(v) for k, v in params.items()}
-                        act.apply_construct_config(persist_params)
-                        act.container.actions.append(act)
+                        act.get_construct_config() # force update
+                        act._construct_config.update(persist_params)
+                        container.actions.append(act)
                         self.sig_action_update_requested.emit()
                     if do_run:
                         act.pre_run()
@@ -996,8 +1014,8 @@ class ActionListWidget(QTreeWidget):
                     a: ActionBase = a_t(context_key=container.current_key)
                     if (task := a.DEFAULT_TASK) is not None:
                         task: TaskBase
+                        task.current_context = container.CurrentContext
                         a.get_construct_config() # force init so out_name appear, the normal action creation get inited by `sig_edit_action_requested` signal below
-                        a.container = container
                         task(a)  # no `request_update_action` needed
 
                     if index is None:
@@ -1044,12 +1062,13 @@ class ActionListWidget(QTreeWidget):
 
             if len(acts) == 1:
 
-                def cb_task_gen(task, act):
+                def cb_task_gen(task: TaskBase, act):
                     def request_update_action():
                         self.sig_edit_action_requested.emit(act)
 
                     def cb_task():
                         task.request_update_action = request_update_action
+                        task.current_context = container.CurrentContext
                         task(act)
                         request_update_action()
 

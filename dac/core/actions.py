@@ -13,6 +13,8 @@ from dac.core import DataNode, ContextKeyNode, ActionNode
 import numpy as np
 from time import sleep
 
+from typing import TypedDict, Any, Optional, Callable
+
 class ActionBase(ActionNode): # needs thread
     QUICK_TASKS = []
     DEFAULT_TASK = None
@@ -69,12 +71,21 @@ class VisualizeActionBase(ActionBase):
         # I have a doubt here, this is not called for SAB.
         # But canvas redrawed, widgets redrawed because of thread ends?
 
+class StatHeaders(TypedDict):
+    row: list[str]
+    col: list[str]
+
+class Stat(TypedDict):
+    title: str
+    headers: StatHeaders
+    data: list[list[Any]]
+
 class TableActionBase(ActionBase):
     def __init__(self, context_key: DataNode, name: str = None, uuid: str = None) -> None:
         super().__init__(context_key, name, uuid)
-        self.renderer = None
+        self.renderer: Optional[Callable[[Stat]]] = None
 
-    def present(self, stats: dict):
+    def present(self, stats: Stat):
         if self.renderer is None:
             return
         self.renderer(stats)
