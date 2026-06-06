@@ -711,7 +711,12 @@ class DataListWidget(QTreeWidget):
                 qat: tuple[type[ActionBase], str, dict]
                 act_type = qat[0]
                 mode = qat[3] if len(qat) > 3 else False
-                caption = f"+ {act_type.CAPTION}" if mode == "create" else act_type.CAPTION
+                if mode == "create":
+                    caption = f"+ {act_type.CAPTION}"
+                elif mode is True:
+                    caption = f"+> {act_type.CAPTION}"
+                else:
+                    caption = act_type.CAPTION
                 menu.addAction(caption).triggered.connect(
                     cb_quickaction_gen(qat, nodes)
                 )
