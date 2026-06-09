@@ -70,7 +70,7 @@ class TaskBase:
     def request_update_action(self):
         pass
 
-    def require_nodes_of_type(self, node_type: type[DataNode]) -> list[DataNode]:
+    def require_nodes_of_type[T: "DataNode"](self, node_type: type[T]) -> list[T]:
         if self.current_context is None:
             return []
         

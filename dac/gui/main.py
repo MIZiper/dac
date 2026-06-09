@@ -2,6 +2,7 @@
 """
 
 import json, sys, click
+import os
 from os import path
 
 from PyQt5 import QtWidgets
@@ -26,7 +27,9 @@ def main(project_file: str, scenario_file: str):
 
     # setting_fpath = path.join(path.dirname(__file__), "..", "scenarios/0.base.yaml")
     # win.use_scenario(setting_fpath)
-    win.use_scenarios_dir(path.join(path.dirname(__file__), "../scenarios"), default="0.base.yaml")
+    scen_dir = os.getenv("SCENARIO_DIR") or path.join(path.dirname(__file__), "../scenarios")
+    scen_def = os.getenv("SCENARIO_DEFAULT") or "0.base.yaml"
+    win.use_scenarios_dir(scen_dir, default=scen_def)
 
     win.show()
     app.exit(app.exec())
