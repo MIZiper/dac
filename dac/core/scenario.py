@@ -98,6 +98,7 @@ def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
                 get_nodetype_path(action_type), # str # this is actually optional?
                 action_type.CAPTION, # str
                 idx, # int
+                mode, # bool | str
             ))
 
     if not hasattr(dac_win, "show"): # web-based cannot use PyQt5 and the tasks
