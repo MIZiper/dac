@@ -73,13 +73,7 @@ class TaskBase:
     def require_nodes_of_type[T: "DataNode"](self, node_type: type[T]) -> list[T]:
         if self.current_context is None:
             return []
-        
-        rs = []
-        for nt, nn, node in self.current_context.DeepNodeIter:
-            if issubclass(nt, node_type):
-                rs.append(node)
-
-        return rs
+        return list(self.current_context.nodes_of_type(node_type))
 
     def __call__(self, action: ActionBase):
         pass

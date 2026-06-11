@@ -105,6 +105,11 @@ class DataNode(NodeBase):
         for child in self._children:
             yield from child.iter_all()
 
+    def iter_all_descendants(self, self_type: type = None):
+        for child in self._children:
+            yield (self_type or type(child), child.name, child)
+            yield from child.iter_all_descendants(type(child))
+
     @staticmethod
     def Value2BasicTypes(v):
         if (
@@ -348,13 +353,18 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
 
     @property
     def DeepNodeIter(self) -> Iterator[tuple[type[DataNode], str, DataNode]]:
-        # can be changed to return_nodes_of_type
         for node_type, nodes in self.items():
             for node_name, node in nodes.items():
-                if len(node.children)>0:
-                    for child_node in node.children:
-                        yield (type(child_node), child_node.name, child_node)
                 yield (node_type, node_name, node)
+                yield from node.iter_all_descendants(node_type)
+
+    def nodes_of_type(self, node_type: type[DataNode]) -> Iterator[DataNode]:
+        for stored_type, nodes in self.items():
+            if issubclass(stored_type, node_type):
+                for node in nodes.values():
+                    yield node
+                    for _, _, child in node.iter_all_descendants(stored_type):
+                        yield child
 
     def _index_node(self, node: DataNode, prefix: str = ""):
         node_type = type(node)
