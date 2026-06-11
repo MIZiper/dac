@@ -67,6 +67,7 @@ class DataNode(NodeBase):
         super().__init__(name, uuid)
         self._parent = parent
         self._children: list[DataNode] = []
+        self._children_by_name: dict[str, DataNode] = {}
 
     @property
     def parent(self) -> Optional["DataNode"]:
@@ -79,19 +80,17 @@ class DataNode(NodeBase):
     def add_child(self, child: "DataNode"):
         child._parent = self
         self._children.append(child)
+        self._children_by_name[child.name] = child
 
     def get_child(self, name: str) -> Optional["DataNode"]:
-        for child in self._children:
-            if child.name == name:
-                return child
-        return None
+        return self._children_by_name.get(name)
 
     def remove_child(self, name: str) -> Optional["DataNode"]:
-        for i, child in enumerate(self._children):
-            if child.name == name:
-                child._parent = None
-                return self._children.pop(i)
-        return None
+        child = self._children_by_name.pop(name, None)
+        if child is not None:
+            child._parent = None
+            self._children.remove(child)
+        return child
 
     def parent_until[T: "DataNode"](self, node_type: type[T]) -> T:
         current = self._parent
@@ -164,6 +163,12 @@ class ActionNode(NodeBase):
 
     def __init_subclass__(cls) -> None:
         cls._SIGNATURE = inspect.signature(cls.__call__)
+        if isinstance(cls._SIGNATURE, inspect.Signature):
+            cls._VALID_PARAM_NAMES = frozenset(
+                p for p in cls._SIGNATURE.parameters if p != "self"
+            )
+        else:
+            cls._VALID_PARAM_NAMES = frozenset(cls._SIGNATURE.keys())
 
     class ActionStatus(IntEnum):
         INIT = 0
@@ -308,13 +313,10 @@ class ActionNode(NodeBase):
         self.status = ActionNode.ActionStatus.CONFIGURED
 
     def _validate_config_keys(self, construct_config: dict) -> None:
-        if isinstance(self._SIGNATURE, inspect.Signature):
-            sig_params = set(self._SIGNATURE.parameters.keys())
-            sig_params -= {"self"}
-            invalid = {k for k in construct_config if k != "name" and k != "out_name"} - sig_params
-        else:
-            sig_params = set(self._SIGNATURE.keys())
-            invalid = {k for k in construct_config if k != "name" and k != "out_name"} - sig_params
+        invalid = {
+            k for k in construct_config
+            if k != "name" and k != "out_name"
+        } - self._VALID_PARAM_NAMES
         if invalid:
             raise ActionConfigError(f"Unknown parameter(s): {', '.join(invalid)}")
 
@@ -446,7 +448,7 @@ class Container:
 
     @property
     def ActionsInCurrentContext(self) -> list[ActionNode]:
-        return filter(lambda a: a.context_key is self.current_key, self.actions)
+        return [a for a in self.actions if a.context_key is self.current_key]
 
     def get_node_of_type_for(
         self, context_key: ContextKeyNode, node_name: str, node_type: type[NodeBase]
@@ -486,17 +488,27 @@ class Container:
     def _get_value_of_annotation(
         self, ann: type | GenericAlias | UnionType, pre_value: Any
     ):
-        # Support many typing annotation variants and convert `pre_value` accordingly.
         from typing import Any as _Any
 
         if pre_value is None:
             return None
 
+        if ann in (int, float, str, bool):
+            return ann(pre_value)
+
+        if ann is _Any:
+            return pre_value
+
         origin = get_origin(ann)
         args = get_args(ann)
+        is_generic = isinstance(ann, GenericAlias)
+        generic_name = getattr(ann, "__name__", None) if is_generic else None
+
+        # Resolve collection generic alias by origin (preferred) or name fallback
+        eff_origin = origin if origin is not None else (generic_name if is_generic else None)
 
         # list[...] - allow partial node resolution (skip missing)
-        if origin is list or (isinstance(ann, GenericAlias) and getattr(ann, "__name__", None) == "list"):
+        if eff_origin in ("list", list):
             elem_type = args[0] if args else _Any
             value = []
             for c in pre_value:
@@ -508,26 +520,30 @@ class Container:
             return value
 
         # tuple[...] - positional types, require matching
-        if origin is tuple or (isinstance(ann, GenericAlias) and getattr(ann, "__name__", None) == "tuple"):
+        if eff_origin in ("tuple", tuple):
             if not args:
                 return tuple(pre_value)
             return [self._get_value_of_annotation(a, c) for a, c in zip(args, pre_value)]
 
         # set[...] - convert elements
-        if origin is set or (isinstance(ann, GenericAlias) and getattr(ann, "__name__", None) == "set"):
+        if eff_origin in ("set", set):
             elem_type = args[0] if args else _Any
             return set(self._get_value_of_annotation(elem_type, c) for c in pre_value)
 
         # dict[key_type, value_type]
-        if origin is dict or (isinstance(ann, GenericAlias) and getattr(ann, "__name__", None) == "dict"):
+        if eff_origin in ("dict", dict):
             key_t, val_t = (args + (_Any, _Any))[:2]
             return {self._get_value_of_annotation(key_t, k): self._get_value_of_annotation(val_t, v) for k, v in pre_value.items()}
 
         # Union / Optional
         if origin is Union or isinstance(ann, UnionType) or (getattr(ann, "__args__", None) and origin is None):
             union_args = args if args else getattr(ann, "__args__", ())
-            for t in union_args:
-                if t is type(None):
+            none_type = type(None)
+            type_args = [t for t in union_args if isinstance(t, type)]
+            other_args = [t for t in union_args if not isinstance(t, type)]
+            sorted_args = [t for t in type_args if t is not none_type] + [t for t in type_args if t is none_type] + other_args
+            for t in sorted_args:
+                if t is none_type:
                     if pre_value is None:
                         return None
                     continue
@@ -538,30 +554,22 @@ class Container:
                     if new_value != pre_value:
                         return new_value
                 except NodeNotFoundError:
-                    # propagate node-not-found only if no union option matches
                     continue
                 except Exception:
                     continue
             raise TypeError(f"Value '{pre_value}' not in the union types '{ann}'.")
 
         # Enum
-        try:
-            if issubclass(ann, Enum):
-                if isinstance(pre_value, Enum):
-                    return pre_value
-                return ann[pre_value]
-        except TypeError:
-            pass
+        if isinstance(ann, type) and issubclass(ann, Enum):
+            if isinstance(pre_value, Enum):
+                return pre_value
+            return ann[pre_value]
 
         # DataNode lookup
-        try:
-            if issubclass(ann, DataNode):
-                if (value := self.get_node_of_type(node_name=pre_value, node_type=ann)) is None:
-                    raise NodeNotFoundError(f"Node '{pre_value}' of '{ann.__name__}' not found.")
-                return value
-        except TypeError:
-            # if issubclass check failed because ann wasn't a class, ignore
-            pass
+        if isinstance(ann, type) and issubclass(ann, DataNode):
+            if (value := self.get_node_of_type(node_name=pre_value, node_type=ann)) is None:
+                raise NodeNotFoundError(f"Node '{pre_value}' of '{ann.__name__}' not found.")
+            return value
 
         # Registered type agency
         if ann in Container._type_agencies:
@@ -569,13 +577,6 @@ class Container:
                 return Container._type_agencies[ann](pre_value)
             except Exception as e:
                 raise TypeAgencyError(f"Type agency for '{ann}' failed: {e}") from e
-
-        # Fallback: if annotation is Any or unhandled type, return pre_value
-        try:
-            if ann is _Any:
-                return pre_value
-        except Exception:
-            pass
 
         return pre_value
 

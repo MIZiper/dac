@@ -14,17 +14,17 @@ from dac.core.exceptions import ScenarioError
 from dac.core.logging import get_logger
 
 _logger = get_logger("scenario")
+_alias_pattern = re.compile("^/(?P<alias_name>.+)/(?P<rest>.+)")
 
 def get_nodetype_path(node_type: type[NodeBase]):
     return f"{node_type.__module__}.{node_type.__qualname__}"
 
 def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
-    alias_pattern = re.compile("^/(?P<alias_name>.+)/(?P<rest>.+)")
     def get_node_type(cls_path: str) -> str | type[NodeBase]:
         if cls_path[0]=="[" and cls_path[-1]=="]":
             return cls_path # just str as section string
         
-        if (rst:=alias_pattern.search(cls_path)):
+        if (rst:=_alias_pattern.search(cls_path)):
             cls_path = alias[rst['alias_name']]+"."+rst['rest']
 
         try:

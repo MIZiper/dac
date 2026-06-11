@@ -59,8 +59,16 @@ class MainWindowBase(QMainWindow):
         status.addPermanentWidget(self._progress_widget)
 
     def start_thread_worker(self, worker: ThreadWorker):
+        def _on_finished():
+            try:
+                worker.signals.message.disconnect(self.message)
+                worker.signals.error.disconnect(self.excepthook)
+            except TypeError:
+                pass
+
         worker.signals.message.connect(self.message)
         worker.signals.error.connect(self.excepthook)
+        worker.signals.finished.connect(_on_finished)
         self._progress_widget.add_worker(worker)
         if self._settings["no_thread"]:
             worker.run()

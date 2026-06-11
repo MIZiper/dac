@@ -341,8 +341,11 @@ class MainWindow(MainWindowBase):
 
         stats: dict with keys 'title', 'headers' (dict with 'row' and 'col'), and 'data' (2D list).
         """
+        if getattr(self, "_stats_dlg", None) is not None:
+            self._stats_dlg.close()
 
         dlg = QtWidgets.QDialog(self)
+        self._stats_dlg = dlg
         dlg.setWindowTitle(stats.get("title", "Stats"))
         dlg.setWindowModality(Qt.WindowModality.NonModal)
         table = QtWidgets.QTableWidget(dlg)
@@ -501,7 +504,7 @@ class MainWindow(MainWindowBase):
                     dac_web_meta.get("title") or self._remote_project_title
                 )
 
-            if self.container is not None and any(True for _ in self.container.CurrentContext.NodeIter):
+            if self.container is not None and next(self.container.CurrentContext.NodeIter, None) is not None:
                 reply = QtWidgets.QMessageBox.question(
                     self, "Replace Project",
                     "A project is currently open. Replace with the remote project?",
@@ -585,10 +588,12 @@ class DataListWidget(QTreeWidget):
         self.itemDoubleClicked.connect(self.action_item_dblclicked)
 
     def refresh(self, container: Container = None):
+        self.setUpdatesEnabled(False)
         self.clear()
         if container is None:
             container = self._container
             if container is None:
+                self.setUpdatesEnabled(True)
                 return
         else:
             self._container = container
@@ -597,6 +602,7 @@ class DataListWidget(QTreeWidget):
         context_item.setText(NAME, "N/A")
         context_item.setText(TYPE, "Context")
         context_item.setData(NAME, Qt.ItemDataRole.UserRole, GCK)
+        cmd_icon = self._STYLE.standardIcon(QStyle.StandardPixmap.SP_CommandLink)
         for node_type, node_name, node_object in container.context_keys.NodeIter:
             itm = QtWidgets.QTreeWidgetItem(context_item)
             itm.setText(NAME, node_name)
@@ -604,9 +610,7 @@ class DataListWidget(QTreeWidget):
             itm.setText(REMARK, node_object.uuid)
             itm.setData(NAME, Qt.ItemDataRole.UserRole, node_object)
             if container.current_key is node_object:
-                itm.setIcon(
-                    NAME, self._STYLE.standardIcon(QStyle.StandardPixmap.SP_CommandLink)
-                )
+                itm.setIcon(NAME, cmd_icon)
         context_item.setExpanded(True)
 
         data_item = QtWidgets.QTreeWidgetItem(self)
@@ -636,6 +640,7 @@ class DataListWidget(QTreeWidget):
                 container.CurrentContext.get_qualified_name(node_object))
             add_tree_items(itm, node_object)
         data_item.setExpanded(True)
+        self.setUpdatesEnabled(True)
 
     def action_context_requested(self, pos: QtCore.QPoint):
         if (container := self._container) is None:
@@ -862,6 +867,15 @@ class ActionListWidget(QTreeWidget):
         ActionNode.ActionStatus.COMPLETE: QStyle.StandardPixmap.SP_DialogApplyButton,
         ActionNode.ActionStatus.FAILED: QStyle.StandardPixmap.SP_DialogCancelButton,
     }
+    _PIXMAP_CACHE = None
+
+    def _get_status_icon(self, status):
+        if ActionListWidget._PIXMAP_CACHE is None:
+            ActionListWidget._PIXMAP_CACHE = {
+                s: self._STYLE.standardIcon(pm)
+                for s, pm in ActionListWidget.PIXMAP.items()
+            }
+        return ActionListWidget._PIXMAP_CACHE[status]
 
     def __init__(self, parent: MainWindow) -> None:
         super().__init__(parent)
@@ -878,12 +892,15 @@ class ActionListWidget(QTreeWidget):
         self.customContextMenuRequested.connect(self.action_context_requested)
         self.itemClicked.connect(self.action_item_clicked)
         self.itemDoubleClicked.connect(self.action_item_dblclicked)
+        self._code_windows: dict[str, QsciScintilla] = {}
 
     def refresh(self, container: Container = None):
+        self.setUpdatesEnabled(False)
         self.clear()
         if container is None:
             container = self._container
             if container is None:
+                self.setUpdatesEnabled(True)
                 return
         else:
             self._container = container
@@ -895,9 +912,9 @@ class ActionListWidget(QTreeWidget):
             if action.out_name is not None:
                 itm.setText(TYPE, action.out_name)
 
-            itm.setIcon(
-                NAME, self._STYLE.standardIcon(ActionListWidget.PIXMAP[action.status])
-            )
+            itm.setIcon(NAME, self._get_status_icon(action.status))
+
+        self.setUpdatesEnabled(True)
 
     def run_action(self, action: ActionNode, complete_cb: callable = None, params: dict = None):
         if (container := self._container) is None:
@@ -959,7 +976,10 @@ class ActionListWidget(QTreeWidget):
             action.pre_run()
             rst = action(**params)
             action.post_run()
-            completed(rst)
+            if complete_cb is not None:
+                QtCore.QTimer.singleShot(0, lambda: completed(rst))
+            else:
+                completed(rst)
 
     def run_all_actions(
         self,
@@ -1154,10 +1174,16 @@ class ActionListWidget(QTreeWidget):
                 def cb_showcode():
                     try:
                         src = inspect.getsource(a.__class__)
-                    except ModuleNotFoundError:  # in compiled program, no src code
+                    except ModuleNotFoundError:
                         self.dac_win.message("No src code available", log=False)
                         return
+                    uuid = a.uuid
+                    if (editor := self._code_windows.get(uuid)):
+                        if editor.isVisible():
+                            editor.raise_()
+                            return
                     editor = QsciScintilla(self.dac_win)
+                    self._code_windows[uuid] = editor
                     editor.setWindowFlag(Qt.WindowType.Tool)
                     editor.resize(1200, 520)
                     lexer = QsciLexerPython(editor)
@@ -1165,12 +1191,10 @@ class ActionListWidget(QTreeWidget):
                     editor.setLexer(lexer)
                     editor.setUtf8(True)
                     editor.setAutoIndent(True)
-                    # editor.setEolVisibility(True)
                     editor.setIndentationGuides(True)
                     editor.setTabWidth(4)
                     editor.setIndentationsUseTabs(False)
                     editor.setMarginType(1, QsciScintilla.NumberMargin)
-
                     editor.setWindowTitle(a.name)
                     editor.setText(src)
                     editor.show()
