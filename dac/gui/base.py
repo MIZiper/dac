@@ -175,12 +175,13 @@ class MainWindowBase(QMainWindow):
         return super().closeEvent(a0)
 
 class ProgressBundle(QtWidgets.QWidget):
-    def __init__(self, caption):
+    def __init__(self, caption, worker=None):
         super().__init__()
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
+        self._worker = worker
         self._progressbar = progress_bar = QtWidgets.QProgressBar()
         progress_bar.setTextVisible(False)
         progress_bar.setMaximum(0)
@@ -197,7 +198,11 @@ class ProgressBundle(QtWidgets.QWidget):
     def started(self):
         self._label.setText(self._caption)
 
-    # TODO: dbl-click to cancel thread
+    def mouseDoubleClickEvent(self, a0: QMouseEvent) -> None:
+        if self._worker is not None:
+            self._worker.cancel()
+            self._label.setText("<b style='color:red;'>(Cancelled)</b> " + self._caption)
+        return super().mouseDoubleClickEvent(a0)
 
 class ProgressWidget4Threads(QtWidgets.QWidget):
     def __init__(self, parent) -> None:
@@ -207,14 +212,15 @@ class ProgressWidget4Threads(QtWidgets.QWidget):
         self.setMinimumHeight(28)
 
     def add_worker(self, worker: ThreadWorker):
-        progress_widget = ProgressBundle(worker.caption)
+        progress_widget = ProgressBundle(worker.caption, worker=worker)
         worker.signals.progress.connect(progress_widget.progress)
         worker.signals.started.connect(progress_widget.started)
         def finished():
+            progress_widget.setVisible(False)
             self._layout.removeWidget(progress_widget)
+            progress_widget.deleteLater()
         worker.signals.finished.connect(finished)
         self._layout.addWidget(progress_widget)
-        # the original idea was to automatically switch among progress with one progressbar
 
 class DacStatusBar(QtWidgets.QStatusBar):
     def mouseDoubleClickEvent(self, a0: QMouseEvent) -> None:

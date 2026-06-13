@@ -954,9 +954,10 @@ class ActionListWidget(QTreeWidget):
 
         if isinstance(action, PAB):
 
-            def fn(p, progress_emitter, logger):
+            def fn(p, progress_emitter, logger, cancel_check=None):
                 action._progress = progress_emitter
                 action._message = logger
+                action._cancel_check = cancel_check
                 action.pre_run()
                 rst = action(**p)
                 action.post_run()

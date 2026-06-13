@@ -44,7 +44,16 @@ class ThreadWorker(QRunnable):
         self.args = args
         self.kwargs = kwargs
 
+        self._is_cancelled = False
+
         self.signals = WorkerSignals()
+
+    def cancel(self):
+        self._is_cancelled = True
+
+    @property
+    def cancelled(self):
+        return self._is_cancelled
 
     @pyqtSlot()
     def run(self):
@@ -59,6 +68,8 @@ class ThreadWorker(QRunnable):
             self.kwargs['progress_emitter'] = self.signals.progress.emit
         if 'logger' in fn_params:
             self.kwargs['logger'] = self.signals.message.emit
+        if 'cancel_check' in fn_params:
+            self.kwargs['cancel_check'] = lambda: self._is_cancelled
 
         try:
             if self.mutex is not None:
