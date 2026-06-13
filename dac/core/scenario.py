@@ -39,6 +39,7 @@ def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
     if clean:
         Container._action_types.clear()
         Container._key_types.clear()
+        Container._drop_action_map.clear()
         # quick_tasks and quick_actions are always overwritten
 
     try:
@@ -100,6 +101,12 @@ def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
                 idx, # int
                 mode, # bool | str
             ))
+
+    for ext, entries in setting.get("drop_actions", {}).items(): # ext_string, [[action_type_string, params_dict], ...]
+        for ats, params, *rest in entries:
+            action_type = get_node_type(ats)
+            if not action_type: continue
+            Container.RegisterDropAction(ext, action_type, params)
 
     if not hasattr(dac_win, "show"): # web-based cannot use PyQt5 and the tasks
         # return flat quick_actions

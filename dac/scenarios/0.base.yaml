@@ -59,3 +59,11 @@ quick_actions: # [action_type, data_param_name, other_params, mode?]
 quick_tasks:
   /mt/actions.LoadAction:
   - [/mt/tasks.FillFpathsTask, "Select measurement files"]
+
+drop_actions:
+  ".tdms":
+    - [/mt/actions.LoadAction, {}]
+  "folder/":
+    - [/mt/actions.LoadAction, {}]
+  "*":
+    - [/mt/actions.LoadAction, {}]

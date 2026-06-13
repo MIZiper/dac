@@ -11,19 +11,22 @@ from datetime import datetime
 from io import StringIO
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QCloseEvent, QMouseEvent
+from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QCloseEvent, QMouseEvent, QDragEnterEvent, QDropEvent
 from PyQt5.QtWidgets import QMainWindow, QWidget
 
 from dac.core.thread import ThreadWorker
 
 
 class MainWindowBase(QMainWindow):
+    sig_files_dropped = pyqtSignal(list)
+
     def __init__(self) -> None:
         super().__init__()
 
         self.setWindowTitle("DAC Base Window")
         self.resize(1024, 768)
+        self.setAcceptDrops(True)
 
         self._thread_pool = QtCore.QThreadPool.globalInstance()
         self._progress_widget = ProgressWidget4Threads(self)
@@ -173,6 +176,24 @@ class MainWindowBase(QMainWindow):
             self._ipy_widget.kernel_client.stop_channels()
             self._ipy_widget.kernel_manager.shutdown_kernel()
         return super().closeEvent(a0)
+
+    def dragEnterEvent(self, a0: QDragEnterEvent) -> None:
+        if a0.mimeData().hasUrls():
+            a0.acceptProposedAction()
+        else:
+            a0.ignore()
+
+    def dragMoveEvent(self, a0) -> None:
+        if a0.mimeData().hasUrls():
+            a0.acceptProposedAction()
+
+    def dropEvent(self, a0: QDropEvent) -> None:
+        urls = a0.mimeData().urls()
+        if not urls:
+            return
+        paths = [url.toLocalFile() for url in urls if url.isLocalFile()]
+        if paths:
+            self.sig_files_dropped.emit(paths)
 
 class ProgressBundle(QtWidgets.QWidget):
     def __init__(self, caption, worker=None):

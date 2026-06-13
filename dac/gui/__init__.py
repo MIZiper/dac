@@ -285,6 +285,7 @@ class MainWindow(MainWindowBase):
         self.node_editor.sig_return_node.connect(
             self.action_list_widget.action_apply_node_config
         )
+        self.sig_files_dropped.connect(self._on_files_dropped)
 
     def action_copy_figure(self):
         if self.figure is None:
@@ -308,6 +309,81 @@ class MainWindow(MainWindowBase):
                 mod = importlib.import_module(mod_name)
                 importlib.reload(mod)
                 # the sequence may be an issue, e.g. ModA depend on ModB, but ModA get reloaded first, and then ModB. (Then reload it twice?)
+
+    def _on_files_dropped(self, paths: list[str]):
+        if (container := self.container) is None:
+            return
+        from os import path as osp
+
+        ext_matches: dict[str, list[tuple[type[ActionNode], dict]]] = {}
+        folder_matches: list[tuple[type[ActionNode], dict]] = []
+        for p in paths:
+            if osp.isdir(p):
+                folder_matches.extend(Container.GetDropActions("folder/"))
+            else:
+                ext = osp.splitext(p)[1].lower()
+                if ext in Container._drop_action_map:
+                    for pair in Container._drop_action_map[ext]:
+                        ext_matches.setdefault(ext, []).append(pair)
+                else:
+                    for pair in Container._drop_action_map.get("*", []):
+                        ext_matches.setdefault("*", []).append(pair)
+
+        all_matches: list[tuple[type[ActionNode], dict, str, str]] = []
+        seen: set[tuple[type[ActionNode], str]] = set()
+        for ext, pairs in ext_matches.items():
+            for act_type, params in pairs:
+                key = (act_type, str(params))
+                if key in seen:
+                    continue
+                seen.add(key)
+                all_matches.append((act_type, params, "[File]", ext))
+        for act_type, params in folder_matches:
+            key = (act_type, str(params))
+            if key in seen:
+                continue
+            seen.add(key)
+            all_matches.append((act_type, params, "[Dir]", "folder"))
+
+        if not all_matches:
+            self.message("No matching action for dropped files", log=False)
+            return
+
+        if len(all_matches) == 1:
+            act_type, params, _, _ = all_matches[0]
+            self._create_action_from_drop(act_type, paths, params)
+            return
+
+        menu = QtWidgets.QMenu(self)
+        for act_type, params, prefix, ext in all_matches:
+            label = f"{prefix} {act_type.CAPTION}"
+            if params:
+                label += f" ({', '.join(f'{k}={v}' for k, v in params.items())})"
+            action = menu.addAction(label)
+            action.triggered.connect(
+                partial(self._create_action_from_drop, act_type, paths, params)
+            )
+        menu.exec(QtGui.QCursor.pos())
+
+    def _create_action_from_drop(
+        self, act_type: type[ActionNode], paths: list[str], params: dict
+    ):
+        if (container := self.container) is None:
+            return
+        from os import path as osp
+
+        action: ActionBase = act_type(context_key=container.current_key)
+        action.get_construct_config()
+        construct = action._construct_config
+        construct["fpaths"] = paths
+        for k, v in params.items():
+            construct[k] = v
+        container.actions.append(action)
+        self.action_list_widget.refresh(container)
+        self.action_list_widget.sig_edit_action_requested.emit(action)
+        self.message(
+            f"Created {act_type.CAPTION} with {len(paths)} path(s)", log=False
+        )
 
     def spawn_cofigure(self):
         figure = Figure()
