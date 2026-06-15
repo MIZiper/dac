@@ -10,7 +10,7 @@ license = { text = "Apache-2.0" }
 keywords = ["data", "context", "analysis"]
 
 [project.optional-dependencies]
-gui = ["pyqt5", "qscintilla"]
+gui = ["pyqt5-qt5==5.15.2; platform_system == 'Windows'", "pyqt5", "qscintilla"]
 ipy = ["pyqt5", "qscintilla", "qtconsole"]
 remote = ["pyqt5", "qscintilla", "pywebview"]
 
