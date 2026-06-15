@@ -21,16 +21,6 @@ class ActionBase(ActionNode): # needs thread
     # the tasks to assist config input (e.g. browse files instead of filling manually)
     # NOTE: no thread for running the tasks, keep them simple
 
-    def _validate_config_keys(self, construct_config: dict) -> None:
-        if isinstance(self, SAB): # SAB has no params defined
-            return
-        invalid = {
-            k for k in construct_config
-            if k != "name" and k != "out_name"
-        } - self._VALID_PARAM_NAMES
-        if invalid:
-            raise ActionConfigError(f"Unknown parameter(s): {', '.join(invalid)}")
-
 # TODO: add batch processing: read data, process with predefined parameters, process, save or export, clean and free memory
 
 class ProcessActionBase(ActionBase):
@@ -127,6 +117,7 @@ class SequenceActionBase(PAB, VAB):
             signatures[act_type.__name__] = act_type._SIGNATURE
 
         cls._SIGNATURE = signatures
+        cls._VALID_PARAM_NAMES = frozenset(signatures.keys())
     
     def __init__(self, context_key: ContextKeyNode, name: str = None, uuid: str = None) -> None:
         super().__init__(context_key, name, uuid)

@@ -167,7 +167,8 @@ class ActionNode(NodeBase):
     _SIGNATURE = None
 
     def __init_subclass__(cls) -> None:
-        cls._SIGNATURE = inspect.signature(cls.__call__)
+        if not isinstance(cls._SIGNATURE, dict):
+            cls._SIGNATURE = inspect.signature(cls.__call__)
         if isinstance(cls._SIGNATURE, inspect.Signature):
             cls._VALID_PARAM_NAMES = frozenset(
                 p for p in cls._SIGNATURE.parameters if p != "self"
@@ -318,7 +319,12 @@ class ActionNode(NodeBase):
         self.status = ActionNode.ActionStatus.CONFIGURED
 
     def _validate_config_keys(self, construct_config: dict) -> None:
-        pass
+        invalid = {
+            k for k in construct_config
+            if k != "name" and k != "out_name"
+        } - self._VALID_PARAM_NAMES
+        if invalid:
+            raise ActionConfigError(f"Unknown parameter(s): {', '.join(invalid)}")
 
     def get_save_config(self) -> dict:
         cfg = super().get_save_config()
