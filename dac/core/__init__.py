@@ -439,8 +439,8 @@ class Container:
     _type_agencies = {}  # {type: handler}
     _modules = set()
     _drop_action_map: dict[
-        str, list[tuple[type["ActionNode"], dict]]
-    ] = {}  # {ext: [(action_type, default_params), ...]}
+        str, list[tuple[type["ActionNode"], str, dict]]
+    ] = {}  # {ext: [(action_type, path_param_name, default_params), ...]}
 
     def __init__(self) -> None:
         self.actions: list[ActionNode] = []
@@ -721,11 +721,11 @@ class Container:
         Container._type_agencies[node_type] = agent_func
 
     @staticmethod
-    def RegisterDropAction(ext: str, action_type: type["ActionNode"], default_params: dict = None):
+    def RegisterDropAction(ext: str, action_type: type["ActionNode"], path_param_name: str, default_params: dict = None):
         if ext not in Container._drop_action_map:
             Container._drop_action_map[ext] = []
-        Container._drop_action_map[ext].append((action_type, default_params or {}))
+        Container._drop_action_map[ext].append((action_type, path_param_name, default_params or {}))
 
     @staticmethod
-    def GetDropActions(ext: str) -> list[tuple[type["ActionNode"], dict]]:
+    def GetDropActions(ext: str) -> list[tuple[type["ActionNode"], str, dict]]:
         return Container._drop_action_map.get(ext, Container._drop_action_map.get("*", []))

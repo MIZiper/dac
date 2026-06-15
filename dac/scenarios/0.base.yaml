@@ -62,8 +62,8 @@ quick_tasks:
 
 drop_actions:
   ".tdms":
-    - [/mt/actions.LoadAction, {}]
+    - [/mt/actions.LoadAction, fpaths, {}]
   "folder/":
-    - [/mt/actions.LoadAction, {}]
+    - [/mt/actions.LoadAction, fpaths, {}]
   "*":
-    - [/mt/actions.LoadAction, {}]
+    - [/mt/actions.LoadAction, fpaths, {}]

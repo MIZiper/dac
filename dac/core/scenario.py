@@ -102,11 +102,11 @@ def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
                 mode, # bool | str
             ))
 
-    for ext, entries in setting.get("drop_actions", {}).items(): # ext_string, [[action_type_string, params_dict], ...]
-        for ats, params, *rest in entries:
+    for ext, entries in setting.get("drop_actions", {}).items(): # ext_string, [[action_type_string, path_param_name, other_params, mode?], ...]
+        for ats, path_param_name, other_params, *rest in entries:
             action_type = get_node_type(ats)
             if not action_type: continue
-            Container.RegisterDropAction(ext, action_type, params)
+            Container.RegisterDropAction(ext, action_type, path_param_name, other_params)
 
     if not hasattr(dac_win, "show"): # web-based cannot use PyQt5 and the tasks
         # return flat quick_actions

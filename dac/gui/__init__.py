@@ -315,67 +315,91 @@ class MainWindow(MainWindowBase):
             return
         from os import path as osp
 
-        ext_matches: dict[str, list[tuple[type[ActionNode], dict]]] = {}
-        folder_matches: list[tuple[type[ActionNode], dict]] = []
+        ext_matches: dict[str, list[tuple[type[ActionNode], str, dict]]] = {}
+        folder_matches: list[tuple[type[ActionNode], str, dict]] = []
         for p in paths:
             if osp.isdir(p):
                 folder_matches.extend(Container.GetDropActions("folder/"))
             else:
                 ext = osp.splitext(p)[1].lower()
                 if ext in Container._drop_action_map:
-                    for pair in Container._drop_action_map[ext]:
-                        ext_matches.setdefault(ext, []).append(pair)
+                    for entry in Container._drop_action_map[ext]:
+                        ext_matches.setdefault(ext, []).append(entry)
                 else:
-                    for pair in Container._drop_action_map.get("*", []):
-                        ext_matches.setdefault("*", []).append(pair)
+                    for entry in Container._drop_action_map.get("*", []):
+                        ext_matches.setdefault("*", []).append(entry)
 
-        all_matches: list[tuple[type[ActionNode], dict, str, str]] = []
-        seen: set[tuple[type[ActionNode], str]] = set()
-        for ext, pairs in ext_matches.items():
-            for act_type, params in pairs:
-                key = (act_type, str(params))
+        all_matches: list[tuple[type[ActionNode], str, dict, str, str]] = []
+        seen: set[tuple[type[ActionNode], str, str]] = set()
+        for ext, entries in ext_matches.items():
+            for act_type, path_param_name, params in entries:
+                key = (act_type, path_param_name, str(params))
                 if key in seen:
                     continue
                 seen.add(key)
-                all_matches.append((act_type, params, "[File]", ext))
-        for act_type, params in folder_matches:
-            key = (act_type, str(params))
+                all_matches.append((act_type, path_param_name, params, "[File]", ext))
+        for act_type, path_param_name, params in folder_matches:
+            key = (act_type, path_param_name, str(params))
             if key in seen:
                 continue
             seen.add(key)
-            all_matches.append((act_type, params, "[Dir]", "folder"))
+            all_matches.append((act_type, path_param_name, params, "[Dir]", "folder"))
 
         if not all_matches:
             self.message("No matching action for dropped files", log=False)
             return
 
         if len(all_matches) == 1:
-            act_type, params, _, _ = all_matches[0]
-            self._create_action_from_drop(act_type, paths, params)
+            act_type, path_param_name, params, _, _ = all_matches[0]
+            self._create_action_from_drop(act_type, path_param_name, paths, params)
             return
 
         menu = QtWidgets.QMenu(self)
-        for act_type, params, prefix, ext in all_matches:
+        for act_type, path_param_name, params, prefix, ext in all_matches:
             label = f"{prefix} {act_type.CAPTION}"
             if params:
                 label += f" ({', '.join(f'{k}={v}' for k, v in params.items())})"
             action = menu.addAction(label)
             action.triggered.connect(
-                partial(self._create_action_from_drop, act_type, paths, params)
+                partial(self._create_action_from_drop, act_type, path_param_name, paths, params)
             )
         menu.exec(QtGui.QCursor.pos())
 
     def _create_action_from_drop(
-        self, act_type: type[ActionNode], paths: list[str], params: dict
+        self, act_type: type[ActionNode], path_param_name: str, paths: list[str], params: dict
     ):
         if (container := self.container) is None:
             return
-        from os import path as osp
+
+        def _is_list_annotation(ann):
+            if ann is inspect._empty:
+                return False
+            origin = get_origin(ann)
+            if origin is list:
+                return True
+            args = get_args(ann)
+            if not args:
+                return False
+            for t in args:
+                if t is type(None):
+                    continue
+                if _is_list_annotation(t):
+                    return True
+            return False
 
         action: ActionBase = act_type(context_key=container.current_key)
         action.get_construct_config()
         construct = action._construct_config
-        construct["fpaths"] = paths
+
+        sig_params = act_type._SIGNATURE
+        is_list = False
+        if isinstance(sig_params, dict):
+            sig_params = act_type._SEQUENCE[0]._SIGNATURE
+        param = sig_params.parameters.get(path_param_name)
+        if param is not None:
+            is_list = _is_list_annotation(param.annotation)
+
+        construct[path_param_name] = paths if is_list else (paths[0] if paths else None)
         for k, v in params.items():
             construct[k] = v
         container.actions.append(action)
