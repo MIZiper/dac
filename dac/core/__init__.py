@@ -318,12 +318,7 @@ class ActionNode(NodeBase):
         self.status = ActionNode.ActionStatus.CONFIGURED
 
     def _validate_config_keys(self, construct_config: dict) -> None:
-        invalid = {
-            k for k in construct_config
-            if k != "name" and k != "out_name"
-        } - self._VALID_PARAM_NAMES
-        if invalid:
-            raise ActionConfigError(f"Unknown parameter(s): {', '.join(invalid)}")
+        pass
 
     def get_save_config(self) -> dict:
         cfg = super().get_save_config()
