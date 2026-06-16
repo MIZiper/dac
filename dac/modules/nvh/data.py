@@ -153,29 +153,23 @@ class FreqDomainData(DataBase):
     def effective_value(self, fmin=0, fmax=0):
         """Calculates the effective (RMS) value of the spectrum.
 
-        .. note::
-            The current implementation calculates `sqrt(sum(abs(y)^2))`,
-            which is related to Parseval's theorem but might need adjustment
-            for a calibrated RMS value depending on windowing and scaling factors
-            not present in this method. The `fmin` and `fmax` arguments are
-            defined but not used.
+        Computes sqrt(sum(abs(y)**2)) over the specified frequency range.
 
         Parameters
         ----------
         fmin : float, [Hz]
-            Minimum frequency for the calculation (currently unused).
+            Minimum frequency for the calculation. 0 means from start.
         fmax : float, [Hz]
-            Maximum frequency for the calculation (currently unused).
+            Maximum frequency for the calculation. 0 means to end.
 
         Returns
         -------
         float
             The square root of the sum of the squared absolute values of the spectrum.
         """
-        # index = (freq > fmin) & (freq <= fmax)
-        # effvalue = sqrt(sum(abs(value(index)*new_factor/orig_factor).^2));
-
-        return np.sqrt(np.sum(np.abs(self.y)**2))
+        i_start = np.searchsorted(self.x, fmin) if fmin > 0 else 0
+        i_end = np.searchsorted(self.x, fmax) if fmax > 0 else self.lines
+        return np.sqrt(np.sum(np.abs(self.y[i_start:i_end])**2))
     
     def to_timedomain(self):
         """Converts the frequency domain data back to the time domain using IFFT.
@@ -198,9 +192,17 @@ class FreqDomainData(DataBase):
         return TimeData(name=self.name, y=y, dt=1/(self.lines*self.df*2), y_unit=self.y_unit)
     
     def as_timedomain(self):
-        """Placeholder for treating spectrum as time domain data.
+        """Treats the spectrum amplitude as if it were time-domain data.
+
+        Returns the amplitude array as a TimeData object with dt = 1/df
+        representing the "time" spacing of frequency lines.
         """
-        ...
+        return TimeData(
+            name=f"{self.name}-AsT",
+            y=self.amplitude,
+            dt=1 / (self.lines * self.df),
+            y_unit=self.y_unit,
+        )
 
     def get_amplitudes_at(self, frequencies: list[float], lines: int=3, width: float=None) -> list[tuple[float, float]]:
         """Extracts peak amplitudes from the spectrum at or near specified frequencies.
@@ -331,24 +333,20 @@ class FreqIntermediateData(DataBase):
             y = np.mean(np.abs(self.z), axis=0)
         return FreqDomainData(name=self.name, y=y, df=self.df, y_unit=self.z_unit)
     
-    def rectify_to(self, x_slice: tuple, y_slice: tuple) -> "FreqIntermediateData":
-        """Resamples or re-bins the FreqIntermediateData to a new grid.
-
-        .. note::
-            The actual implementation is incomplete, currently a `pass` statement
-            within the loops and returns `FreqIntermediateData` class, not an instance.
+    def rectify_to(self, x_slice: int, y_slice: int) -> "FreqIntermediateData":
+        """Re-bins the FreqIntermediateData to a coarser x and y grid by averaging.
 
         Parameters
         ----------
-        x_slice : tuple
-            Tuple defining the new x-axis (frequency) bins or range.
-        y_slice : tuple
-            Tuple defining the new y-axis (reference) bins or range.
+        x_slice : int
+            Number of frequency bins per new x bin.
+        y_slice : int
+            Number of reference bins per new y bin.
 
         Returns
         -------
         FreqIntermediateData
-            A new FreqIntermediateData object on the rectified grid (intended).
+            A new FreqIntermediateData object on the rectified grid.
         """
         ref_bins = self.ref_bins
         ys = ref_bins.y
@@ -356,19 +354,26 @@ class FreqIntermediateData(DataBase):
         ys = ys[idx]
         zs = self.z[idx]
 
-        xs = self.x # the frequencies
+        batches, lines = zs.shape
+        new_batches = batches // y_slice
+        new_lines = lines // x_slice
+        if new_batches == 0 or new_lines == 0:
+            return self
 
-        x_bins = np.arange(x_slice)
-        x_idxes = np.digitize(xs, x_bins)
-        y_bins = np.arange(y_bins)
-        y_idxes = np.digitize(ys, y_bins)
+        z_rect = zs[:new_batches * y_slice, :new_lines * x_slice]
+        z_rect = z_rect.reshape(new_batches, y_slice, new_lines, x_slice)
+        z_rect = np.mean(np.abs(z_rect), axis=(1, 3))
 
-        # average by energy
-        for y in ys:
-            for x in xs:
-                pass
+        y_rect = np.mean(ys[:new_batches * y_slice].reshape(new_batches, y_slice), axis=1)
+        ref_rect = DataBins(name=ref_bins.name, y=y_rect, y_unit=ref_bins.y_unit)
 
-        return FreqIntermediateData
+        return FreqIntermediateData(
+            name=f"{self.name}-Rect",
+            z=z_rect,
+            df=self.df * x_slice,
+            z_unit=self.z_unit,
+            ref_bins=ref_rect,
+        )
     
     def extract_orderslice(self, orders: "OrderList", line_tol: int=3) -> "OrderSliceData":
         """Extracts order slices from the FreqIntermediateData.
@@ -525,5 +530,36 @@ class OrderSliceData(DataBase):
         self.slices: dict[OrderInfo, SliceData] = {}
         self.ref_source: FreqIntermediateData = source
     
-    def rectify2freqdata(self): # when speed is uneven, remove high bandwidth
-        pass
+    def rectify2freqdata(self, df: float = None):
+        """Converts all order slices to a FreqDomainData by mapping slices to a common frequency grid.
+
+        Each SliceData in self.slices is resampled onto a common frequency axis with spacing df.
+        If df is None, the frequency resolution of the source is used.
+
+        Returns
+        -------
+        list[FreqDomainData]
+            A list of FreqDomainData objects, one per order slice.
+        """
+        if self.ref_source is None:
+            return []
+        if df is None:
+            df = self.ref_source.df
+        f_max = self.ref_source.x[-1]
+        f_grid = np.arange(0, f_max, df)
+        results = []
+        for order_info, slice_data in self.slices.items():
+            amplitude = np.interp(
+                f_grid,
+                slice_data.f[np.argsort(slice_data.f)],
+                slice_data.amplitude[np.argsort(slice_data.f)],
+                left=0,
+                right=0,
+            )
+            results.append(FreqDomainData(
+                name=order_info.name,
+                y=amplitude,
+                df=df,
+                y_unit=self.ref_source.z_unit,
+            ))
+        return results

@@ -4,7 +4,7 @@ import numpy as np
 import re
 from scipy import signal
 
-from dac.core.actions import ActionBase, VAB, PAB, SAB
+from dac.core.actions import ActionBase, VAB, PAB, SAB, TAB
 from dac.core.exceptions import ActionExecutionError
 from . import TimeData
 from .data_loader import load_tdms
@@ -519,7 +519,76 @@ class PulseToAzimuthAction(ActionBase):
         )
     
 class RefPulseToAzimuthAction(PAB):
-    ... # create azimuth using reference
+    CAPTION = "Ref pulse to azimuth"
+    def __call__(self, channel: TimeData, ref_level: float, ppr: int=1, higher_as_pulse: bool=True, phase_shift: float=0, ref_channel: TimeData=None) -> TimeData:
+        rst = []
+        aggregate = channel.y if not higher_as_pulse else -channel.y
+        inpulse = aggregate < ref_level
+        indexes = np.arange(len(channel.y))[inpulse]
+        idx_diff = np.diff(indexes)
+        idx_pulse_end = indexes[:-1][idx_diff > np.mean(idx_diff)]
+        ang_data = np.zeros_like(channel.y) * np.nan
+        for i, (from_idx, to_idx) in enumerate(zip(idx_pulse_end[:-1], idx_pulse_end[1:])):
+            ang_data[from_idx:to_idx] = np.arange(to_idx - from_idx) / (to_idx - from_idx) * 360 + 360 * i
+        return TimeData(
+            name=f"Azi-{channel.name}", dt=channel.dt, y_unit="°",
+            y=(ang_data / ppr + phase_shift) % 360,
+        )
+
+class IntegrateTimeAction(PAB):
+    CAPTION = "Integrate in time domain"
+    def __call__(self, channels: list[TimeData]) -> list[TimeData]:
+        rst = []
+        n = len(channels)
+        for i, channel in enumerate(channels):
+            rst.append(channel.integrate())
+            self.progress(i + 1, n)
+        return rst
+
+class DifferentiateTimeAction(PAB):
+    CAPTION = "Differentiate in time domain"
+    def __call__(self, channels: list[TimeData]) -> list[TimeData]:
+        rst = []
+        n = len(channels)
+        for i, channel in enumerate(channels):
+            rst.append(channel.differentiate())
+            self.progress(i + 1, n)
+        return rst
+
+class DCOffsetRemovalAction(ActionBase):
+    CAPTION = "Remove DC offset"
+    def __call__(self, channels: list[TimeData]) -> list[TimeData]:
+        rst = []
+        for channel in channels:
+            rst.append(TimeData(
+                name=f"{channel.name}-DCrm",
+                y=channel.y - np.mean(channel.y),
+                dt=channel.dt,
+                y_unit=channel.y_unit,
+                comment=channel.comment,
+            ))
+        return rst
+
+class StatisticsAction(TAB):
+    CAPTION = "Show statistics of TimeData"
+    def __call__(self, channels: list[TimeData]) -> list[TimeData]:
+        rows = ["mean", "std", "min", "max", "rms", "crest_factor", "skewness", "kurtosis"]
+        cols = []
+        data = []
+        for channel in channels:
+            stats = channel.statistics()
+            cols.append(stats["name"])
+            row_vals = []
+            for key in rows:
+                row_vals.append(f"{stats[key]:.4g}")
+            data.append(row_vals)
+        stats = {
+            "title": "TimeData Statistics",
+            "headers": {"row": rows, "col": cols},
+            "data": list(zip(*data)),
+        }
+        self.present(stats)
+        return channels
 
 class OpAction(ActionBase):
     CAPTION = "Operation on TimeData"

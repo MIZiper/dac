@@ -278,11 +278,11 @@ class ViewFreqIntermediateAction(VAB):
 class ExtractAmplitudeAction(PAB):
     CAPTION = "Extract amplitude at frequencies"
 
-    def __call__(self, channels: list[FreqDomainData], frequencies: list[float], line_tol: int=3):
+    def __call__(self, channels: list[FreqDomainData], frequencies: list[float], line_tol: int=3, width: float=None) -> list[DataBins]:
         """Extracts peak amplitudes from FreqDomainData at specified frequencies.
 
         For each specified frequency, it finds the peak amplitude within a given
-        tolerance (number of frequency lines).
+        tolerance (number of frequency lines or width in Hz).
 
         Parameters
         ----------
@@ -293,20 +293,32 @@ class ExtractAmplitudeAction(PAB):
         line_tol : int, default 3
             Number of frequency lines around the target frequency
             to search for the peak.
+        width : float, optional
+            Search width in Hz. Overrides line_tol if provided.
 
         Returns
         -------
-        list
-            A list of lists, where each inner list contains tuples of
-            (actual_frequency, peak_amplitude) for each specified frequency
-            in the corresponding channel. Structure:
-
-                [[ (f1_ch1, amp1_ch1), (f2_ch1, amp2_ch1), ... ],  # Channel 1
-                [ (f1_ch2, amp1_ch2), (f2_ch2, amp2_ch2), ... ]]  # Channel 2
-
-            (Note: The actual implementation is missing, currently returns `...`)
+        list[DataBins]
+            A list of DataBins, each containing the extracted amplitudes
+            from the corresponding input channel.
         """
-        ...
+        result_bins = []
+        n = len(channels)
+        for i, channel in enumerate(channels):
+            fas = channel.get_amplitudes_at(frequencies, lines=line_tol, width=width)
+            amps = []
+            freq_found = []
+            for fa in fas:
+                if fa is not None:
+                    freq_found.append(fa[0])
+                    amps.append(np.abs(fa[1]))
+                else:
+                    freq_found.append(np.nan)
+                    amps.append(np.nan)
+            bins = DataBins(name=f"{channel.name}-Amps", y=np.array(amps), y_unit=channel.y_unit)
+            result_bins.append(bins)
+            self.progress(i + 1, n)
+        return result_bins
 
 class ViewColorPlotAndCheckOrderSlice(ViewFreqIntermediateAction):
     # obsolete, it's too laggy
@@ -349,31 +361,66 @@ class ViewColorPlotAndCheckOrderSlice(ViewFreqIntermediateAction):
         )
         self._widgets.append(order_input)
 
-class MarkOrders(VAB): # Mark orders for colorplot, I suppose?
-    pass
+class MarkOrders(VAB):
+    CAPTION = "Mark orders on color plot"
+    def __call__(self, channel: FreqIntermediateData, orders: OrderList):
+        """Marks order lines on a FreqIntermediateData color plot.
 
-class ViewColorPlotWithOrderSlice(ViewFreqIntermediateAction): # inherit SAB = ViewColorPlot + MarkOrders
+        Draws lines from the origin with slopes corresponding to each order
+        value. The order value translates ref_bins values to frequency.
+
+        Parameters
+        ----------
+        channel : FreqIntermediateData
+            The FreqIntermediateData object whose color plot is the target.
+        orders : OrderList
+            An OrderList defining the orders to mark.
+        """
+        fig = self.figure
+        ax = fig.gca()
+        if channel.ref_bins is None:
+            return
+        for order in orders.orders:
+            ax.axline((0, 0), slope=order.value, color='w', ls='--', lw=0.8)
+            ax.annotate(
+                order.name,
+                (ax.get_xlim()[1] * 0.85, ax.get_xlim()[1] * 0.85 * order.value),
+                color='w',
+                fontsize=8,
+                va='bottom',
+            )
+        self.canvas.draw_idle()
+
+class ViewColorPlotWithOrderSlice(ViewFreqIntermediateAction):
     CAPTION = "Show color plot with order indication"
-    def __call__(self, channel: FreqIntermediateData, orders: OrderList, fmt_lines: list[str]=["{f_1}", "0.5"], xlim: tuple[float, float] = None, clim: tuple[float, float] = [0, 0.001]):
-        """Displays a FreqIntermediateData colormap with order lines.
-
-        (Note: The actual implementation is missing, currently a `pass` statement)
+    def __call__(self, channel: FreqIntermediateData, orders: OrderList, fmt_lines: list[str]=None, xlim: tuple[float, float]=None, clim: tuple[float, float]=[0, 0.001]):
+        """Displays a FreqIntermediateData colormap with order lines overlaid.
 
         Parameters
         ----------
         channel : FreqIntermediateData
             The FreqIntermediateData object to plot.
         orders : OrderList
-            An OrderList defining the orders to mark.
-        fmt_lines : list[str]
-            A list of strings for custom frequency lines (similar to
-            ShowFreqLinesFreq).
+            An OrderList defining the orders to mark as rays from origin.
+        fmt_lines : list[str], optional
+            Labels for custom frequency lines (not yet implemented).
         xlim : tuple[float, float], optional
             Tuple (min, max) for the x-axis (frequency) limits.
         clim : tuple[float, float], optional
             Tuple (min, max) for the color axis limits.
         """
-        pass
+        super().__call__(channel, xlim, clim)
+        ax = self.figure.gca()
+        for order in orders.orders:
+            ax.axline((0, 0), slope=order.value, color='w', ls='--', lw=0.8)
+            ax.annotate(
+                order.name,
+                (ax.get_xlim()[1] * 0.85, ax.get_xlim()[1] * 0.85 * order.value),
+                color='w',
+                fontsize=8,
+                va='bottom',
+            )
+        self.canvas.draw_idle()
 
 class CreateOrders(ActionBase):
     CAPTION = "Create orders"
@@ -772,6 +819,13 @@ class SpectrumToTimeAction(PAB):
 
 class SpectrumAsTimeAction(PAB):
     CAPTION = "Treat frequency spectrum as TimeData"
+    def __call__(self, channels: list[FreqDomainData]) -> list[TimeData]:
+        rst = []
+        n = len(channels)
+        for i, ch in enumerate(channels):
+            rst.append(ch.as_timedomain())
+            self.progress(i + 1, n)
+        return rst
 
 class LoadCaseSpectrumComparison(VAB):
     CAPTION = "Show spectrum across loadcases"
@@ -799,21 +853,225 @@ class LoadCaseSpectrumComparison(VAB):
         ax.legend(loc="upper right")
 
 class LoadCaseFreqIntermediateAverage(VAB):
-    def __call__(self, loadcases: list[str], channel_name: str, ref_case: str):
-        """Averages FreqIntermediateData for a channel across multiple load cases,
-        potentially referencing one specific case.
+    CAPTION = "Average FreqIntermediate across load cases"
+    def __call__(self, loadcases: list[SimpleDefinition], channel_name: str):
+        """Averages FreqIntermediateData for a channel across multiple load cases.
 
-        (Note: The actual implementation is missing, currently a `pass` statement)
+        Retrieves the named FreqIntermediateData from each load case context,
+        averages them, and displays the resulting colormap.
 
         Parameters
         ----------
-        loadcases : list[str]
-            A list of strings for load case identifiers.
+        loadcases : list[SimpleDefinition]
+            A list of load case identifiers (SimpleDefinition).
         channel_name : str
-            The name of the FreqIntermediateData channel.
-        ref_case : str
-            A string identifying the reference load case.
+            The name of the FreqIntermediateData channel to average.
         """
-        pass
+        intermediates = []
+        ref_bins = None
+        for loadcase in loadcases:
+            ctx = self.container.get_context(loadcase)
+            fim: FreqIntermediateData = ctx.get_node_of_type(channel_name, FreqIntermediateData)
+            intermediates.append(fim)
+            if ref_bins is None:
+                ref_bins = fim.ref_bins
+        if not intermediates:
+            return
+        z_stack = np.stack([f.z for f in intermediates])
+        z_mean = np.mean(z_stack, axis=0)
+        avg = FreqIntermediateData(
+            name=f"{channel_name}-AvgLC",
+            z=z_mean,
+            df=intermediates[0].df,
+            z_unit=intermediates[0].z_unit,
+            ref_bins=ref_bins,
+        )
+        fig = self.figure
+        ax = fig.gca()
+        fig.suptitle(f"Average color map: {channel_name}")
+        xs = avg.x
+        zs = avg.z
+        ax.set_xlabel("Frequency [Hz]")
+        if avg.ref_bins is not None:
+            ys = avg.ref_bins.y
+            idx = np.argsort(ys)
+            ys = ys[idx]
+            zs = zs[idx]
+            ax.set_ylabel(f"{avg.ref_bins.name} [{avg.ref_bins.y_unit}]")
+        m = ax.pcolormesh(xs, ys, np.abs(zs), cmap='jet')
+        fig.colorbar(m).set_label(f"Amplitude [{avg.z_unit}]")
+        self.canvas.draw_idle()
 
-# BearingEnvelopeAnalysis = FFT + FilterSpec + ...
+class OctaveBandAction(PAB):
+    CAPTION = "1/1 and 1/3 octave band analysis"
+    def __call__(self, channels: list[FreqDomainData], band_fraction: int=3) -> list[FreqDomainData]:
+        """Computes 1/N octave band synthesis from spectra.
+
+        Integrates spectral energy within each octave band and assigns
+        the result to the band center frequency. Follows IEC 61260 nominal
+        center frequencies.
+
+        Parameters
+        ----------
+        channels : list[FreqDomainData]
+            A list of FreqDomainData objects to process.
+        band_fraction : int, default 3
+            Octave band fraction. 1 for 1/1 octave, 3 for 1/3 octave.
+
+        Returns
+        -------
+        list[FreqDomainData]
+            A list of FreqDomainData objects with octave band values.
+        """
+        base10 = 10.0
+        ref_freq = 1000.0
+        n = len(channels)
+        results = []
+        for i, channel in enumerate(channels):
+            x = channel.x
+            y_abs = np.abs(channel.y)
+            f_min = max(x[0], 10.0)
+            f_max = min(x[-1], 20000.0)
+            oct_low = ref_freq * base10 ** (0.3 * (-100) / band_fraction)
+            oct_high = ref_freq * base10 ** (0.3 * 100 / band_fraction)
+            center_indices = np.arange(-100, 101)
+            center_freqs = ref_freq * base10 ** (0.3 * center_indices / band_fraction)
+            mask = (center_freqs >= f_min) & (center_freqs <= f_max)
+            center_freqs = center_freqs[mask]
+            band_values = np.zeros(len(center_freqs))
+            for j, fc in enumerate(center_freqs):
+                f_low = fc / base10 ** (0.15 / band_fraction)
+                f_high = fc * base10 ** (0.15 / band_fraction)
+                band_idx = (x >= f_low) & (x < f_high)
+                if np.any(band_idx):
+                    band_values[j] = np.sqrt(np.sum(y_abs[band_idx]**2))
+            results.append(FreqDomainData(
+                name=f"{channel.name}-Oct{band_fraction}",
+                y=band_values,
+                df=center_freqs[1] - center_freqs[0] if len(center_freqs) > 1 else 1.0,
+                y_unit=channel.y_unit,
+            ))
+            self.progress(i + 1, n)
+        return results
+
+class EnvelopeSpectrumAction(PAB):
+    CAPTION = "Envelope spectrum analysis"
+    def __call__(self, channels: list[TimeData], f_low: float, f_high: float, filter_order: int=4) -> list[FreqDomainData]:
+        """Computes envelope spectrum for bearing/gear fault diagnosis.
+
+        Applies a band-pass Butterworth filter, extracts the envelope via Hilbert
+        transform, removes DC, and computes the FFT to produce the envelope spectrum.
+
+        Parameters
+        ----------
+        channels : list[TimeData]
+            A list of TimeData objects to process.
+        f_low : float
+            Lower cutoff frequency for band-pass filter in Hz.
+        f_high : float
+            Upper cutoff frequency for band-pass filter in Hz.
+        filter_order : int, default 4
+            Order of the Butterworth filter.
+
+        Returns
+        -------
+        list[FreqDomainData]
+            A list of FreqDomainData objects containing the envelope spectra.
+        """
+        from scipy import signal
+        n = len(channels)
+        results = []
+        for i, channel in enumerate(channels):
+            Wn = np.array([f_low, f_high]) / (channel.fs / 2)
+            b, a = signal.butter(filter_order, Wn, btype='bandpass')
+            y_filt = signal.filtfilt(b, a, channel.y)
+            analytic = signal.hilbert(y_filt)
+            env = np.abs(analytic)
+            env = env - np.mean(env)
+            batch_N = len(env)
+            df = 1 / (batch_N * channel.dt)
+            fdata = np.fft.fft(env) / batch_N
+            double_spec = fdata[:int(np.ceil(batch_N / 2))]
+            double_spec[1:] *= 2
+            results.append(FreqDomainData(
+                name=f"{channel.name}-EnvSpec",
+                y=double_spec,
+                df=df,
+                y_unit=channel.y_unit,
+            ))
+            self.progress(i + 1, n)
+        return results
+
+class CepstrumAction(PAB):
+    CAPTION = "Real cepstrum analysis"
+    def __call__(self, channels: list[FreqDomainData]) -> list[FreqDomainData]:
+        """Computes the real cepstrum from FreqDomainData.
+
+        The real cepstrum is the inverse FFT of the log magnitude spectrum.
+        Used to detect periodic structures such as gear mesh harmonics
+        and bearing fault sidebands.
+
+        Parameters
+        ----------
+        channels : list[FreqDomainData]
+            A list of FreqDomainData objects to process.
+
+        Returns
+        -------
+        list[FreqDomainData]
+            A list of FreqDomainData objects representing the real cepstra.
+            The x-axis is quefrency [s] and y is the cepstrum amplitude.
+        """
+        n = len(channels)
+        results = []
+        for i, channel in enumerate(channels):
+            amp = channel.amplitude.copy()
+            amp[amp <= 0] = np.min(amp[amp > 0]) if np.any(amp > 0) else 1e-30
+            log_amp = np.log(amp)
+            double_spec = np.concatenate([log_amp, log_amp[channel.lines:0:-1]])
+            cep = np.real(np.fft.ifft(double_spec))
+            cep = cep[:channel.lines]
+            dq = 1 / (channel.lines * channel.df)
+            results.append(FreqDomainData(
+                name=f"{channel.name}-Cep",
+                y=cep,
+                df=dq,
+                y_unit=channel.y_unit,
+            ))
+            self.progress(i + 1, n)
+        return results
+
+class CoherenceAction(VAB):
+    CAPTION = "Coherence between channels"
+    def __call__(self, channel_a: FreqIntermediateData, channel_b: FreqIntermediateData):
+        """Computes and plots the magnitude-squared coherence between two channels.
+
+        The coherence is computed from the cross-spectrum and individual
+        power spectra of two FreqIntermediateData objects.
+
+        Parameters
+        ----------
+        channel_a : FreqIntermediateData
+            First channel (reference).
+        channel_b : FreqIntermediateData
+            Second channel.
+        """
+        cross = np.conj(channel_a.z) * channel_b.z
+        cross_avg = np.mean(cross, axis=0)
+        spec_a = np.mean(np.abs(channel_a.z)**2, axis=0)
+        spec_b = np.mean(np.abs(channel_b.z)**2, axis=0)
+        coh = np.abs(cross_avg) / np.sqrt(spec_a * spec_b + 1e-30)
+        fig = self.figure
+        gs = GridSpec(2, 1, height_ratios=[2, 1])
+        ax_coh = fig.add_subplot(gs[1])
+        ax_coh.plot(channel_a.x, coh, 'k')
+        ax_coh.set_xlabel("Frequency [Hz]")
+        ax_coh.set_ylabel("Coherence [-]")
+        ax_coh.set_ylim(0, 1.05)
+        ax_spec = fig.add_subplot(gs[0], sharex=ax_coh)
+        ax_spec.plot(channel_a.x, np.sqrt(spec_a), label=channel_a.name)
+        ax_spec.plot(channel_b.x, np.sqrt(spec_b), label=channel_b.name)
+        ax_spec.set_ylabel("Amplitude")
+        ax_spec.legend(loc='upper right')
+        ax_spec.set_title(f"Coherence: {channel_a.name} vs {channel_b.name}")
+        self.canvas.draw_idle()

@@ -55,12 +55,66 @@ class GearStage:
         else:
             raise TypeError("Unsupported stage for meshing frequency")
 
-    def get_freq_at_order(self, order: str):
-        ...
+    def get_freq_at_order(self, order: str, input_speed: float):
+        """Return the frequency for a named order at a given input speed.
 
-    def get_order_name_at_freq(self, freq: float, max_order: int, tolerance: int):
-        # return the name
-        ...
+        Parameters
+        ----------
+        order : str
+            Order name, e.g. "f", "fz", "fw", or "Npf" where N is number of planets.
+        input_speed : float
+            Input shaft speed in RPM.
+
+        Returns
+        -------
+        float or None
+            The frequency in Hz, or None if the order is not applicable.
+        """
+        labels_at_speed = {lbl: freq for freq, lbl in self.get_freqs_labels_at(input_speed)}
+        return labels_at_speed.get(order)
+
+    def get_order_name_at_freq(self, freq: float, input_speed: float, max_order: int=20, tolerance: float=0.05):
+        """Find the closest order name for a given frequency.
+
+        Searches through shaft orders and characteristic frequencies up to
+        max_order to find the best match.
+
+        Parameters
+        ----------
+        freq : float
+            The target frequency in Hz.
+        input_speed : float
+            Input shaft speed in RPM.
+        max_order : int, default 20
+            Maximum harmonic order to check.
+        tolerance : float, default 0.05
+            Relative tolerance for matching (0.05 = 5%).
+
+        Returns
+        -------
+        str or None
+            Best matching order name, or None if no match found within tolerance.
+        """
+        f_base = self.f(input_speed)
+        best_name = None
+        best_dev = np.inf
+        for harm in range(1, max_order + 1):
+            f_test = f_base * harm
+            dev = abs(freq - f_test) / f_test if f_test > 0 else np.inf
+            if dev < tolerance and dev < best_dev:
+                best_dev = dev
+                best_name = f"{harm}f"
+
+        if self.stage_type in (GearStage.StageType.Planetary, GearStage.StageType.Parallel):
+            fz_base = self.fz(input_speed)
+            for harm in range(1, max_order + 1):
+                f_test = fz_base * harm
+                dev = abs(freq - f_test) / f_test if f_test > 0 else np.inf
+                if dev < tolerance and dev < best_dev:
+                    best_dev = dev
+                    best_name = f"{harm}fz"
+
+        return best_name
 
     def get_freqs_labels_at(self, input_speed: float):
         rst = [
