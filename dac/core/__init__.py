@@ -175,6 +175,8 @@ class ActionNode(NodeBase):
             )
         else:
             cls._VALID_PARAM_NAMES = frozenset(cls._SIGNATURE.keys())
+        if cls.__doc__ is None and hasattr(cls.__call__, '__doc__') and cls.__call__.__doc__ is not None:
+            cls.__doc__ = cls.__call__.__doc__
 
     class ActionStatus(IntEnum):
         INIT = 0
