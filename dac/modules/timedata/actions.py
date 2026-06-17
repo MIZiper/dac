@@ -571,7 +571,7 @@ class DCOffsetRemovalAction(ActionBase):
 
 class StatisticsAction(TAB):
     CAPTION = "Show statistics of TimeData"
-    def __call__(self, channels: list[TimeData]) -> list[TimeData]:
+    def __call__(self, channels: list[TimeData]):
         rows = ["mean", "std", "min", "max", "rms", "crest_factor", "skewness", "kurtosis"]
         cols = []
         data = []
@@ -588,7 +588,6 @@ class StatisticsAction(TAB):
             "data": list(zip(*data)),
         }
         self.present(stats)
-        return channels
 
 class OpAction(ActionBase):
     CAPTION = "Operation on TimeData"

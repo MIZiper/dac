@@ -19,6 +19,10 @@ actions:
   - /md/actions.CreateBearing
   - /md/actions.CreateGearboxWithBearings
   - /md/actions.CreateOrdersOfGearbox
+  - "[Freq domain]"
+  - /mv/actions.LoadCaseFreqIntermediateAverage
+  - "[OrderSlice]"
+  - /mv/actions.ViewOrderSliceOfMeasurements
   
   /dd/SimpleDefinition:
   - /da/Separator
@@ -53,9 +57,12 @@ actions:
   - /mv/actions.EnvelopeSpectrumAction
   - /mv/actions.CepstrumAction
   - /mv/actions.CoherenceAction
+  - "[<]"
+  - "[OrderSlice>]"
+  - /mv/actions.CreateOrders
+  - /mv/actions.ExtractOrderSlicesAction
   - /mv/actions.ViewOrderSlice
   - /mv/actions.ViewColorPlotWithOrderSlice
-  - /mv/actions.LoadCaseFreqIntermediateAverage
   - "[<]"
   - /mv/actions.ShowSpectrumWithGuesser
 
@@ -67,12 +74,9 @@ quick_actions: # [action_type, data_param_name, other_params, mode?]
   #   e.g. [/da/A1A2, sec, {A2: {amp: 5.0}}]
   /mt/TimeData:
   - [/mt/actions.ShowTimeDataAction, channels, {}]
-  - [/mt/actions.IntegrateTimeAction, channels, {}]
-  - [/mt/actions.DCOffsetRemovalAction, channels, {}]
-  - [/mv/actions.EnvelopeSpectrumAction, channels, {f_low: 1000, f_high: 8000}]
+  - [/mt/actions.StatisticsAction, channels, {}]
   /mv/data.FreqDomainData:
   - [/mv/actions.ViewFreqDomainAction, channels, {with_phase: true}]
-  - [/mv/actions.CepstrumAction, channels, {}]
   /mv/data.FreqIntermediateData:
   - [/mv/actions.ViewFreqIntermediateAction, channel, {}]
   /mv/data.OrderSliceData:
@@ -85,7 +89,6 @@ quick_tasks:
 drop_actions:
   ".tdms":
     - [/mt/actions.LoadAction, fpaths, {}]
-  "folder/":
-    - [/mt/actions.LoadAction, fpaths, {}]
+  "folder/": []
   "*":
     - [/mt/actions.LoadAction, fpaths, {}]
