@@ -394,7 +394,26 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
     def get_node_of_type(self, node_name: str, node_type: type[NodeBase]) -> NodeBase:
         if node_type in self and node_name in self[node_type]:
             return self[node_type][node_name]
-        return self._name_index.get((node_type, node_name))
+        node = self._name_index.get((node_type, node_name))
+        if node is not None:
+            return node
+        for stored_type, nodes in self.items():
+            if issubclass(stored_type, node_type) and node_name in nodes:
+                return nodes[node_name]
+        return None
+
+    def remove_node(self, node: NodeBase):
+        node_type = type(node)
+        if node_type in self and node.name in self[node_type]:
+            del self[node_type][node.name]
+            if not self[node_type]:
+                del self[node_type]
+        self._unindex_node(node)
+
+    def clear(self):
+        self._name_index.clear()
+        self._uuid_dict.clear()
+        super().clear()
 
     def rename_node_to(self, node: NodeBase, new_name: str):
         node_type = type(node)

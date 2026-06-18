@@ -15,6 +15,7 @@ actions:
   - "[Test space>]"
   - /da/A1A2 # SAB action
   - /da/A1A2_2 # SAB of SAB
+  - /da/CleanupAction
   - "[<]"
   
   /dd/SimpleDefinition:

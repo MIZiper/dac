@@ -105,6 +105,17 @@ class Separator(ActionBase):
     def __call__(self):
         pass
 
+class CleanupAction(ActionBase):
+    CAPTION = "Clean up context data"
+    def __call__(self, keep: list[DataNode] = None) -> None:
+        if not keep:
+            return
+        ctx = self.container.CurrentContext
+        keep_set = set(keep)
+        for _, _, node in list(ctx.NodeIter):
+            if node not in keep_set:
+                ctx.remove_node(node)
+
 class SequenceActionBase(PAB, VAB):
     CAPTION = "Not implemented sequence"
     _SEQUENCE = []
