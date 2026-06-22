@@ -681,8 +681,31 @@ class DataListWidget(QTreeWidget):
         self.itemClicked.connect(self.action_item_clicked)
         self.itemDoubleClicked.connect(self.action_item_dblclicked)
 
+    def _collect_expanded_uuids(self) -> set:
+        expanded = set()
+        for i in range(self.topLevelItemCount()):
+            self._walk_expanded_uuids(self.topLevelItem(i), expanded)
+        return expanded
+
+    def _walk_expanded_uuids(self, item, expanded):
+        if item.isExpanded() and item.text(REMARK):
+            expanded.add(item.text(REMARK))
+        for i in range(item.childCount()):
+            self._walk_expanded_uuids(item.child(i), expanded)
+
+    def _restore_expanded_uuids(self, expanded):
+        for i in range(self.topLevelItemCount()):
+            self._walk_restore_expanded(self.topLevelItem(i), expanded)
+
+    def _walk_restore_expanded(self, item, expanded):
+        if item.text(REMARK) in expanded:
+            item.setExpanded(True)
+        for i in range(item.childCount()):
+            self._walk_restore_expanded(item.child(i), expanded)
+
     def refresh(self, container: Container = None):
         self.setUpdatesEnabled(False)
+        expanded_uuids = self._collect_expanded_uuids()
         self.clear()
         if container is None:
             container = self._container
@@ -734,6 +757,7 @@ class DataListWidget(QTreeWidget):
                 container.CurrentContext.get_qualified_name(node_object))
             add_tree_items(itm, node_object)
         data_item.setExpanded(True)
+        self._restore_expanded_uuids(expanded_uuids)
         self.setUpdatesEnabled(True)
 
     def action_context_requested(self, pos: QtCore.QPoint):
