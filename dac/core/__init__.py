@@ -100,15 +100,11 @@ class DataNode(NodeBase):
             current = current._parent
         raise NodeNotFoundError(f"Didn't find a parent of <{node_type}>")
 
-    def iter_all(self):
-        yield self
+    def iter_all_of(self, target_type: type["DataNode"]) -> Iterator["DataNode"]:
         for child in self._children:
-            yield from child.iter_all()
-
-    def iter_all_descendants(self, self_type: type = None):
-        for child in self._children:
-            yield (self_type or type(child), child.name, child)
-            yield from child.iter_all_descendants(type(child))
+            if isinstance(child, target_type):
+                yield child
+            yield from child.iter_all_of(target_type)
 
     @staticmethod
     def Value2BasicTypes(v):
@@ -354,20 +350,14 @@ class DataContext(dict[type[DataNode], dict[str, DataNode]]):
             for node_name, node in nodes.items():
                 yield (node_type, node_name, node)
 
-    @property
-    def DeepNodeIter(self) -> Iterator[tuple[type[DataNode], str, DataNode]]:
-        for node_type, nodes in self.items():
-            for node_name, node in nodes.items():
-                yield (node_type, node_name, node)
-                yield from node.iter_all_descendants(node_type)
-
     def nodes_of_type(self, node_type: type[DataNode]) -> Iterator[DataNode]:
         for stored_type, nodes in self.items():
             if issubclass(stored_type, node_type):
                 for node in nodes.values():
                     yield node
-                    for _, _, child in node.iter_all_descendants(stored_type):
-                        yield child
+            else: # assume `node_type` won't host child as same `node_type`
+                for node in nodes.values():
+                    yield from node.iter_all_of(node_type)
 
     def _index_node(self, node: DataNode, prefix: str = ""):
         node_type = type(node)
