@@ -681,31 +681,42 @@ class DataListWidget(QTreeWidget):
         self.itemClicked.connect(self.action_item_clicked)
         self.itemDoubleClicked.connect(self.action_item_dblclicked)
 
-    def _collect_expanded_uuids(self) -> set:
+    def _collect_expanded_keys(self) -> set:
         expanded = set()
         for i in range(self.topLevelItemCount()):
-            self._walk_expanded_uuids(self.topLevelItem(i), expanded)
+            self._walk_expanded_keys(self.topLevelItem(i), expanded)
         return expanded
 
-    def _walk_expanded_uuids(self, item, expanded):
-        if item.isExpanded() and item.text(REMARK):
-            expanded.add(item.text(REMARK))
-        for i in range(item.childCount()):
-            self._walk_expanded_uuids(item.child(i), expanded)
+    def _item_stable_key(self, item):
+        key = item.data(NAME, QUALIFIED_NAME_ROLE)
+        if key:
+            return key
+        name = item.text(NAME)
+        type_name = item.text(TYPE)
+        if name and type_name:
+            return f"{type_name}:{name}"
+        return None
 
-    def _restore_expanded_uuids(self, expanded):
+    def _walk_expanded_keys(self, item, expanded):
+        key = self._item_stable_key(item)
+        if key and item.isExpanded():
+            expanded.add(key)
+        for i in range(item.childCount()):
+            self._walk_expanded_keys(item.child(i), expanded)
+
+    def _restore_expanded_keys(self, expanded):
         for i in range(self.topLevelItemCount()):
             self._walk_restore_expanded(self.topLevelItem(i), expanded)
 
     def _walk_restore_expanded(self, item, expanded):
-        if item.text(REMARK) in expanded:
+        if self._item_stable_key(item) in expanded:
             item.setExpanded(True)
         for i in range(item.childCount()):
             self._walk_restore_expanded(item.child(i), expanded)
 
     def refresh(self, container: Container = None):
         self.setUpdatesEnabled(False)
-        expanded_uuids = self._collect_expanded_uuids()
+        expanded_keys = self._collect_expanded_keys()
         self.clear()
         if container is None:
             container = self._container
@@ -757,7 +768,7 @@ class DataListWidget(QTreeWidget):
                 container.CurrentContext.get_qualified_name(node_object))
             add_tree_items(itm, node_object)
         data_item.setExpanded(True)
-        self._restore_expanded_uuids(expanded_uuids)
+        self._restore_expanded_keys(expanded_keys)
         self.setUpdatesEnabled(True)
 
     def action_context_requested(self, pos: QtCore.QPoint):
