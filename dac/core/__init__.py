@@ -447,6 +447,8 @@ class Container:
         )
         self.context_keys = DataContext(self)
         self.current_key: ContextKeyNode = GCK
+        from dac.core.file_store import FileStore
+        self.file_store = FileStore.instance()
 
     @property
     def CurrentContext(self) -> DataContext:

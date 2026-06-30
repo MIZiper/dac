@@ -8,6 +8,28 @@ from collections import OrderedDict
 from . import TimeData
 from datetime import datetime, timedelta, timezone
 
+
+def load_tdms_meta(fpath) -> list[dict]:
+    """Read TDMS metadata without loading channel data arrays.
+
+    Returns a list of dicts with keys:
+        name, dt, y_unit, comment, n_samples
+    """
+    result = []
+    f = TdmsFile(fpath, read_metadata_only=True, keep_open=False)
+    for g in f.groups():
+        for c in g.channels():
+            prop = c.properties
+            result.append({
+                "name": c.name,
+                "dt": float(prop.get("wf_increment", 1)),
+                "y_unit": prop.get("Unit", "-"),
+                "comment": prop.get("Description", ""),
+                "n_samples": int(prop.get("wf_samples", 0)),
+            })
+    return result
+
+
 def load_tdms(fpath) -> list[TimeData]:
     """Loads data from a TDMS file and converts channels to TimeData objects.
 

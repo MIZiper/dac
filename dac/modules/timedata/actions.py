@@ -15,30 +15,63 @@ class LoadAction(PAB):
     def __call__(self, fpaths: list[str], ftype: str=None) -> list[TimeData]:
         """Loads time-series data from files.
 
-        Currently supports TDMS files. Iterates through a list of file paths,
-        loads TDMS data using `load_tdms` from `.data_loader`.
+        When a ``FileStore`` is available (via ``self.container.file_store``)
+        the action creates ``LazyTimeData`` nodes that defer loading the
+        actual data arrays until first access.  This avoids loading large
+        files into memory upfront and lets multiple actions share the same
+        file handles without repeated I/O.
+
+        .. note::
+
+           Lazy mode is enabled automatically when a ``FileStore`` is
+           present.  The action falls back to eager loading otherwise.
 
         Parameters
         ----------
         fpaths : list[str]
-            A list of strings representing file paths to load.
+            File paths to load.
         ftype : str, optional
-            File type string (currently unused, but could be used to
-            select different loaders), by default None.
+            File type hint (currently unused).
 
         Returns
         -------
         list[TimeData]
-            A list of TimeData objects loaded from the files.
+            ``LazyTimeData`` when ``FileStore`` is available, plain
+            ``TimeData`` otherwise.
         """
 
         n = len(fpaths)
         rst = []
+        file_store = getattr(self.container, "file_store", None)
+
         for i, fpath in enumerate(fpaths):
             if not fpath.upper().endswith("TDMS"):
                 continue
-            r = load_tdms(fpath=fpath)
-            rst.extend(r)
+            if file_store is not None:
+                from . import LazyTimeData
+                from .data_loader import load_tdms_meta
+                import numpy as np
+
+                file_store.get(fpath)
+                metas = load_tdms_meta(fpath)
+                for meta in metas:
+                    cn = meta["name"]
+                    fs = file_store
+                    fp = fpath
+                    load_fn = lambda fs=fs, fp=fp, cn=cn: np.array(
+                        fs.get(fp)[cn][:], dtype=np.float64
+                    )
+                    rst.append(LazyTimeData(
+                        name=meta["name"],
+                        dt=meta["dt"],
+                        y_unit=meta["y_unit"],
+                        comment=meta["comment"],
+                        n_samples=meta["n_samples"],
+                        load_fn=load_fn,
+                    ))
+            else:
+                r = load_tdms(fpath=fpath)
+                rst.extend(r)
             self.progress(i+1, n)
         return rst
 
