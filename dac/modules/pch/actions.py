@@ -122,12 +122,11 @@ class PreviewChannelAction(VAB):
             )
             if len(t) == 0:
                 continue
-            t_mpl = mdates.epoch2num(t)
+            t_mpl = t
             ax.plot(
                 t_mpl,
                 y,
                 label=f"{ch.name} [{ch.y_unit}]",
-                linewidth=0.5,
             )
 
         ax.legend(loc="upper right")

@@ -162,7 +162,7 @@ class TDMSLoader(Loader):
                     props.get("wf_start_time")
                 )
                 dt = float(props.get("wf_increment", 1.0))
-                n_samples = getattr(channel, "number_values", 0)
+                n_samples = int(props.get('wf_samples', 0))
                 duration = n_samples * dt
                 cache_key = (source, group.name, channel.name)
                 seg = TimeSegment(
@@ -204,6 +204,8 @@ class TDMSLoader(Loader):
             return 0.0
         from datetime import datetime
 
+        if isinstance(wf_start_time, np.datetime64):
+            return wf_start_time.tolist().timestamp()
         if isinstance(wf_start_time, datetime):
             return wf_start_time.timestamp()
         return 0.0

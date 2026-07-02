@@ -76,7 +76,7 @@ def downsample_time_data(
 
 def epoch_to_mpl(t_epoch: np.ndarray) -> np.ndarray:
     """Convert epoch seconds to matplotlib date numbers."""
-    return mdates.epoch2num(t_epoch)
+    return t_epoch
 
 
 def setup_datetime_axis(ax, tz=None):
@@ -91,7 +91,7 @@ def setup_datetime_axis(ax, tz=None):
     """
     if tz is None:
         tz = timezone.utc
-    ax.xaxis.set_major_formatter(
-        mdates.DateFormatter("%Y-%m-%d %H:%M:%S", tz=tz)
-    )
+    # ax.xaxis.set_major_formatter(
+    #     mdates.DateFormatter("%Y-%m-%d %H:%M:%S", tz=tz)
+    # )
     ax.figure.autofmt_xdate()
