@@ -147,6 +147,9 @@ class TDMSLoader(Loader):
 
     Reads channel metadata (name, sample interval, start time, unit)
     without loading waveform data. Full data is loaded on demand.
+
+    t0 is returned as ``np.datetime64`` when the file contains a valid
+    ``wf_start_time`` property.
     """
 
     def load_meta(self, source: str) -> "list[TimeSegment]":
@@ -158,17 +161,14 @@ class TDMSLoader(Loader):
         for group in f.groups():
             for channel in group.channels():
                 props = channel.properties
-                t0 = self._tdms_time_to_epoch(
-                    props.get("wf_start_time")
-                )
+                t0 = self._tdms_time_to_datetime64(props.get("wf_start_time"))
                 dt = float(props.get("wf_increment", 1.0))
-                n_samples = int(props.get('wf_samples', 0))
-                duration = n_samples * dt
+                n_samples = int(props.get("wf_samples", 0))
                 cache_key = (source, group.name, channel.name)
                 seg = TimeSegment(
                     name=channel.name,
                     t0=t0,
-                    duration=duration,
+                    length=n_samples,
                     dt=dt,
                     y_unit=str(
                         props.get("unit_string", props.get("Unit", "-"))
@@ -199,23 +199,23 @@ class TDMSLoader(Loader):
         )
 
     @staticmethod
-    def _tdms_time_to_epoch(wf_start_time) -> float:
+    def _tdms_time_to_datetime64(wf_start_time) -> np.datetime64:
         if wf_start_time is None:
-            return 0.0
+            return np.datetime64("NaT")
         from datetime import datetime
 
         if isinstance(wf_start_time, np.datetime64):
-            return wf_start_time.tolist().timestamp()
+            return wf_start_time
         if isinstance(wf_start_time, datetime):
-            return wf_start_time.timestamp()
-        return 0.0
+            return np.datetime64(wf_start_time.replace(tzinfo=None).isoformat())
+        return np.datetime64("NaT")
 
 
 class CSVLoader(Loader):
     """Loader for CSV files.
 
     Expects CSV with a header row. The first column is treated as the
-    time index when `has_time_column` is True. Remaining columns become
+    time index when ``has_time_column`` is True. Remaining columns become
     TimeSegments. Delimiter and skiprows can be configured per source.
     """
 
@@ -230,7 +230,7 @@ class CSVLoader(Loader):
         skiprows: int = 0,
         has_time_column: bool = True,
         dt: float = 1.0,
-        t0: float = 0.0,
+        t0: "float | np.datetime64" = 0.0,
     ) -> "list[TimeSegment]":
         from . import TimeSegment
 
@@ -257,12 +257,11 @@ class CSVLoader(Loader):
             if not name:
                 name = f"col_{i}"
 
-            duration = max(0, n_lines) * dt
             cache_key = (source, "", name)
             seg = TimeSegment(
                 name=name,
                 t0=t0,
-                duration=duration,
+                length=max(0, n_lines),
                 dt=dt,
                 y_unit="-",
                 comment="",
@@ -320,17 +319,14 @@ class HDF5Loader(Loader):
         with h5py.File(source, "r") as f:
             for name, dataset in self._iter_datasets(f, h5py):
                 shape = dataset.shape
-                duration = 0.0
-                dt = 1.0
-                if len(shape) >= 1:
-                    duration = shape[0] * dt
+                length = shape[0] if len(shape) >= 1 else 0
 
                 cache_key = (source, "", name)
                 seg = TimeSegment(
                     name=name,
                     t0=0.0,
-                    duration=duration,
-                    dt=dt,
+                    length=length,
+                    dt=1.0,
                     y_unit="-",
                     comment="",
                     _cache_key=cache_key,

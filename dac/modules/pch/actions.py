@@ -2,13 +2,12 @@
 
 from collections import defaultdict
 
-import matplotlib.dates as mdates
 import numpy as np
 
 from dac.core.actions import PAB, VAB
 from . import TimeSegment, TimeChannel
 from .loader import TDMSLoader, CSVLoader, HDF5Loader
-from .plots import downsample_array, downsample_time_data, setup_datetime_axis
+from .plots import is_datetime_type, setup_datetime_axis
 from dac.modules.timedata import TimeData
 
 
@@ -77,9 +76,7 @@ class LoadChannelAction(PAB):
 
             loader = loader_cls()
             if lt == "csv":
-                segments = loader.load_meta(
-                    fpath, t0=t0, dt=dt
-                )
+                segments = loader.load_meta(fpath, t0=t0, dt=dt)
             else:
                 segments = loader.load_meta(fpath)
 
@@ -97,7 +94,8 @@ class PreviewChannelAction(VAB):
     """Plot TimeChannels with downsampled preview.
 
     Data is downsampled to ~1 Hz for fast rendering. Each channel is
-    drawn on the same axes with absolute time (datetime-formatted x-axis).
+    drawn on the same axes. When *t0* is ``np.datetime64`` the x-axis
+    is formatted as date/time; for float *t0* it is labelled "Time [s]".
     """
 
     CAPTION = "Preview channels"
@@ -106,15 +104,14 @@ class PreviewChannelAction(VAB):
         self,
         channels: list[TimeChannel],
         target_fs: float = 1.0,
-        t_start: float = None,
-        t_end: float = None,
+        t_start=None,
+        t_end=None,
     ):
         fig = self.figure
         fig.suptitle("Channel preview")
 
         ax = fig.gca()
-        ax.set_xlabel("Time")
-        setup_datetime_axis(ax)
+        _datetime_configured = False
 
         for ch in channels:
             t, y, _ = ch.get_merged_data(
@@ -122,12 +119,20 @@ class PreviewChannelAction(VAB):
             )
             if len(t) == 0:
                 continue
-            t_mpl = t
+
+            if not _datetime_configured and is_datetime_type(t):
+                setup_datetime_axis(ax)
+                _datetime_configured = True
+
             ax.plot(
-                t_mpl,
+                t,
                 y,
                 label=f"{ch.name} [{ch.y_unit}]",
+                linewidth=0.5,
             )
+
+        if not _datetime_configured:
+            ax.set_xlabel("Time [s]")
 
         ax.legend(loc="upper right")
 
@@ -144,12 +149,10 @@ class ExtractTimeDataAction(PAB):
     def __call__(
         self,
         channel: TimeChannel,
-        t_start: float,
-        t_end: float,
+        t_start,
+        t_end,
     ) -> TimeData:
-        t, y, dt = channel.get_merged_data(
-            t_start=t_start, t_end=t_end
-        )
+        t, y, dt = channel.get_merged_data(t_start=t_start, t_end=t_end)
         if len(y) == 0:
             self.message(
                 f"No data in range [{t_start}, {t_end}] for {channel.name}"
@@ -161,9 +164,7 @@ class ExtractTimeDataAction(PAB):
                 y_unit=channel.y_unit,
             )
 
-        self.message(
-            f"Extracted {len(y)} samples ({len(y)*dt:.2f}s)"
-        )
+        self.message(f"Extracted {len(y)} samples ({len(y) * dt:.2f}s)")
         return TimeData(
             name=f"{channel.name}-Extract",
             y=y,

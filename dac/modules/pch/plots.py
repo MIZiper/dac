@@ -1,12 +1,16 @@
 """Plot utilities for PCH module.
 
-Provides helpers for downsampling, datetime axis setup, and multi-axis
-layout for TimeChannel visualization.
+Provides helpers for downsampling, time-type detection, and datetime
+axis setup for TimeChannel visualization.
 """
 
 import numpy as np
-from datetime import datetime, timezone
 import matplotlib.dates as mdates
+
+
+def is_datetime_type(t) -> bool:
+    """Return True if the array has a datetime64 dtype."""
+    return np.asarray(t).dtype.kind == "M"
 
 
 def downsample_array(
@@ -48,7 +52,7 @@ def downsample_time_data(
     Parameters
     ----------
     t : np.ndarray
-        Time axis (absolute epoch seconds).
+        Time axis (datetime64 or float).
     y : np.ndarray
         Data array.
     target_fs : float
@@ -66,7 +70,11 @@ def downsample_time_data(
     if len(t) < 2:
         return t, y, 1.0
 
-    src_fs = 1.0 / np.mean(np.diff(t))
+    if is_datetime_type(t):
+        src_fs = 1e9 / np.mean(np.diff(t.astype("datetime64[ns]").astype(np.int64)))
+    else:
+        src_fs = 1.0 / np.mean(np.diff(t))
+
     interval = int(round(src_fs / target_fs))
     if interval <= 1:
         return t, y, 1.0 / src_fs
@@ -74,24 +82,14 @@ def downsample_time_data(
     return t[::interval], y[::interval], 1.0 / target_fs
 
 
-def epoch_to_mpl(t_epoch: np.ndarray) -> np.ndarray:
-    """Convert epoch seconds to matplotlib date numbers."""
-    return t_epoch
-
-
-def setup_datetime_axis(ax, tz=None):
+def setup_datetime_axis(ax):
     """Configure a matplotlib axis for datetime display.
 
-    Parameters
-    ----------
-    ax : matplotlib.axes.Axes
-        The axis to configure.
-    tz : datetime.timezone, optional
-        Timezone for display. Defaults to UTC.
+    Uses ``AutoDateLocator`` and ``ConciseDateFormatter`` for
+    automatic format selection based on the visible time span.
     """
-    if tz is None:
-        tz = timezone.utc
-    # ax.xaxis.set_major_formatter(
-    #     mdates.DateFormatter("%Y-%m-%d %H:%M:%S", tz=tz)
-    # )
+    locator = mdates.AutoDateLocator()
+    formatter = mdates.ConciseDateFormatter(locator)
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(formatter)
     ax.figure.autofmt_xdate()

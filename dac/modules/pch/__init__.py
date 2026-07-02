@@ -3,6 +3,10 @@
 TimeSegment is like TimeData but with absolute time positioning (t0) and
 lazy loading of the y array via a Loader. TimeChannel groups segments of
 the same measurement channel together.
+
+t0 supports both ``np.datetime64`` (absolute timestamps) and ``float``
+(relative seconds from an arbitrary origin). All time-axis properties
+preserve the original type.
 """
 
 import bisect
@@ -16,14 +20,22 @@ class TimeSegment(DataBase):
 
     The `y` array is loaded on first access via the associated Loader and
     process-wide Cache. Call `unload()` to release memory when no longer needed.
+
+    Parameters
+    ----------
+    t0 : np.datetime64 or float
+        Start time. ``np.datetime64`` gives absolute time; ``float`` gives
+        relative seconds.
+    length : int
+        Number of samples in the segment.
     """
 
     def __init__(
         self,
         name: str = None,
         uuid: str = None,
-        t0: float = 0.0,
-        duration: float = 0.0,
+        t0: "np.datetime64 | float" = 0.0,
+        length: int = 0,
         dt: float = 1.0,
         y_unit: str = "-",
         comment: str = "",
@@ -32,13 +44,15 @@ class TimeSegment(DataBase):
     ) -> None:
         super().__init__(name, uuid)
         self.t0 = t0
-        self.duration = duration
+        self._length = length
         self.dt = dt
         self.y_unit = y_unit
         self.comment = comment
         self._y: np.ndarray | None = None
         self._cache_key = _cache_key
         self._loader = _loader
+
+    # ---- loaded data ----
 
     @property
     def y(self) -> np.ndarray:
@@ -54,15 +68,29 @@ class TimeSegment(DataBase):
     def is_loaded(self) -> bool:
         return self._y is not None
 
-    @property
-    def fs(self) -> float:
-        return 1.0 / self.dt
+    def unload(self):
+        self._y = None
+
+    # ---- size ----
 
     @property
     def length(self) -> int:
         if self._y is not None:
             return len(self._y)
-        return int(self.duration / self.dt)
+        return self._length
+
+    @length.setter
+    def length(self, value: int):
+        self._length = value
+
+    @property
+    def duration(self) -> float:
+        """Duration in seconds (``length * dt``)."""
+        return self.length * self.dt
+
+    @property
+    def fs(self) -> float:
+        return 1.0 / self.dt
 
     @property
     def nbytes(self) -> int:
@@ -70,19 +98,32 @@ class TimeSegment(DataBase):
             return self._y.nbytes
         return 0
 
+    # ---- time axis ----
+
     @property
     def t(self) -> np.ndarray:
-        return self.t0 + np.arange(self.length) * self.dt
+        n = self.length
+        if n == 0:
+            return np.array([], dtype=_time_dtype(self.t0))
+        if isinstance(self.t0, np.datetime64):
+            step_ns = int(round(self.dt * 1e9))
+            return self.t0 + np.arange(n) * np.timedelta64(step_ns, "ns")
+        return self.t0 + np.arange(n, dtype=np.float64) * self.dt
 
-    def unload(self):
-        self._y = None
+    @property
+    def t_end(self):
+        """End time boundary (``t0 + duration``), matching the type of *t0*."""
+        dur = self.duration
+        if isinstance(self.t0, np.datetime64):
+            return self.t0 + np.timedelta64(int(round(dur * 1e9)), "ns")
+        return self.t0 + dur
 
 
 class TimeChannel(DataBase):
     """Container for TimeSegments of the same measurement channel.
 
-    Segments are sorted by their start time. Provides methods to query
-    segments by time range and merge data for plotting or extraction.
+    Segments are kept sorted by *t0*. Provides methods to query segments
+    by time range and merge data for plotting or extraction.
     """
 
     def __init__(
@@ -103,13 +144,12 @@ class TimeChannel(DataBase):
             self.y_unit = seg.y_unit
 
     @property
-    def time_range(self) -> tuple[float, float]:
-        segs = self.segments
+    def time_range(self) -> tuple:
+        segs = self._segments
         if not segs:
-            return (0.0, 0.0)
-        t0 = min(s.t0 for s in segs)
-        t1 = max(s.t0 + s.duration for s in segs)
-        return (t0, t1)
+            t0 = 0.0
+            return (t0, t0)
+        return (segs[0].t0, segs[-1].t_end)
 
     @property
     def nbytes(self) -> int:
@@ -119,11 +159,11 @@ class TimeChannel(DataBase):
     def is_fully_loaded(self) -> bool:
         return all(s.is_loaded for s in self._segments)
 
-    def segments_at(self, t_start: float, t_end: float) -> list[TimeSegment]:
+    def segments_at(self, t_start, t_end) -> list[TimeSegment]:
         return [
             s
-            for s in self.segments
-            if s.t0 < t_end and s.t0 + s.duration > t_start
+            for s in self._segments
+            if s.t0 < t_end and s.t_end > t_start
         ]
 
     def unload(self):
@@ -132,25 +172,25 @@ class TimeChannel(DataBase):
 
     def get_merged_data(
         self,
-        t_start: float = None,
-        t_end: float = None,
+        t_start=None,
+        t_end=None,
         target_fs: float = None,
     ) -> tuple[np.ndarray, np.ndarray, float]:
         """Merge overlapping segments into continuous time and data arrays.
 
         Parameters
         ----------
-        t_start : float, optional
-            Start of time range (absolute epoch seconds).
-        t_end : float, optional
-            End of time range (absolute epoch seconds).
+        t_start :
+            Start of time range.  Must match the type of ``segments[0].t0``.
+        t_end :
+            End of time range.  Must match the type of ``segments[0].t0``.
         target_fs : float, optional
             If set, downsample output to this sample rate (Hz).
 
         Returns
         -------
         t : np.ndarray
-            Merged absolute time axis.
+            Merged time axis (datetime64 or float64).
         y : np.ndarray
             Merged data.
         dt : float
@@ -163,7 +203,8 @@ class TimeChannel(DataBase):
 
         segs = self.segments_at(t_start, t_end)
         if not segs:
-            return np.array([]), np.array([]), 1.0
+            empty_t = np.array([], dtype=_time_dtype(t_start))
+            return empty_t, np.array([]), 1.0
 
         t_parts = []
         y_parts = []
@@ -180,17 +221,15 @@ class TimeChannel(DataBase):
             if len(t_cropped) == 0:
                 continue
 
-            if prev_seg is not None:
-                prev_end = prev_seg.t0 + prev_seg.duration
-                if seg.t0 > prev_end:
-                    t_parts.append(np.array([prev_end]))
-                    y_parts.append(np.array([np.nan]))
+            if prev_seg is not None and seg.t0 > prev_seg.t_end:
+                t_parts.append(np.array([prev_seg.t_end]))
+                y_parts.append(np.array([np.nan]))
 
             t_parts.append(t_cropped)
             y_parts.append(y_cropped)
             prev_seg = seg
 
-        t = np.concatenate(t_parts) if t_parts else np.array([])
+        t = np.concatenate(t_parts) if t_parts else np.array([], dtype=_time_dtype(t_start))
         y = np.concatenate(y_parts) if y_parts else np.array([])
 
         if target_fs is not None and target_fs < segs[0].fs:
@@ -201,3 +240,13 @@ class TimeChannel(DataBase):
                 dt = dt * interval
 
         return t, y, dt
+
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+
+def _time_dtype(t0) -> np.dtype:
+    if isinstance(t0, np.datetime64):
+        return np.dtype("datetime64[ns]")
+    return np.float64
