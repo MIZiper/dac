@@ -6,6 +6,7 @@ alias:
   mt: dac.modules.timedata
   mv: dac.modules.nvh
   md: dac.modules.drivetrain
+  mp: dac.modules.pch
 
 data:
   _: # for now only add data to global context
@@ -19,6 +20,10 @@ actions:
   - /md/actions.CreateBearing
   - /md/actions.CreateGearboxWithBearings
   - /md/actions.CreateOrdersOfGearbox
+  - "[PCH]"
+  - /mp/actions.LoadChannelAction
+  - /mp/actions.PreviewChannelAction
+  - /mp/actions.SelectTimeRangeAction
   
   /dd/SimpleDefinition:
   - /da/Separator
@@ -44,6 +49,8 @@ actions:
   - /mv/actions.SpectrumToTimeAction
   - "[<]"
   - /mv/actions.ShowSpectrumWithGuesser
+  - "[PCH]"
+  - /mp/actions.LoadAndCropAction
 
 quick_actions: # [action_type, data_param_name, other_params, mode?]
   # mode: false (default) → run only
@@ -59,11 +66,17 @@ quick_actions: # [action_type, data_param_name, other_params, mode?]
 quick_tasks:
   /mt/actions.LoadAction:
   - [/mt/tasks.FillFpathsTask, "Select measurement files"]
+  /mp/actions.LoadChannelAction:
+  - [/mt/tasks.FillFpathsTask, "Select measurement files"]
+  /mp/actions.SelectTimeRangeAction:
+  - [/mp/tasks.SetupAnalysisContextTask, "Setup Analysis Context"]
 
 drop_actions:
   ".tdms":
     - [/mt/actions.LoadAction, fpaths, {}]
+    - [/mp/actions.LoadChannelAction, fpaths, {}]
   "folder/":
     - [/mt/actions.LoadAction, fpaths, {}]
+    - [/mp/actions.LoadChannelAction, fpaths, {}]
   "*":
     - [/mt/actions.LoadAction, fpaths, {}]
