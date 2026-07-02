@@ -160,6 +160,11 @@ class TimeChannel(DataBase):
         return all(s.is_loaded for s in self._segments)
 
     def segments_at(self, t_start, t_end) -> list[TimeSegment]:
+        if not self._segments:
+            return []
+        t0_ref = self._segments[0].t0
+        t_start = _coerce_time(t_start, t0_ref)
+        t_end = _coerce_time(t_end, t0_ref)
         return [
             s
             for s in self._segments
@@ -200,6 +205,9 @@ class TimeChannel(DataBase):
             t_start = self.time_range[0]
         if t_end is None:
             t_end = self.time_range[1]
+        ref_t0 = self._segments[0].t0 if self._segments else 0.0
+        t_start = _coerce_time(t_start, ref_t0)
+        t_end = _coerce_time(t_end, ref_t0)
 
         segs = self.segments_at(t_start, t_end)
         if not segs:
@@ -250,3 +258,19 @@ def _time_dtype(t0) -> np.dtype:
     if isinstance(t0, np.datetime64):
         return np.dtype("datetime64[ns]")
     return np.float64
+
+
+def _coerce_time(val, ref):
+    """Coerce *val* to match the type of *ref* for comparison.
+
+    ``float`` epoch seconds ↔ ``np.datetime64[ns]`` are mutually
+    convertible.  Returns *val* unchanged when types already match or
+    when *val* is ``None``.
+    """
+    if val is None:
+        return val
+    if isinstance(ref, np.datetime64) and not isinstance(val, np.datetime64):
+        return np.datetime64(int(round(float(val) * 1e9)), "ns")
+    if not isinstance(ref, np.datetime64) and isinstance(val, np.datetime64):
+        return val.astype("datetime64[ns]").astype(np.int64) / 1e9
+    return val

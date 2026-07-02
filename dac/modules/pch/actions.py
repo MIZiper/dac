@@ -4,6 +4,7 @@ from collections import defaultdict
 
 import numpy as np
 from matplotlib import gridspec
+from PyQt5 import QtWidgets
 
 from dac.core.actions import PAB, VAB
 from . import TimeSegment, TimeChannel
@@ -204,9 +205,11 @@ class SelectTimeRangeAction(VAB):
         self._channels = channels
         self._t_start = None
         self._t_end = None
+        self._press_xdata = None
         self._span_patches = []
         self._vlines = []
         self._axes = []
+        self._dragging = False
 
         fig = self.figure
         fig.suptitle(
@@ -253,6 +256,8 @@ class SelectTimeRangeAction(VAB):
 
             ax.set_ylabel(f"[{unit}]")
             ax.legend(loc="upper right", fontsize="small")
+            if i < n_rows - 1:
+                ax.tick_params(labelbottom=False)
 
         if not datetime_setup and axes:
             axes[-1].set_xlabel("Time [s]")
@@ -264,11 +269,47 @@ class SelectTimeRangeAction(VAB):
 
         canvas = self.canvas
 
+        # Detect time type from the first channel's first segment
+        _ref_type = None
+        for ch in channels:
+            if ch._segments:
+                _ref_type = type(ch._segments[0].t0)
+                break
+        _is_datetime = _ref_type is np.datetime64
+
+        def _normalize_x(x):
+            """Convert matplotlib canvas x coordinate to the channel's t0 type."""
+            if x is None:
+                return None
+            if _is_datetime:
+                import matplotlib.dates as _mdates
+                dt = _mdates.num2date(x).replace(tzinfo=None)
+                return np.datetime64(dt.isoformat())
+            return x
+
         # --- event handlers ---
         def _ax_for(event):
             if event.inaxes is not None and event.inaxes in axes:
                 return event.inaxes
             return None
+
+        def _show_hint():
+            """Brief text overlay telling the user what to do next."""
+            _clear_hint()
+            hint = fig.text(
+                0.5, 0.01,
+                "Selection recorded.  Right-click this action "
+                "in the Action panel → 'Setup Analysis Context'",
+                ha="center", fontsize=9,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="lightyellow", alpha=0.9),
+            )
+            self._hint = hint
+            canvas.draw_idle()
+
+        def _clear_hint():
+            if hasattr(self, "_hint") and self._hint is not None:
+                self._hint.remove()
+                self._hint = None
 
         def on_press(event):
             if canvas.widgetlock.locked():
@@ -276,14 +317,12 @@ class SelectTimeRangeAction(VAB):
             ax = _ax_for(event)
             if ax is None:
                 return
-            if event.button == 1:  # left button
-                self._t_start = event.xdata
+            if event.button == 1:
+                self._press_xdata = event.xdata
+                self._t_start = _normalize_x(event.xdata)
+                self._dragging = True
                 _clear_spans()
                 _clear_vlines()
-
-                if event.dblclick:
-                    return
-                # span selection
                 for ax_i in axes:
                     span = ax_i.axvspan(
                         event.xdata, event.xdata,
@@ -293,28 +332,36 @@ class SelectTimeRangeAction(VAB):
                 canvas.draw_idle()
 
         def on_motion(event):
-            if self._t_start is None or not self._span_patches:
+            if not self._dragging:
                 return
-            x = event.xdata
+            x = _normalize_x(event.xdata)
             if x is None:
                 return
+            t0 = min(self._t_start, x)
+            t1 = max(self._t_start, x)
             for span in self._span_patches:
-                xy = span.get_xy()
-                xy[1, 0] = x
-                xy[2, 0] = x
-                span.set_xy(xy)
+                span.remove()
+            self._span_patches.clear()
+            for ax_i in axes:
+                span = ax_i.axvspan(t0, t1, alpha=0.2, color="green")
+                self._span_patches.append(span)
             canvas.draw_idle()
 
         def on_release(event):
-            if self._t_start is None:
+            if not self._dragging and event.button != 3:
+                return
+            if event.button == 3:
+                _on_right_click()
+                return
+            self._dragging = False
+            x = _normalize_x(event.xdata)
+            if self._t_start is None or x is None:
+                _clear_spans()
                 return
             _clear_spans()
-            x = event.xdata
-            if x is None:
-                self._t_start = None
-                return
-            if abs(x - self._t_start) < 1e-12:
-                # point mode: draw vertical lines
+            t_range = axes[0].get_xlim()
+            click_threshold = (t_range[1] - t_range[0]) * 0.005
+            if abs(event.xdata - self._press_xdata) < click_threshold:
                 self._t_end = self._t_start
                 for ax_i in axes:
                     vline = ax_i.axvline(
@@ -322,19 +369,14 @@ class SelectTimeRangeAction(VAB):
                     )
                     self._vlines.append(vline)
             else:
-                # range mode: draw span
                 self._t_end = x
                 t0, t1 = sorted([self._t_start, self._t_end])
                 self._t_start, self._t_end = t0, t1
                 for ax_i in axes:
-                    span = ax_i.axvspan(
-                        t0, t1, alpha=0.15, color="green"
-                    )
+                    span = ax_i.axvspan(t0, t1, alpha=0.15, color="green")
                     self._span_patches.append(span)
             canvas.draw_idle()
-            self.message(
-                f"Selected: {self._t_start} → {self._t_end}"
-            )
+            _show_hint()
 
         def _clear_spans():
             for s in self._span_patches:
@@ -345,6 +387,27 @@ class SelectTimeRangeAction(VAB):
             for v in self._vlines:
                 v.remove()
             self._vlines.clear()
+
+        def _on_right_click():
+            if self._t_start is None:
+                return
+            _clear_hint()
+            # Locate the DAC MainWindow via QApplication
+            app = QtWidgets.QApplication.instance()
+            dac_win = None
+            for w in app.topLevelWidgets():
+                if hasattr(w, "container") and w.container is not None:
+                    dac_win = w
+                    break
+            if dac_win is None:
+                return
+
+            from dac.modules.pch.tasks import SetupAnalysisContextTask
+            from dac.core.actions import ActionBase
+
+            task = SetupAnalysisContextTask(dac_win, "")
+            task.current_context = dac_win.container.CurrentContext
+            task(self)
 
         self._cids.append(canvas.mpl_connect("button_press_event", on_press))
         self._cids.append(canvas.mpl_connect("motion_notify_event", on_motion))
@@ -378,6 +441,8 @@ class LoadAndCropAction(PAB):
     ) -> list[TimeData]:
         results: list[TimeData] = []
         n = len(fpaths)
+        t_start = _normalize_time(t_start)
+        t_end = _normalize_time(t_end)
         is_range = t_start is not None and t_end is not None and t_start < t_end
 
         for i_file, fpath in enumerate(fpaths):
@@ -426,3 +491,40 @@ class LoadAndCropAction(PAB):
 
         self.message(f"Loaded {len(results)} channels")
         return results
+
+
+# ---------------------------------------------------------------------------
+# time value helpers
+# ---------------------------------------------------------------------------
+
+
+def _normalize_time(val):
+    """Coerce *val* to ``np.datetime64`` or ``float`` for comparison.
+
+    Accepts ``None``, ``str`` (ISO datetime or numeric), ``float``,
+    and ``np.datetime64``. Empty string → ``None``.
+    """
+    if val is None or val == "":
+        return None
+    if isinstance(val, np.datetime64):
+        return val
+    if isinstance(val, str):
+        try:
+            return np.datetime64(val)
+        except ValueError:
+            return float(val)
+    return float(val)
+
+
+def _time_to_str(val):
+    """Convert a time value to a clean string for YAML persistence.
+
+    ``np.datetime64`` → ISO string, ``float`` → numeric string,
+    ``None`` → ``""``.
+    """
+    if val is None:
+        return ""
+    if isinstance(val, np.datetime64):
+        ts = val.astype("datetime64[ms]")
+        return str(ts).replace("T", " ")
+    return str(val)

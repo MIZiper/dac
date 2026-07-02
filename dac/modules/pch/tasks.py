@@ -12,7 +12,7 @@ from dac.core.actions import ActionBase
 from dac.core.data import SimpleDefinition
 from dac.gui import TaskBase
 from . import TimeChannel, TimeSegment
-from .actions import LoadAndCropAction
+from .actions import LoadAndCropAction, _time_to_str
 
 
 class SetupAnalysisDialog(QtWidgets.QDialog):
@@ -87,6 +87,17 @@ class SetupAnalysisDialog(QtWidgets.QDialog):
             self._list_widget.addItem(item)
         layout.addWidget(self._list_widget)
 
+        # --- check all / uncheck all ---
+        toggle_row = QtWidgets.QHBoxLayout()
+        btn_all = QtWidgets.QPushButton("Check all")
+        btn_none = QtWidgets.QPushButton("Uncheck all")
+        btn_all.clicked.connect(lambda: self._set_all_checked(Qt.CheckState.Checked))
+        btn_none.clicked.connect(lambda: self._set_all_checked(Qt.CheckState.Unchecked))
+        toggle_row.addWidget(btn_all)
+        toggle_row.addWidget(btn_none)
+        toggle_row.addStretch()
+        layout.addLayout(toggle_row)
+
         # --- buttons ---
         btn_row = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.StandardButton.Ok
@@ -113,6 +124,10 @@ class SetupAnalysisDialog(QtWidgets.QDialog):
 
         self._result = (name, selected)
         self.accept()
+
+    def _set_all_checked(self, state: Qt.CheckState):
+        for i in range(self._list_widget.count()):
+            self._list_widget.item(i).setCheckState(state)
 
     def result(self):
         return self._result
@@ -194,11 +209,12 @@ class SetupAnalysisContextTask(TaskBase):
         # create LoadAndCropAction in the new context
         act = LoadAndCropAction(context_key=new_key)
         act.get_construct_config()
+        is_point = t_start is not None and t_start == t_end
         act._construct_config.update(
             {
                 "fpaths": list(fpaths),
-                "t_start": t_start,
-                "t_end": t_end,
+                "t_start": _time_to_str(t_start),
+                "t_end": _time_to_str(t_end if not is_point else None),
             }
         )
         container.actions.append(act)

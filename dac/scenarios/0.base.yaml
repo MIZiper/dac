@@ -62,6 +62,9 @@ quick_actions: # [action_type, data_param_name, other_params, mode?]
   - [/mt/actions.ShowTimeDataAction, channels, {}]
   /mv/data.FreqDomainData:
   - [/mv/actions.ViewFreqDomainAction, channels, {with_phase: true}]
+  dac.modules.pch.TimeChannel:
+  - [dac.modules.pch.actions.PreviewChannelAction, channels, {}]
+  - [dac.modules.pch.actions.SelectTimeRangeAction, channels, {}]
 
 quick_tasks:
   /mt/actions.LoadAction:
