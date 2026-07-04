@@ -776,8 +776,18 @@ class DataListWidget(QTreeWidget):
             return
         itm = self.itemAt(pos)
         menu = QtWidgets.QMenu("DataMenu")
+        if not itm:
+            return
+        node_object = itm.data(NAME, Qt.ItemDataRole.UserRole)
 
-        if (not itm) or not (node_object := itm.data(NAME, Qt.ItemDataRole.UserRole)):
+        if node_object is None:
+            if itm.text(TYPE) == "Data":
+                def cb_clear_all():
+                    container.CurrentContext.clear()
+                    self.refresh()
+                    self.sig_action_update_requested.emit()
+                menu.addAction("Clear All").triggered.connect(cb_clear_all)
+                menu.exec(self.viewport().mapToGlobal(pos))
             return
 
         if getattr(node_object, "QUICK_ACTIONS", []):
@@ -868,7 +878,14 @@ class DataListWidget(QTreeWidget):
             menu.addAction("Push to IPy").triggered.connect(
                 cb_pushnode_gen(node_object)
             )
-            # TODO: enable delete local object
+            def cb_delete_selected():
+                for i in self.selectedItems():
+                    node = i.data(NAME, Qt.ItemDataRole.UserRole)
+                    if node is not None:
+                        container.CurrentContext.remove_node(node)
+                self.refresh()
+                self.sig_action_update_requested.emit()
+            menu.addAction("Delete").triggered.connect(cb_delete_selected)
             menu.exec(self.viewport().mapToGlobal(pos))
             return  # stop here, no activate / delete
 

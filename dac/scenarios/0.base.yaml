@@ -25,6 +25,10 @@ actions:
   - /mp/actions.PreviewChannelAction
   - /mp/actions.SelectTimeRangeAction
   - /mp/actions.SpecPlotAction
+  - "[Freq domain]"
+  - /mv/actions.LoadCaseFreqIntermediateAverage
+  - "[OrderSlice]"
+  - /mv/actions.ViewOrderSliceOfMeasurements
   
   /dd/SimpleDefinition:
   - /da/Separator
@@ -38,6 +42,10 @@ actions:
   - /mt/actions.PulseToAzimuthAction
   - /mt/actions.TruncAction
   - /mt/actions.FilterAction
+  - /mt/actions.IntegrateTimeAction
+  - dac.modules.timedata.actions.DifferentiateTimeAction
+  - /mt/actions.DCOffsetRemovalAction
+  - /mt/actions.StatisticsAction
   - "[<]"
   - "[Freq domain]"
   - /mv/actions.ToFreqDomainAction
@@ -48,6 +56,19 @@ actions:
   - /mv/actions.AverageIntermediateAction
   - /mv/actions.FilterSpectrumAction
   - /mv/actions.SpectrumToTimeAction
+  - /mv/actions.SpectrumAsTimeAction
+  - /mv/actions.ExtractAmplitudeAction
+  - /mv/actions.IntegrateFreqDomainAction
+  - /mv/actions.OctaveBandAction
+  - /mv/actions.EnvelopeSpectrumAction
+  - /mv/actions.CepstrumAction
+  - /mv/actions.CoherenceAction
+  - "[<]"
+  - "[OrderSlice>]"
+  - /mv/actions.CreateOrders
+  - /mv/actions.ExtractOrderSlicesAction
+  - /mv/actions.ViewOrderSlice
+  - /mv/actions.ViewColorPlotWithOrderSlice
   - "[<]"
   - /mv/actions.ShowSpectrumWithGuesser
   - "[PCH]"
@@ -61,12 +82,17 @@ quick_actions: # [action_type, data_param_name, other_params, mode?]
   #   e.g. [/da/A1A2, sec, {A2: {amp: 5.0}}]
   /mt/TimeData:
   - [/mt/actions.ShowTimeDataAction, channels, {}]
+  - [/mt/actions.StatisticsAction, channels, {}]
   /mv/data.FreqDomainData:
   - [/mv/actions.ViewFreqDomainAction, channels, {with_phase: true}]
   dac.modules.pch.TimeChannel:
   - [dac.modules.pch.actions.PreviewChannelAction, channels, {}]
   - [dac.modules.pch.actions.SelectTimeRangeAction, channels, {}]
   - [dac.modules.pch.actions.SpecPlotAction, channels, {}]
+  /mv/data.FreqIntermediateData:
+  - [/mv/actions.ViewFreqIntermediateAction, channel, {}]
+  /mv/data.OrderSliceData:
+  - [/mv/actions.ViewOrderSlice, order_slice, {}]
 
 quick_tasks:
   /mt/actions.LoadAction:
