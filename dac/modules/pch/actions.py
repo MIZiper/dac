@@ -518,6 +518,8 @@ class LoadAndCropAction(PAB):
         t_end = _normalize_time(t_end)
         is_range = t_start is not None and t_end is not None and t_start < t_end
 
+        # NOTE: h5 support chunks, meaning for cropping it doesn't need to read full segment
+
         for i_file, fpath in enumerate(fpaths):
             lt = _detect_loader_type(fpath)
             loader_cls = _LOADER_MAP.get(lt)

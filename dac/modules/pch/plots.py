@@ -92,4 +92,4 @@ def setup_datetime_axis(ax):
     formatter = mdates.ConciseDateFormatter(locator)
     ax.xaxis.set_major_locator(locator)
     ax.xaxis.set_major_formatter(formatter)
-    ax.figure.autofmt_xdate()
+    # ax.figure.autofmt_xdate()
