@@ -40,6 +40,7 @@ class TimeSegment(DataBase):
         y_unit: str = "-",
         comment: str = "",
         _cache_key: tuple = None,
+        _bulk_key: tuple = None,
         _loader=None,
     ) -> None:
         super().__init__(name, uuid)
@@ -50,6 +51,7 @@ class TimeSegment(DataBase):
         self.comment = comment
         self._y: np.ndarray | None = None
         self._cache_key = _cache_key
+        self._bulk_key = _bulk_key
         self._loader = _loader
 
     # ---- loaded data ----

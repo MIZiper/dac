@@ -106,6 +106,24 @@ class Cache:
         return len(self._data)
 
 
+class _BulkData:
+    """Channel-name → array mapping with total ``nbytes`` for cache eviction.
+
+    Keeps the Cache API compatible with bulk loaders that return
+    heterogeneous arrays (different lengths / dtypes per channel).
+    """
+
+    __slots__ = ('arrays', '_nbytes')
+
+    def __init__(self, arrays: dict[str, np.ndarray]):
+        self.arrays = arrays
+        self._nbytes = sum(a.nbytes for a in arrays.values())
+
+    @property
+    def nbytes(self) -> int:
+        return self._nbytes
+
+
 class Loader(ABC):
     """Abstract base for data file loaders.
 
@@ -125,14 +143,52 @@ class Loader(ABC):
         """Read waveform data for a cache key from the source file."""
         ...
 
+    def _read_bulk(self, source: str) -> _BulkData:
+        """Read all channels at once for formats that cannot load
+        individual channels independently (e.g. CSV).
+
+        Returns a :class:`_BulkData` whose ``.arrays`` is a
+        ``{channel_name: np.ndarray}`` mapping. Subclasses that support
+        bulk loading **must** override this and :meth:`_extract_channel`;
+        the default path (TDMS, HDF5) does not use bulk loading.
+        """
+        raise NotImplementedError
+
+    def _extract_channel(self, bulk_data: _BulkData, source: str, key: tuple) -> np.ndarray:
+        """Extract a single channel from *bulk_data* by *key*.
+
+        *key* is the original per-channel cache key ``(source, group, name)``.
+        Must be overridden together with :meth:`_read_bulk`.
+        """
+        raise NotImplementedError
+
     def load_full(self, cache_key: tuple, segment=None) -> np.ndarray:
         """Load full data array, using the cache.
 
-        If *segment* is provided, it is registered so that the cache
-        can call `segment.unload()` on eviction.
+        If the segment has a ``_bulk_key`` the loader reads all channels
+        in one pass and caches the combined array; individual channel
+        access then slices from that bulk array.  For loaders that can
+        read channels independently (TDMS, HDF5) each channel is cached
+        separately under its per-channel key.
+
+        When *segment* is provided it is registered so that the cache
+        can call ``segment.unload()`` on eviction.
         """
         source = cache_key[0]
 
+        # Bulk-loading path (CSV etc.)
+        bulk_key = getattr(segment, "_bulk_key", None) if segment is not None else None
+        if bulk_key is not None:
+            def _read_bulk_fn():
+                return self._read_bulk(source)
+
+            bulk_data = self._cache.get(bulk_key, _read_bulk_fn)
+            data = self._extract_channel(bulk_data, source, cache_key)
+            if segment is not None:
+                self._cache.register_segment(bulk_key, segment)
+            return data
+
+        # Per-channel path (TDMS, HDF5)
         def read_fn():
             return self._read_data(source, cache_key)
 
@@ -212,7 +268,8 @@ class TDMSLoader(Loader):
 
 
 class CSVLoader(Loader):
-    """Loader for CSV files.
+    """Loader for CSV files — reads the entire file once and caches the
+    combined array, then extracts individual columns on request.
 
     Expects CSV with a header row. The first column is treated as the
     time index when ``has_time_column`` is True. Remaining columns become
@@ -222,6 +279,7 @@ class CSVLoader(Loader):
     def __init__(self):
         super().__init__()
         self._formats: dict[str, dict] = {}
+        self._col_index: dict[str, dict[str, int]] = {}
 
     def load_meta(
         self,
@@ -251,12 +309,14 @@ class CSVLoader(Loader):
             n_lines = sum(1 for _ in f) - skiprows - 1
 
         start_col = 1 if has_time_column else 0
-        segments = []
-        for i in range(start_col, len(headers)):
-            name = headers[i].strip()
-            if not name:
-                name = f"col_{i}"
+        col_names = [headers[i].strip() or f"col_{i}"
+                     for i in range(start_col, len(headers))]
+        self._col_index[source] = {name: idx
+                                   for idx, name in enumerate(col_names)}
 
+        bulk_key = (source,)
+        segments = []
+        for idx, name in enumerate(col_names):
             cache_key = (source, "", name)
             seg = TimeSegment(
                 name=name,
@@ -266,38 +326,42 @@ class CSVLoader(Loader):
                 y_unit="-",
                 comment="",
                 _cache_key=cache_key,
+                _bulk_key=bulk_key,
                 _loader=self,
             )
             segments.append(seg)
         return segments
 
-    def _read_data(self, source: str, key: tuple) -> np.ndarray:
+    def _read_bulk(self, source: str) -> _BulkData:
         fmt = self._formats.get(source, {})
         delimiter = fmt.get("delimiter", ",")
         skiprows = fmt.get("skiprows", 0)
         has_time_column = fmt.get("has_time_column", True)
 
-        _, _, channel_name = key
+        usecols = None
+        if has_time_column:
+            n_cols = 1 + len(self._col_index[source])
+            usecols = list(range(1, n_cols))
 
-        with open(source, "r") as f:
-            reader = csv.reader(f, delimiter=delimiter)
-            for _ in range(skiprows):
-                next(reader)
-            headers = next(reader)
-            cols = [h.strip() for h in headers]
-            if channel_name in cols:
-                col_idx = cols.index(channel_name)
-            elif channel_name.startswith("col_"):
-                col_idx = int(channel_name.split("_")[1])
-            else:
-                col_idx = 1 if has_time_column else 0
-
-        return np.loadtxt(
+        data = np.loadtxt(
             source,
             delimiter=delimiter,
             skiprows=skiprows + 1,
-            usecols=col_idx,
-            ndmin=1,
+            usecols=usecols,
+            ndmin=2,
+        )
+        arrays = {}
+        for name, idx in self._col_index[source].items():
+            arrays[name] = data[:, idx]
+        return _BulkData(arrays)
+
+    def _extract_channel(self, bulk_data: _BulkData, source: str, key: tuple) -> np.ndarray:
+        _, _, name = key
+        return bulk_data.arrays[name]
+
+    def _read_data(self, source: str, key: tuple) -> np.ndarray:
+        raise NotImplementedError(
+            "CSVLoader uses bulk loading; _read_data should not be called directly"
         )
 
 
