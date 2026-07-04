@@ -1,7 +1,5 @@
 """Actions for PCH module: load channels, preview plots, extract TimeData."""
 
-from collections import defaultdict
-
 import numpy as np
 from matplotlib import gridspec
 from PyQt5 import QtWidgets
@@ -34,19 +32,29 @@ def _detect_loader_type(fpath: str) -> str:
 
 def _group_by_channel_name(
     segments: list[TimeSegment],
+    existing: dict[str, TimeChannel] | None = None,
 ) -> list[TimeChannel]:
-    groups = defaultdict(list)
+    """Group *segments* into TimeChannels by name.
+
+    If *existing* is given, its channels are mutated via ``add_segment``
+    and any new names are appended to it; the returned list contains all
+    channels (old + new).  When *existing* is None a fresh set is built.
+    """
+    if existing is not None:
+        ch_map = existing
+    else:
+        ch_map = {}
+
     for seg in segments:
         name = seg.name or "unknown"
-        groups[name].append(seg)
-
-    channels = []
-    for ch_name, segs in groups.items():
-        ch = TimeChannel(name=ch_name)
-        for seg in segs:
+        if name in ch_map:
+            ch_map[name].add_segment(seg)
+        else:
+            ch = TimeChannel(name=name)
             ch.add_segment(seg)
-        channels.append(ch)
-    return channels
+            ch_map[name] = ch
+
+    return list(ch_map.values())
 
 
 class LoadChannelAction(PAB):
@@ -85,7 +93,18 @@ class LoadChannelAction(PAB):
             all_segments.extend(segments)
             self.progress(i + 1, n)
 
-        channels = _group_by_channel_name(all_segments)
+        # Pull in existing TimeChannel nodes from the current context
+        # so new segments are merged by name instead of replacing.
+        existing: dict[str, TimeChannel] | None = None
+        if self.container is not None:
+            ctx = self.container.CurrentContext
+            for _, _, node in ctx.NodeIter:
+                if isinstance(node, TimeChannel):
+                    if existing is None:
+                        existing = {}
+                    existing[node.name] = node
+
+        channels = _group_by_channel_name(all_segments, existing)
         self.message(
             f"Loaded {len(all_segments)} segments into {len(channels)} channels"
         )
@@ -351,7 +370,8 @@ class SelectTimeRangeAction(VAB):
             if not self._dragging and event.button != 3:
                 return
             if event.button == 3:
-                _on_right_click()
+                if not canvas.widgetlock.locked():
+                    _on_right_click()
                 return
             self._dragging = False
             x = _normalize_x(event.xdata)
