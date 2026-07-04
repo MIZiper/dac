@@ -435,6 +435,59 @@ class SelectTimeRangeAction(VAB):
 
 
 # ---------------------------------------------------------------------------
+# Spec plot — customisable multi-subplot chart
+# ---------------------------------------------------------------------------
+
+
+class SpecPlotAction(VAB):
+    """Render TimeChannels with a customisable chart specification.
+
+    Edit the ``spec`` parameter in YAML config.  See
+    :mod:`dac.modules.pch.spec` for the full configuration reference.
+
+    Quick guide
+    -----------
+    ``layout`` – 2-D grid of subplot names
+        Flat ``["ax1", "ax2"]`` = one column, two rows.
+        Nested ``[["a","b"],["c"]]`` = row 1 has two columns.
+
+    ``axes`` – dict of subplot specs, one per name in *layout*
+        Each entry accepts:
+
+        * ``chs`` – ``[channel_name, ...]``
+        * ``x`` / ``y`` – ``[min, max]`` or ``null`` for auto
+        * ``share_x`` / ``share_y`` – name of another subplot to share axis
+        * ``height`` – relative row height (int, default 10)
+        * ``grid`` – ``true`` to show grid lines
+        * ``coax`` – twin y-axis: ``{chs: [...], y: [min, max]}``
+
+    ``xs`` – list of ``[t_start, t_end]`` time windows
+        Flat *layout* → columns cloned per window, side by side.
+        2-D *layout* → *xs* entries map to rows by index.
+
+    ``ds_step`` – downsampling step in seconds (``null`` = full res)
+
+    ``legend`` – ``null`` (default per-axes), ``"single"``, ``"none"``
+
+    ``title`` – figure title
+
+    Minimal example::
+
+        layout: [speed, torque]
+        axes:
+          speed:  {chs: [Speed]}
+          torque: {chs: [Torque], share_x: speed}
+    """
+
+    CAPTION = "Spec plot"
+
+    def __call__(self, channels: list[TimeChannel], spec: dict = {}):
+        from .spec import spec_from_dict, render_spec
+        chart = spec_from_dict(spec if isinstance(spec, dict) else {})
+        render_spec(chart, channels, self.figure)
+
+
+# ---------------------------------------------------------------------------
 # Load and crop (standalone, no TimeChannel dependency)
 # ---------------------------------------------------------------------------
 

@@ -24,6 +24,7 @@ actions:
   - /mp/actions.LoadChannelAction
   - /mp/actions.PreviewChannelAction
   - /mp/actions.SelectTimeRangeAction
+  - /mp/actions.SpecPlotAction
   
   /dd/SimpleDefinition:
   - /da/Separator
@@ -65,6 +66,7 @@ quick_actions: # [action_type, data_param_name, other_params, mode?]
   dac.modules.pch.TimeChannel:
   - [dac.modules.pch.actions.PreviewChannelAction, channels, {}]
   - [dac.modules.pch.actions.SelectTimeRangeAction, channels, {}]
+  - [dac.modules.pch.actions.SpecPlotAction, channels, {}]
 
 quick_tasks:
   /mt/actions.LoadAction:
