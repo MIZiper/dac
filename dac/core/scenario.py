@@ -7,7 +7,7 @@ The Data and Action are defined under individual modules.
 Scenario is just a layout definition, any action types can be added to context if you know the path.
 """
 
-import re, yaml
+import importlib, re, yaml
 from os import path
 from dac.core import Container, NodeBase
 from dac.core.exceptions import ScenarioError
@@ -18,6 +18,25 @@ _alias_pattern = re.compile("^/(?P<alias_name>.+)/(?P<rest>.+)")
 
 def get_nodetype_path(node_type: type[NodeBase]):
     return f"{node_type.__module__}.{node_type.__qualname__}"
+
+def _resolve_inherit_path(setting_fpath: str, inherit_path: str) -> str:
+    if inherit_path.startswith('/'):
+        inner = inherit_path[1:]
+        if '/' in inner:
+            pkg_name, sub_path = inner.split('/', 1)
+        else:
+            pkg_name, sub_path = inner, ''
+        try:
+            pkg = importlib.import_module(pkg_name)
+            if hasattr(pkg, '__path__'):
+                pkg_dir = pkg.__path__[0]
+            else:
+                pkg_dir = path.dirname(pkg.__file__)
+            return path.join(pkg_dir, sub_path)
+        except (ImportError, AttributeError, IndexError) as e:
+            _logger.warning("Cannot resolve package '%s' from inherit path '%s': %s", pkg_name, inherit_path, e)
+    return path.join(path.dirname(setting_fpath), inherit_path)
+
 
 def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
     def get_node_type(cls_path: str) -> str | type[NodeBase]:
@@ -62,7 +81,7 @@ def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
         return
 
     if (inherit_rel_path:=setting.get('inherit')) is not None:
-        use_scenario(path.join(path.dirname(setting_fpath), inherit_rel_path), clean=False, dac_win=dac_win)
+        use_scenario(_resolve_inherit_path(setting_fpath, inherit_rel_path), clean=False, dac_win=dac_win)
 
     alias = setting.get('alias', {})
 
