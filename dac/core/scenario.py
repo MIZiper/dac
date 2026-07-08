@@ -80,8 +80,9 @@ def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
     if not setting:
         return
 
+    inherited_qa = None
     if (inherit_rel_path:=setting.get('inherit')) is not None:
-        use_scenario(_resolve_inherit_path(setting_fpath, inherit_rel_path), clean=False, dac_win=dac_win)
+        inherited_qa = use_scenario(_resolve_inherit_path(setting_fpath, inherit_rel_path), clean=False, dac_win=dac_win)
 
     alias = setting.get('alias', {})
 
@@ -129,6 +130,8 @@ def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
 
     if not hasattr(dac_win, "show"): # web-based cannot use PyQt5 and the tasks
         # return flat quick_actions
+        if inherited_qa:
+            return inherited_qa + quick_actions
         return quick_actions
 
     for ats, tss in setting.get("quick_tasks", {}).items(): # action_type_string, task_string_s
