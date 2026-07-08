@@ -120,6 +120,69 @@ class TimeSegment(DataBase):
             return self.t0 + np.timedelta64(int(round(dur * 1e9)), "ns")
         return self.t0 + dur
 
+    # ---- crop / downsample ----
+
+    def decimation_step(self, target_fs: float | None) -> int:
+        """Integer decimation step to approximate *target_fs* for this segment.
+
+        Each segment uses its own sample rate, so segments of differing
+        ``fs`` yield different steps.  Returns 1 when no downsampling is
+        needed (``target_fs`` unset or not below this segment's ``fs``).
+        """
+        if target_fs is None or target_fs <= 0 or target_fs >= self.fs:
+            return 1
+        return max(1, int(round(self.fs / target_fs)))
+
+    def index_bounds(self, t_start=None, t_end=None) -> tuple[int, int]:
+        """Inclusive sample-index bounds covering ``[t_start, t_end]``.
+
+        Bounds are derived arithmetically from *t0*/*dt* (no full-length
+        time axis is built).  ``t_start``/``t_end`` must match the type of
+        *t0*; ``None`` means unbounded on that side.  Returns ``(i0, i1)``
+        with ``i0 > i1`` when the segment has no samples in range.
+        """
+        n = self.length
+        if n == 0:
+            return 0, -1
+        i0, i1 = 0, n - 1
+        if isinstance(self.t0, np.datetime64):
+            step_ns = int(round(self.dt * 1e9)) or 1
+            t0_ns = self.t0.astype("datetime64[ns]")
+            if t_start is not None:
+                d = (np.datetime64(t_start).astype("datetime64[ns]") - t0_ns).astype(np.int64)
+                i0 = max(i0, int(-(-d // step_ns)))  # ceil division
+            if t_end is not None:
+                d = (np.datetime64(t_end).astype("datetime64[ns]") - t0_ns).astype(np.int64)
+                i1 = min(i1, int(d // step_ns))  # floor division
+        else:
+            if t_start is not None:
+                i0 = max(i0, int(np.ceil((t_start - self.t0) / self.dt - 1e-9)))
+            if t_end is not None:
+                i1 = min(i1, int(np.floor((t_end - self.t0) / self.dt + 1e-9)))
+        return i0, i1
+
+    def crop_downsample(
+        self, t_start=None, t_end=None, step: int = 1
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Return ``(t, y)`` for samples in ``[t_start, t_end]`` decimated by *step*.
+
+        The time axis is computed only for the selected indices, so no
+        full-resolution ``datetime64`` array is materialised for cropping.
+        """
+        i0, i1 = self.index_bounds(t_start, t_end)
+        if i0 > i1:
+            return np.array([], dtype=_time_dtype(self.t0)), np.array([])
+        step = max(1, int(step))
+        idx = np.arange(i0, i1 + 1, step)
+        y = self.y[i0 : i1 + 1 : step]
+        if isinstance(self.t0, np.datetime64):
+            step_ns = int(round(self.dt * 1e9))
+            t = self.t0.astype("datetime64[ns]") + idx * np.timedelta64(step_ns, "ns")
+        else:
+            t = self.t0 + idx * self.dt
+        return t, y
+
+
 
 class TimeChannel(DataBase):
     """Container for TimeSegments of the same measurement channel.
@@ -185,6 +248,10 @@ class TimeChannel(DataBase):
     ) -> tuple[np.ndarray, np.ndarray, float]:
         """Merge overlapping segments into continuous time and data arrays.
 
+        Each segment is cropped and downsampled independently (per its own
+        sample rate) *before* merging, so segments with different ``fs`` are
+        handled correctly and gap markers between segments are preserved.
+
         Parameters
         ----------
         t_start :
@@ -192,16 +259,17 @@ class TimeChannel(DataBase):
         t_end :
             End of time range.  Must match the type of ``segments[0].t0``.
         target_fs : float, optional
-            If set, downsample output to this sample rate (Hz).
+            If set, each segment is downsampled toward this sample rate (Hz).
 
         Returns
         -------
         t : np.ndarray
             Merged time axis (datetime64 or float64).
         y : np.ndarray
-            Merged data.
+            Merged data, with ``np.nan`` markers inserted across gaps.
         dt : float
-            Effective sample interval after optional downsampling.
+            Effective sample interval of the first segment after optional
+            downsampling.  Note segments may have differing rates.
         """
         if t_start is None:
             t_start = self.time_range[0]
@@ -218,21 +286,21 @@ class TimeChannel(DataBase):
 
         t_parts = []
         y_parts = []
-        dt = segs[0].dt
+        dt = None
         prev_seg = None
 
         for seg in segs:
-            t_seg = seg.t
-            y_seg = seg.y
-            mask = (t_seg >= t_start) & (t_seg <= t_end)
-            t_cropped = t_seg[mask]
-            y_cropped = y_seg[mask]
+            step = seg.decimation_step(target_fs)
+            t_cropped, y_cropped = seg.crop_downsample(t_start, t_end, step)
 
             if len(t_cropped) == 0:
                 continue
 
+            if dt is None:
+                dt = seg.dt * step
+
             if prev_seg is not None and seg.t0 > prev_seg.t_end:
-                t_parts.append(np.array([prev_seg.t_end]))
+                t_parts.append(np.array([prev_seg.t_end], dtype=t_cropped.dtype))
                 y_parts.append(np.array([np.nan]))
 
             t_parts.append(t_cropped)
@@ -242,14 +310,7 @@ class TimeChannel(DataBase):
         t = np.concatenate(t_parts) if t_parts else np.array([], dtype=_time_dtype(t_start))
         y = np.concatenate(y_parts) if y_parts else np.array([])
 
-        if target_fs is not None and target_fs < segs[0].fs:
-            interval = int(round(segs[0].fs / target_fs))
-            if interval > 1:
-                t = t[::interval]
-                y = y[::interval]
-                dt = dt * interval
-
-        return t, y, dt
+        return t, y, dt if dt is not None else segs[0].dt
 
 
 # ---------------------------------------------------------------------------
