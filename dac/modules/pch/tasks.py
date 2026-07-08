@@ -11,8 +11,8 @@ from PyQt5.QtCore import Qt
 from dac.core.actions import ActionBase
 from dac.core.data import SimpleDefinition
 from dac.gui import TaskBase
-from . import TimeChannel, TimeSegment
-from .actions import LoadAndCropAction, _time_to_str
+from . import TimeChannel, TimeSegment, time_to_str
+from .actions import LoadAndCropAction
 
 
 class SetupAnalysisDialog(QtWidgets.QDialog):
@@ -213,8 +213,8 @@ class SetupAnalysisContextTask(TaskBase):
         act._construct_config.update(
             {
                 "fpaths": list(fpaths),
-                "t_start": _time_to_str(t_start),
-                "t_end": _time_to_str(t_end if not is_point else None),
+                "t_start": time_to_str(t_start),
+                "t_end": time_to_str(t_end if not is_point else None),
             }
         )
         container.actions.append(act)

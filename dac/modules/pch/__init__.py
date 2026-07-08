@@ -276,3 +276,35 @@ def _coerce_time(val, ref):
     if not isinstance(ref, np.datetime64) and isinstance(val, np.datetime64):
         return val.astype("datetime64[ns]").astype(np.int64) / 1e9
     return val
+
+
+def normalize_time(val):
+    """Coerce *val* to ``np.datetime64`` or ``float`` for comparison.
+
+    Accepts ``None``, ``str`` (ISO datetime or numeric), ``float``,
+    and ``np.datetime64``. Empty string → ``None``.
+    """
+    if val is None or val == "":
+        return None
+    if isinstance(val, np.datetime64):
+        return val
+    if isinstance(val, str):
+        try:
+            return np.datetime64(val)
+        except ValueError:
+            return float(val)
+    return float(val)
+
+
+def time_to_str(val):
+    """Convert a time value to a clean string for YAML persistence.
+
+    ``np.datetime64`` → ISO string, ``float`` → numeric string,
+    ``None`` → ``""``.
+    """
+    if val is None:
+        return ""
+    if isinstance(val, np.datetime64):
+        ts = val.astype("datetime64[ms]")
+        return str(ts).replace("T", " ")
+    return str(val)

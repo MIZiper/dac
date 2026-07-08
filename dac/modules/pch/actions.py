@@ -5,7 +5,7 @@ from matplotlib import gridspec
 from PyQt5 import QtWidgets
 
 from dac.core.actions import PAB, VAB
-from . import TimeSegment, TimeChannel
+from . import TimeSegment, TimeChannel, normalize_time
 from .loader import TDMSLoader, CSVLoader, HDF5Loader
 from .plots import is_datetime_type, setup_datetime_axis
 from dac.modules.timedata import TimeData
@@ -149,7 +149,6 @@ class PreviewChannelAction(VAB):
                 t,
                 y,
                 label=f"{ch.name} [{ch.y_unit}]",
-                linewidth=0.5,
             )
 
         if not _datetime_configured:
@@ -269,7 +268,7 @@ class SelectTimeRangeAction(VAB):
                     setup_datetime_axis(ax)
                     datetime_setup = True
 
-                ax.plot(t, y, label=f"{ch.name}", linewidth=0.5)
+                ax.plot(t, y, label=f"{ch.name}")
                 self._all_times.append(t)
                 all_y_flat.extend(y if len(y) else [0])
 
@@ -385,7 +384,7 @@ class SelectTimeRangeAction(VAB):
                 self._t_end = self._t_start
                 for ax_i in axes:
                     vline = ax_i.axvline(
-                        self._t_start, color="red", linestyle="--", linewidth=1
+                        self._t_start, color="red", linestyle="--",
                     )
                     self._vlines.append(vline)
             else:
@@ -514,8 +513,8 @@ class LoadAndCropAction(PAB):
     ) -> list[TimeData]:
         results: list[TimeData] = []
         n = len(fpaths)
-        t_start = _normalize_time(t_start)
-        t_end = _normalize_time(t_end)
+        t_start = normalize_time(t_start)
+        t_end = normalize_time(t_end)
         is_range = t_start is not None and t_end is not None and t_start < t_end
 
         # NOTE: h5 support chunks, meaning for cropping it doesn't need to read full segment
@@ -566,40 +565,3 @@ class LoadAndCropAction(PAB):
 
         self.message(f"Loaded {len(results)} channels")
         return results
-
-
-# ---------------------------------------------------------------------------
-# time value helpers
-# ---------------------------------------------------------------------------
-
-
-def _normalize_time(val):
-    """Coerce *val* to ``np.datetime64`` or ``float`` for comparison.
-
-    Accepts ``None``, ``str`` (ISO datetime or numeric), ``float``,
-    and ``np.datetime64``. Empty string → ``None``.
-    """
-    if val is None or val == "":
-        return None
-    if isinstance(val, np.datetime64):
-        return val
-    if isinstance(val, str):
-        try:
-            return np.datetime64(val)
-        except ValueError:
-            return float(val)
-    return float(val)
-
-
-def _time_to_str(val):
-    """Convert a time value to a clean string for YAML persistence.
-
-    ``np.datetime64`` → ISO string, ``float`` → numeric string,
-    ``None`` → ``""``.
-    """
-    if val is None:
-        return ""
-    if isinstance(val, np.datetime64):
-        ts = val.astype("datetime64[ms]")
-        return str(ts).replace("T", " ")
-    return str(val)
