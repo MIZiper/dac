@@ -1,18 +1,22 @@
 """Quick tasks for PCH module.
 
 Provides ``SetupAnalysisContextTask`` that creates a new analysis context
-with a ``LoadAndCropAction`` configured to extract data from the time range
-selected interactively via ``SelectTimeRangeAction``.
+from a time range selected interactively via ``SelectTimeRangeAction``.
+
+The built-in task creates a ``LoadAndCropAction``.  Downstream apps that
+need a different load pattern can subclass and override
+:meth:`SetupAnalysisContextTask.build_load_actions`.
 """
 
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtCore import Qt
 
+from dac.core import ContextKeyNode
 from dac.core.actions import ActionBase
 from dac.core.data import SimpleDefinition
 from dac.gui import TaskBase
-from . import TimeChannel, TimeSegment, time_to_str
-from .actions import LoadAndCropAction
+from . import TimeChannel, time_to_str
+from .actions import LoadAndCropAction, SelectTimeRangeAction
 
 
 class SetupAnalysisDialog(QtWidgets.QDialog):
@@ -144,8 +148,47 @@ class SetupAnalysisContextTask(TaskBase):
     Reads the interactively selected time range, shows
     ``SetupAnalysisDialog`` to collect the context name and channel
     selection, then creates a new ``SimpleDefinition`` context key and
-    a ``LoadAndCropAction`` in that context.
+    load action(s) in that context.
+
+    The built-in :meth:`build_context` creates a ``SimpleDefinition``
+    context key and a single ``LoadAndCropAction``.  Downstream apps that
+    need a different context key type or load pattern subclass this task
+    and override that one method.
+
+    On construction the task installs itself as the *setup handler* on
+    ``SelectTimeRangeAction`` so the canvas right-click can trigger it.
     """
+
+    def __init__(self, dac_win: "MainWindow", name: str, *args):
+        super().__init__(dac_win, name, *args)
+        SelectTimeRangeAction.setup_handler = self
+
+    def build_context(
+        self,
+        context_name: str,
+        channels: list[TimeChannel],
+        fpaths: list[str],
+        t_start,
+        t_end,
+    ) -> tuple[ContextKeyNode, list[ActionBase]]:
+        """Build the context key and its load action(s). Override to customize.
+
+        Returns ``(context_key, actions)``; both are configured but not
+        yet added to the container — the caller registers the key and
+        appends the actions under it.
+        """
+        is_point = t_start is not None and t_start == t_end
+        context_key = SimpleDefinition(name=context_name)
+        act = LoadAndCropAction(context_key=context_key)
+        act.get_construct_config()
+        act._construct_config.update(
+            {
+                "fpaths": list(fpaths),
+                "t_start": time_to_str(t_start),
+                "t_end": time_to_str(t_end if not is_point else None),
+            }
+        )
+        return context_key, [act]
 
     def __call__(self, action: ActionBase):
         container = self.dac_win.container
@@ -202,22 +245,13 @@ class SetupAnalysisContextTask(TaskBase):
             )
             return
 
-        # create context key and add to container
-        new_key = SimpleDefinition(name=context_name)
-        container.context_keys.add_node(new_key)
-
-        # create LoadAndCropAction in the new context
-        act = LoadAndCropAction(context_key=new_key)
-        act.get_construct_config()
-        is_point = t_start is not None and t_start == t_end
-        act._construct_config.update(
-            {
-                "fpaths": list(fpaths),
-                "t_start": time_to_str(t_start),
-                "t_end": time_to_str(t_end if not is_point else None),
-            }
+        # build context key + load action(s) — overridable
+        new_key, actions = self.build_context(
+            context_name, selected_channels, list(fpaths), t_start, t_end
         )
-        container.actions.append(act)
+        container.context_keys.add_node(new_key)
+        for act in actions or []:
+            container.actions.append(act)
 
         # refresh the UI
         self.dac_win.data_list_widget.refresh()

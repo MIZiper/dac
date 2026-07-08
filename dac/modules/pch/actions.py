@@ -1,8 +1,9 @@
 """Actions for PCH module: load channels, preview plots, extract TimeData."""
 
+from typing import Callable
+
 import numpy as np
 from matplotlib import gridspec
-from PyQt5 import QtWidgets
 
 from dac.core.actions import PAB, VAB
 from . import TimeSegment, TimeChannel, normalize_time
@@ -205,12 +206,19 @@ class SelectTimeRangeAction(VAB):
     **Left-drag** selects a time span (range mode);
     **left-click** selects a single point (full-file mode).
 
-    After selection right-click the action in the list and choose
-    "Setup Analysis Context" to create a new analysis context with
-    a ``LoadAndCropAction`` ready to extract data.
+    After selection, right-click creates a new analysis context via the
+    *setup handler* in :attr:`setup_handler` -- a callable
+    ``handler(action)`` (typically a :class:`~dac.gui.TaskBase`) that
+    reads ``action._t_start`` / ``action._t_end``.  Downstream apps set
+    :attr:`setup_handler` (usually done for you when the task is created).
+
+    This class has no hard dependency on PyQt or any specific load
+    action, so it can be imported and used in headless / non-GUI code.
     """
 
     CAPTION = "Select time range for analysis"
+
+    setup_handler: Callable[["SelectTimeRangeAction"], None] = None
 
     def __call__(
         self,
@@ -411,22 +419,16 @@ class SelectTimeRangeAction(VAB):
             if self._t_start is None:
                 return
             _clear_hint()
-            # Locate the DAC MainWindow via QApplication
-            app = QtWidgets.QApplication.instance()
-            dac_win = None
-            for w in app.topLevelWidgets():
-                if hasattr(w, "container") and w.container is not None:
-                    dac_win = w
-                    break
-            if dac_win is None:
+            handler = SelectTimeRangeAction.setup_handler
+            if handler is None:
+                import warnings
+                warnings.warn(
+                    "SelectTimeRangeAction.setup_handler is not set; "
+                    "cannot create analysis context from selection.",
+                    stacklevel=2,
+                )
                 return
-
-            from dac.modules.pch.tasks import SetupAnalysisContextTask
-            from dac.core.actions import ActionBase
-
-            task = SetupAnalysisContextTask(dac_win, "")
-            task.current_context = dac_win.container.CurrentContext
-            task(self)
+            handler(self)
 
         self._cids.append(canvas.mpl_connect("button_press_event", on_press))
         self._cids.append(canvas.mpl_connect("motion_notify_event", on_motion))
