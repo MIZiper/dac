@@ -29,7 +29,7 @@ from matplotlib import rcParams
 from matplotlib import dates as mdates
 from matplotlib.figure import Figure
 
-from . import TimeChannel
+from . import TimeChannel, TSChannel
 from .plots import is_datetime_type, setup_datetime_axis
 
 
@@ -221,7 +221,7 @@ def spec_from_dict(d: dict) -> ChartSpec:
 
 def render_spec(
     spec: ChartSpec,
-    channels: list[TimeChannel],
+    channels: list[TimeChannel | TSChannel],
     figure: Figure,
 ) -> None:
     """Render *spec* on *figure* using data from *channels*.
@@ -432,7 +432,7 @@ def _expand_xs(
 def _plot_channels(
     ax,
     ch_names: list[str],
-    ch_by_name: dict[str, TimeChannel],
+    ch_by_name: dict[str, TimeChannel | TSChannel],
     xlim,
     ds_step: float | None,
     color_cycle: list,

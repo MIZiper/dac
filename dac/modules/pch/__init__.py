@@ -184,6 +184,84 @@ class TimeSegment(DataBase):
 
 
 
+class TSSegment(DataBase):
+    """Time-stamped segment with explicit timestamps and direct data storage.
+
+    Unlike :class:`TimeSegment` which computes time axes from *t0* and
+    *dt*, this stores the full timestamp array directly.  Data is held in
+    memory without caching or lazy loading, suitable for small timestamped
+    datasets.
+
+    The ``_t`` and ``_y`` arrays are underscore-prefixed internally so
+    that :meth:`~dac.core.DataNode.get_construct_config` skips them
+    during serialization.
+
+    Parameters
+    ----------
+    t : np.ndarray
+        Timestamp array (``datetime64`` or ``float``).
+    y : np.ndarray
+        Data array (same length as *t*).
+    """
+
+    def __init__(
+        self,
+        name: str = None,
+        uuid: str = None,
+        t: np.ndarray = None,
+        y: np.ndarray = None,
+        y_unit: str = "-",
+        comment: str = "",
+    ) -> None:
+        super().__init__(name, uuid)
+        self._t = np.asarray(t) if t is not None else np.array([])
+        self._y = np.asarray(y) if y is not None else np.array([])
+        self.y_unit = y_unit
+        self.comment = comment
+
+    # ---- stored arrays ----
+
+    @property
+    def t(self) -> np.ndarray:
+        return self._t
+
+    @t.setter
+    def t(self, value):
+        self._t = np.asarray(value)
+
+    @property
+    def y(self) -> np.ndarray:
+        return self._y
+
+    @y.setter
+    def y(self, value):
+        self._y = np.asarray(value)
+
+    # ---- size ----
+
+    @property
+    def t0(self):
+        """First timestamp (or ``None`` if empty)."""
+        if len(self._t) == 0:
+            return None
+        return self._t[0]
+
+    @property
+    def t_end(self):
+        """Last timestamp (or ``None`` if empty)."""
+        if len(self._t) == 0:
+            return None
+        return self._t[-1]
+
+    @property
+    def length(self) -> int:
+        return len(self._t)
+
+    @property
+    def nbytes(self) -> int:
+        return self._t.nbytes + self._y.nbytes
+
+
 class TimeChannel(DataBase):
     """Container for TimeSegments of the same measurement channel.
 
@@ -311,6 +389,188 @@ class TimeChannel(DataBase):
         y = np.concatenate(y_parts) if y_parts else np.array([])
 
         return t, y, dt if dt is not None else segs[0].dt
+
+
+class TSChannel(DataBase):
+    """Container for timestamped segments (:class:`TSSegment`) of the same channel.
+
+    Like :class:`TimeChannel`, this groups segments sorted by *t0* and
+    provides :meth:`get_merged_data` for plotting via SpecPlot.  Unlike
+    ``TimeChannel``, timestamps are stored explicitly (not computed from
+    *t0*+*dt*), cropping uses boolean indexing on the stored arrays, and
+    downsampling uses simple integer decimation.
+
+    ``SelectTimeRangeAction`` works visually but the downstream
+    ``SetupAnalysisContextTask`` does **not** apply — ``TSSegment`` has
+    no ``_cache_key`` referencing loadable files.
+    """
+
+    def __init__(
+        self, name: str = None, uuid: str = None, y_unit: str = "-"
+    ) -> None:
+        super().__init__(name, uuid)
+        self._segments: list[TSSegment] = []
+        self.y_unit = y_unit
+
+    @property
+    def segments(self) -> list[TSSegment]:
+        return list(self._segments)
+
+    def add_segment(self, seg: TSSegment):
+        bisect.insort(self._segments, seg, key=lambda s: s.t0)
+        self.add_child(seg)
+        if self.y_unit == "-" and seg.y_unit != "-":
+            self.y_unit = seg.y_unit
+
+    @property
+    def time_range(self) -> tuple:
+        segs = self._segments
+        if not segs:
+            t0 = 0.0
+            return (t0, t0)
+        return (segs[0].t0, segs[-1].t_end)
+
+    @property
+    def nbytes(self) -> int:
+        return sum(s.nbytes for s in self._segments)
+
+    def segments_at(self, t_start, t_end) -> list[TSSegment]:
+        if not self._segments:
+            return []
+        t0_ref = self._segments[0].t0
+        t_start = _coerce_time(t_start, t0_ref)
+        t_end = _coerce_time(t_end, t0_ref)
+        return [
+            s
+            for s in self._segments
+            if s.t0 is not None and s.t_end is not None
+            and s.t0 < t_end and s.t_end > t_start
+        ]
+
+    def unload(self):
+        """Free stored data arrays (set to empty)."""
+        for s in self._segments:
+            s._t = np.array([])
+            s._y = np.array([])
+
+    def get_merged_data(
+        self,
+        t_start=None,
+        t_end=None,
+        target_fs: float = None,
+    ) -> tuple[np.ndarray, np.ndarray, float]:
+        """Merge overlapping segments into continuous time and data arrays.
+
+        Unlike :meth:`TimeChannel.get_merged_data` which uses arithmetic
+        ``index_bounds`` and strided slicing, this method uses boolean
+        masking on the stored timestamps for cropping.  Downsampling uses
+        simple integer decimation computed from the mean sample interval.
+
+        Parameters
+        ----------
+        t_start :
+            Start of time range.  Must match the type of ``segments[0].t0``.
+        t_end :
+            End of time range.  Must match the type of ``segments[0].t0``.
+        target_fs : float, optional
+            If set, data is decimated toward this sample rate (Hz).
+
+        Returns
+        -------
+        t : np.ndarray
+            Merged time axis (datetime64 or float64).
+        y : np.ndarray
+            Merged data, with ``np.nan`` markers inserted across gaps.
+        dt : float
+            Approximate mean sample interval of the merged data, or 1.0
+            when unavailable.
+        """
+        if t_start is None:
+            t_start = self.time_range[0]
+        if t_end is None:
+            t_end = self.time_range[1]
+        ref_t0 = self._segments[0].t0 if self._segments else 0.0
+        t_start = _coerce_time(t_start, ref_t0)
+        t_end = _coerce_time(t_end, ref_t0)
+
+        segs = self.segments_at(t_start, t_end)
+        if not segs:
+            empty_t = np.array([], dtype=_time_dtype(t_start))
+            return empty_t, np.array([]), 1.0
+
+        t_parts = []
+        y_parts = []
+        dt = None
+        prev_seg = None
+
+        for seg in segs:
+            t_seg = seg.t
+            y_seg = seg.y
+            if len(t_seg) == 0:
+                continue
+
+            mask = (t_seg >= t_start) & (t_seg <= t_end)
+            t_cropped = t_seg[mask]
+            y_cropped = y_seg[mask]
+
+            if len(t_cropped) == 0:
+                continue
+
+            # ---- downsampling via simple decimation ----
+            step = 1
+            if target_fs is not None and target_fs > 0 and len(t_cropped) > 1:
+                if isinstance(t_cropped[0], np.datetime64):
+                    diffs = np.diff(
+                        t_cropped.astype("datetime64[ns]").astype(np.int64)
+                    )
+                else:
+                    diffs = np.diff(t_cropped.astype(np.float64))
+                mean_dt_ns = np.mean(diffs)
+                if mean_dt_ns > 0:
+                    mean_fs = (
+                        1e9 / mean_dt_ns
+                        if isinstance(t_cropped[0], np.datetime64)
+                        else 1.0 / mean_dt_ns
+                    )
+                    step = max(1, int(round(mean_fs / target_fs)))
+
+            if step > 1:
+                t_cropped = t_cropped[::step]
+                y_cropped = y_cropped[::step]
+
+            # ---- mean dt from first valid segment ----
+            if dt is None and len(t_cropped) > 1:
+                if isinstance(t_cropped[0], np.datetime64):
+                    dt = (
+                        float(
+                            np.mean(
+                                np.diff(
+                                    t_cropped.astype("datetime64[ns]").astype(np.int64)
+                                )
+                            )
+                        )
+                        / 1e9
+                    )
+                else:
+                    dt = float(np.mean(np.diff(t_cropped.astype(np.float64))))
+
+            # ---- gap marker between non-contiguous segments ----
+            if prev_seg is not None and seg.t0 > prev_seg.t_end:
+                t_parts.append(np.array([prev_seg.t_end], dtype=t_cropped.dtype))
+                y_parts.append(np.array([np.nan]))
+
+            t_parts.append(t_cropped)
+            y_parts.append(y_cropped)
+            prev_seg = seg
+
+        t = (
+            np.concatenate(t_parts)
+            if t_parts
+            else np.array([], dtype=_time_dtype(t_start))
+        )
+        y = np.concatenate(y_parts) if y_parts else np.array([])
+
+        return t, y, dt if dt is not None else 1.0
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ import numpy as np
 from matplotlib import gridspec
 
 from dac.core.actions import PAB, VAB
-from . import TimeSegment, TimeChannel, normalize_time
+from . import TimeSegment, TimeChannel, TSChannel, normalize_time
 from .loader import TDMSLoader, CSVLoader, HDF5Loader
 from .plots import is_datetime_type, setup_datetime_axis
 from dac.modules.timedata import TimeData
@@ -124,7 +124,7 @@ class PreviewChannelAction(VAB):
 
     def __call__(
         self,
-        channels: list[TimeChannel],
+        channels: list[TimeChannel | TSChannel],
         target_fs: float = 1.0,
         t_start=None,
         t_end=None,
@@ -222,7 +222,7 @@ class SelectTimeRangeAction(VAB):
 
     def __call__(
         self,
-        channels: list[TimeChannel],
+        channels: list[TimeChannel | TSChannel],
         target_fs: float = 1.0,
     ):
         if not channels:
@@ -482,7 +482,7 @@ class SpecPlotAction(VAB):
 
     CAPTION = "Spec plot"
 
-    def __call__(self, channels: list[TimeChannel], spec: dict = {}):
+    def __call__(self, channels: list[TimeChannel | TSChannel], spec: dict = {}):
         from .spec import spec_from_dict, render_spec
         chart = spec_from_dict(spec if isinstance(spec, dict) else {})
         render_spec(chart, channels, self.figure)
