@@ -428,6 +428,7 @@ class SelectTimeRangeAction(VAB):
                     stacklevel=2,
                 )
                 return
+            handler.current_context = self.container.CurrentContext
             handler(self)
 
         self._cids.append(canvas.mpl_connect("button_press_event", on_press))

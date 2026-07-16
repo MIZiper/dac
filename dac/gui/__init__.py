@@ -511,7 +511,7 @@ class MainWindow(MainWindowBase):
             self.container = container = Container.parse_save_config(dac_config)
         except Exception as e:
             self.message(f"Failed to parse project config: {e}")
-            self.container = Container()
+            # TODO: make self.error()
             return
         self.data_list_widget.refresh(container)
         self.action_list_widget.refresh(container)
