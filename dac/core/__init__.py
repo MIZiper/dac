@@ -475,6 +475,9 @@ class Container:
     def ActionsInCurrentContext(self) -> list[ActionNode]:
         return [a for a in self.actions if a.context_key is self.current_key]
 
+    def get_actions_for_context(self, context_key: ContextKeyNode) -> list[ActionNode]:
+        return [a for a in self.actions if a.context_key is context_key]
+
     def get_node_of_type_for(
         self, context_key: ContextKeyNode, node_name: str, node_type: type[NodeBase]
     ) -> NodeBase | None:

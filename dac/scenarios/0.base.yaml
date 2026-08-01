@@ -7,6 +7,7 @@ alias:
   mv: dac.modules.nvh
   md: dac.modules.drivetrain
   mp: dac.modules.pch
+  mb: dac.modules.batch
 
 data:
   _: # for now only add data to global context
@@ -25,6 +26,10 @@ actions:
   - /mp/actions.PreviewChannelAction
   - /mp/actions.SelectTimeRangeAction
   - /mp/actions.SpecPlotAction
+  - "[Batch]"
+  - /mb/BatchAction
+  - /mb/AppendCSVAction
+  - /mb/AppendJSONLAction
   - "[Freq domain]"
   - /mv/actions.LoadCaseFreqIntermediateAverage
   - "[OrderSlice]"
