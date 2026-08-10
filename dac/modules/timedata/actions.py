@@ -383,9 +383,12 @@ class CounterToTachoAction(ActionBase):
 
         return TimeData(name="Tacho", y=rpm, dt=channel.dt, y_unit="rpm")
     
+
+
 class ChopOffSpikesAction(PAB):
     CAPTION = "Chop off spikes"
-    def __call__(self, channels: list[TimeData], max_dydt: float, limits: tuple[float, float]=None) -> list[TimeData]:
+    def __call__(self, channels: list[TimeData], max_dydt: float,
+                 limits: tuple[float, float] = None) -> list[TimeData]:
         """Removes spikes from TimeData channels by limiting the rate of change.
 
         Iterates through the data and if a segment's rate of change (`dy/dt`)
@@ -408,56 +411,76 @@ class ChopOffSpikesAction(PAB):
             A list of new TimeData objects with spikes removed/interpolated.
             The names are appended with "-Chop".
         """
-        # `max_dydt`: maximum delta y per sec
+        ret = []
+        for i, channel in enumerate(channels):
+            cleaned = _remove_spikes(channel.y, channel.dt, max_dydt, limits)
+            ret.append(TimeData(
+                name=f"{channel.name}-Chop",
+                y=cleaned,
+                dt=channel.dt,
+                y_unit=channel.y_unit,
+            ))
+            self.progress(i + 1, len(channels))
+        return ret
+        
+def _remove_spikes(y: np.ndarray, dt: float, max_dydt: float,
+                   limits: tuple[float, float] = None) -> np.ndarray:
+    """Remove spikes by limiting the rate of change, returning a cleaned copy.
 
-        if limits is None:
-            low_lim, high_lim = -np.inf, np.inf
+    Iterates through *y* sample by sample.  When a segment's rate of change
+    exceeds ``max_dydt``, the spike region is replaced by linear interpolation
+    between the last clean value and the next clean value.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Input signal data.
+    dt : float
+        Sample interval (seconds).
+    max_dydt : float
+        Maximum allowed change in *y* per second.
+    limits : tuple[float, float], optional
+        Optional ``(min_val, max_val)`` to clip the output values.
+        If None, no clipping is applied.
+
+    Returns
+    -------
+    np.ndarray
+        Copy of *y* with spike regions linearly interpolated.
+    """
+    if limits is None:
+        low_lim, high_lim = -np.inf, np.inf
+    else:
+        low_lim, high_lim = limits
+
+    target_data = y.copy()
+    max_dy = max_dydt * dt
+
+    if len(target_data) == 0:
+        return target_data
+
+    look4raise = True
+    pv = y[0]
+
+    for i, cv in enumerate(y[1:]):
+        dy = cv - pv
+        if look4raise:
+            if dy > max_dy:
+                s = i
+                sv = pv
+                look4raise = False
         else:
-            low_lim, high_lim = limits
+            if (np.abs(dy) < max_dy
+                    and np.abs(cv - sv) < max_dy * (i + 1 - s)
+                    and cv <= high_lim
+                    and cv >= low_lim):
+                look4raise = True
+                target_data[(s + 1):(i + 1)] = np.linspace(
+                    sv, cv, num=(i - s + 2), endpoint=True
+                )[1:-1]
+        pv = cv
 
-        ret_channels = []
-        n = len(channels)
-
-        for j, channel in enumerate(channels):
-            signal = channel
-            orig_data = signal.y
-            target_data = orig_data.copy()
-
-            max_dy = max_dydt * signal.dt
-
-            look4raise = True
-            s, e = 0, 0
-
-            if len(target_data)>0:
-                pv = orig_data[0]
-            else:
-                continue
-            
-            for i, cv in enumerate(orig_data[1:]):
-                dy = cv-pv
-                if look4raise:
-                    if dy > max_dy:
-                        s = i # start from prev idx
-                        sv = pv
-                        look4raise = False
-                else:
-                    if np.abs(dy)<max_dy and np.abs(cv-sv)<max_dy*(i+1-s) and cv<=high_lim and cv>=low_lim:
-                        look4raise = True
-                        target_data[(s+1):(i+1)] = np.linspace(sv, cv, num=(i-s+2), endpoint=True)[1:-1]
-                pv = cv
-            
-            ret_channels.append(
-                TimeData(
-                    name=f"{channel.name}-Chop",
-                    y=target_data,
-                    dt=signal.dt,
-                    y_unit=signal.y_unit
-                )
-            )
-
-            self.progress(j+1, n)
-
-        return ret_channels
+    return target_data
 
 class PulseToAzimuthAction(ActionBase):
     CAPTION = "Pulse to azimuth"

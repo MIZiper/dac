@@ -25,6 +25,7 @@ actions:
   - /mp/actions.PreviewChannelAction
   - /mp/actions.SelectTimeRangeAction
   - /mp/actions.SpecPlotAction
+  - /mp/actions.ChopOffSpikesAction
   - "[Freq domain]"
   - /mv/actions.LoadCaseFreqIntermediateAverage
   - "[OrderSlice]"

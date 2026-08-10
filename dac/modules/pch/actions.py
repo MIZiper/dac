@@ -10,6 +10,7 @@ from . import TimeSegment, TimeChannel, TSChannel, normalize_time
 from .loader import TDMSLoader, CSVLoader, HDF5Loader
 from .plots import is_datetime_type, setup_datetime_axis
 from dac.modules.timedata import TimeData
+from dac.modules.timedata.actions import _remove_spikes
 
 
 _LOADER_MAP = {
@@ -568,3 +569,40 @@ class LoadAndCropAction(PAB):
 
         self.message(f"Loaded {len(results)} channels")
         return results
+
+
+class ChopOffSpikesAction(PAB):
+    """Remove spikes from TimeChannel segments by limiting the rate of change.
+
+    Operates on each :class:`~dac.modules.pch.TimeSegment` independently.
+    Spike regions are linearly interpolated; cleaned segments are assembled
+    into new :class:`~dac.modules.pch.TimeChannel` objects named with a
+    ``-Chop`` suffix.
+    """
+
+    CAPTION = "Chop off spikes"
+
+    def __call__(
+        self,
+        channels: list[TimeChannel],
+        max_dydt: float,
+        limits: tuple[float, float] = None,
+    ) -> list[TimeChannel]:
+        ret = []
+        for i, ch in enumerate(channels):
+            new_ch = TimeChannel(name=f"{ch.name}-Chop", y_unit=ch.y_unit)
+            for seg in ch.segments:
+                cleaned_y = _remove_spikes(seg.y, seg.dt, max_dydt, limits)
+                new_seg = TimeSegment(
+                    name=seg.name,
+                    t0=seg.t0,
+                    length=len(cleaned_y),
+                    dt=seg.dt,
+                    y_unit=seg.y_unit,
+                    comment=seg.comment,
+                )
+                new_seg._y = cleaned_y
+                new_ch.add_segment(new_seg)
+            ret.append(new_ch)
+            self.progress(i + 1, len(channels))
+        return ret
