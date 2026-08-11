@@ -1,0 +1,197 @@
+"""GUI task for interactively adding event log entries.
+
+Provides ``AddEventLogTask`` — a :class:`~dac.gui.TaskBase` registered as
+a QUICK_TASK for ``SelectEventRangeAction``.  When triggered (right-click
+on the action or on the canvas), it opens a modal dialog that lets the
+user pick (or create) a ``CreateEventLogAction`` and enter a label for
+the selected time range.
+"""
+
+from PyQt5 import QtWidgets
+from PyQt5.QtCore import Qt
+
+from dac.core.actions import ActionBase
+from dac.gui import TaskBase
+from dac.modules.pch import time_to_str
+
+from .actions import CreateEventLogAction, SelectEventRangeAction
+
+_NEW_GROUP_MARKER = "  [ New Group … ]"
+
+
+# ---------------------------------------------------------------------------
+# Dialog
+# ---------------------------------------------------------------------------
+
+
+class _AddEventLogDialog(QtWidgets.QDialog):
+    """Modal dialog for adding one event log entry.
+
+    Shows the selected time range, lets the user pick or type a group
+    name, and enter a label string.
+    """
+
+    def __init__(self, t_start, t_end, container, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Add Event Log Entry")
+        self.setMinimumWidth(400)
+
+        self._t_start = t_start
+        self._t_end = t_end
+        self._container = container
+        self._result = None
+
+        layout = QtWidgets.QVBoxLayout(self)
+
+        # ---- time range (read-only) ----
+        time_row = QtWidgets.QHBoxLayout()
+        time_row.addWidget(QtWidgets.QLabel("Time range:"))
+        t0_str = time_to_str(t_start)
+        t1_str = time_to_str(t_end)
+        if t_start == t_end:
+            time_label = QtWidgets.QLabel(f"Point at  {t0_str}")
+        else:
+            time_label = QtWidgets.QLabel(f"{t0_str}  →  {t1_str}")
+        time_row.addWidget(time_label)
+        time_row.addStretch()
+        layout.addLayout(time_row)
+
+        # ---- group selection ----
+        layout.addWidget(QtWidgets.QLabel("Event log group:"))
+
+        self._group_combo = QtWidgets.QComboBox()
+        existing = self._collect_group_names()
+        self._group_combo.addItems(existing)
+        self._group_combo.addItem(_NEW_GROUP_MARKER)
+        self._group_combo.currentTextChanged.connect(self._on_group_changed)
+        layout.addWidget(self._group_combo)
+
+        self._new_group_edit = QtWidgets.QLineEdit()
+        self._new_group_edit.setPlaceholderText("Enter new group name …")
+        self._new_group_edit.setVisible(False)
+        layout.addWidget(self._new_group_edit)
+
+        # ---- label ----
+        label_row = QtWidgets.QHBoxLayout()
+        label_row.addWidget(QtWidgets.QLabel("Label:"))
+        self._label_edit = QtWidgets.QLineEdit()
+        self._label_edit.setPlaceholderText("e.g. Knock, Rattle, Shift …")
+        label_row.addWidget(self._label_edit)
+        layout.addLayout(label_row)
+
+        # ---- buttons ----
+        btn_row = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok
+            | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        btn_row.accepted.connect(self._on_accept)
+        btn_row.rejected.connect(self.reject)
+        layout.addWidget(btn_row)
+
+    # -- helpers ------------------------------------------------
+
+    def _collect_group_names(self) -> list[str]:
+        names = []
+        if self._container is None:
+            return names
+        for act in self._container.actions:
+            if isinstance(act, CreateEventLogAction):
+                gname = act._construct_config.get("group_name", act.name)
+                if gname and gname not in names:
+                    names.append(gname)
+        return names
+
+    def _on_group_changed(self, text: str):
+        self._new_group_edit.setVisible(text == _NEW_GROUP_MARKER)
+
+    def _on_accept(self):
+        label = self._label_edit.text().strip()
+        if self._group_combo.currentText() == _NEW_GROUP_MARKER:
+            group_name = self._new_group_edit.text().strip()
+        else:
+            group_name = self._group_combo.currentText().strip()
+
+        if not group_name:
+            QtWidgets.QMessageBox.warning(
+                self, "Missing group name",
+                "Please select or enter a group name.",
+            )
+            return
+        if not label:
+            QtWidgets.QMessageBox.warning(
+                self, "Missing label", "Please enter a label for the event.",
+            )
+            return
+
+        self._result = (group_name, label)
+        self.accept()
+
+    def result(self):
+        return self._result
+
+
+# ---------------------------------------------------------------------------
+# Task
+# ---------------------------------------------------------------------------
+
+
+class AddEventLogTask(TaskBase):
+    """QUICK_TASK for ``SelectEventRangeAction``.
+
+    On construction the task installs itself as the *setup handler* on
+    ``SelectEventRangeAction`` so the canvas right-click triggers it.
+    """
+
+    def __init__(self, dac_win: "MainWindow", name: str, *args):
+        super().__init__(dac_win, name, *args)
+        SelectEventRangeAction.setup_handler = self
+
+    def __call__(self, action: ActionBase):
+        container = self.dac_win.container
+        if container is None:
+            return
+
+        t_start = getattr(action, "_t_start", None)
+        t_end = getattr(action, "_t_end", None)
+
+        if t_start is None:
+            QtWidgets.QMessageBox.information(
+                self.dac_win,
+                "No selection",
+                "Run the action first and select a time range on the plot.",
+            )
+            return
+
+        dlg = _AddEventLogDialog(t_start, t_end, container, parent=self.dac_win)
+        if not dlg.exec_():
+            return
+
+        group_name, label = dlg.result()
+        time_str = f"{time_to_str(t_start)} ~ {time_to_str(t_end)}"
+
+        target: CreateEventLogAction | None = None
+        for act in container.actions:
+            if isinstance(act, CreateEventLogAction):
+                if act._construct_config.get("group_name") == group_name:
+                    target = act
+                    break
+
+        if target is None:
+            target = CreateEventLogAction(context_key=action.context_key)
+            target.container = container
+            target.get_construct_config()
+            target._construct_config["group_name"] = group_name
+            target._construct_config.setdefault("event_data", [])
+            target.apply_construct_config(target._construct_config)
+            container.actions.append(target)
+            self.dac_win.message(f"Created event log group '{group_name}'")
+
+        target._construct_config.setdefault("event_data", []).append(
+            [time_str, label]
+        )
+        target.status = CreateEventLogAction.ActionStatus.CONFIGURED
+
+        self.dac_win.action_list_widget.refresh()
+        self.dac_win.message(
+            f"Added event '{label}' to group '{group_name}'"
+        )

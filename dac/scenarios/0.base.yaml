@@ -7,6 +7,7 @@ alias:
   mv: dac.modules.nvh
   md: dac.modules.drivetrain
   mp: dac.modules.pch
+  me: dac.modules.event_log
 
 data:
   _: # for now only add data to global context
@@ -26,6 +27,11 @@ actions:
   - /mp/actions.SelectTimeRangeAction
   - /mp/actions.SpecPlotAction
   - /mp/actions.ChopOffSpikesAction
+  - "[Event Log]"
+  - /me/actions.CreateEventLogAction
+  - /me/actions.PlotEventsAction
+  - /me/actions.ExtractEventStatisticsAction
+  - /me/actions.ViewEventStatisticsAction
   - "[Freq domain]"
   - /mv/actions.LoadCaseFreqIntermediateAverage
   - "[OrderSlice]"
@@ -90,6 +96,10 @@ quick_actions: # [action_type, data_param_name, other_params, mode?]
   - [dac.modules.pch.actions.PreviewChannelAction, channels, {}]
   - [dac.modules.pch.actions.SelectTimeRangeAction, channels, {}]
   - [dac.modules.pch.actions.SpecPlotAction, channels, {}]
+  - [dac.modules.event_log.actions.SelectEventRangeAction, channels, {}, "create"]
+  - [dac.modules.event_log.actions.PlotEventsAction, channels, {OverlayEventsAction: {events: null}}, true]
+  /me/EventLogCollection:
+  - [/me/actions.ExtractEventStatisticsAction, events, {channels: null}, true]
   /mv/data.FreqIntermediateData:
   - [/mv/actions.ViewFreqIntermediateAction, channel, {}]
   /mv/data.OrderSliceData:
@@ -102,6 +112,8 @@ quick_tasks:
   - [/mt/tasks.FillFpathsTask, "Select measurement files"]
   /mp/actions.SelectTimeRangeAction:
   - [/mp/tasks.SetupAnalysisContextTask, "Setup Analysis Context"]
+  /me/actions.SelectEventRangeAction:
+  - [/me/tasks.AddEventLogTask, "Add event log entry"]
 
 drop_actions:
   ".tdms":

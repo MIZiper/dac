@@ -149,7 +149,7 @@ class SequenceActionBase(PAB, VAB):
                     cfg[key] = ActionNode.Annotation2Config(param.annotation)
                 else:
                     cfg[key] = "<Any>"
-            if (ret_ann:=sig.return_annotation) is not inspect._empty and ret_ann.__name__!="list":
+            if (ret_ann:=sig.return_annotation) is not inspect._empty and getattr(ret_ann, '__name__', '')!="list":
                 ... # how to pass the return result?
         else:
             for subact_name, subact_sig in sig.items():
