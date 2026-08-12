@@ -177,7 +177,7 @@ class ExtractEventStatisticsAction(PAB):
 
                 record: dict = {
                     "channel": ch.name,
-                    "event": entry.label or entry.name,
+                    "event": entry.name,
                     "t_start": entry.start,
                     "t_end": entry.end,
                     "n_samples": int(len(y_clean)),

@@ -78,15 +78,15 @@ class _AddEventLogDialog(QtWidgets.QDialog):
         self._group_combo.currentTextChanged.connect(self._on_group_changed)
         layout.addWidget(self._group_combo)
 
-        # Initialise the edit-field visibility; when there are no existing
-        # groups the combo defaults to the "new group" marker and the signal
-        # above never fires during population.
-        self._on_group_changed(self._group_combo.currentText())
-
         self._new_group_edit = QtWidgets.QLineEdit()
         self._new_group_edit.setPlaceholderText("Enter new group name …")
         self._new_group_edit.setVisible(False)
         layout.addWidget(self._new_group_edit)
+
+        # Initialise the edit-field visibility; when there are no existing
+        # groups the combo defaults to the "new group" marker and the signal
+        # above never fires during population.
+        self._on_group_changed(self._group_combo.currentText())
 
         # ---- label ----
         label_row = QtWidgets.QHBoxLayout()
@@ -198,14 +198,14 @@ class AddEventLogTask(TaskBase):
             target.container = container
             target.get_construct_config()
             target.out_name = group_name
-            target._construct_config.setdefault("event_data", [])
+            target._construct_config["event_data"] = []
             target.status = CreateEventLogAction.ActionStatus.CONFIGURED
             container.actions.append(target)
             self.dac_win.message(f"Created event log group '{group_name}'")
 
-        target._construct_config.setdefault("event_data", []).append(
-            [time_str, label]
-        )
+        if not isinstance(target._construct_config.get("event_data"), list):
+            target._construct_config["event_data"] = []
+        target._construct_config["event_data"].append([time_str, label])
         target.status = CreateEventLogAction.ActionStatus.CONFIGURED
 
         self.dac_win.action_list_widget.refresh()

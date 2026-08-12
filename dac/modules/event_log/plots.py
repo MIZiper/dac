@@ -64,13 +64,13 @@ def overlay_events(
             for ax in all_axes:
                 ax.axvspan(t0, t1, alpha=0.15, color=color)
 
-            if entry.label:
+            if entry.name:
                 mid = time_midpoint(t0, t1)
                 _, y_max = label_ax.get_ylim()
                 label_ax.text(
                     mid,
                     y_max * 0.95,
-                    entry.label,
+                    entry.name,
                     color=color,
                     fontsize=8,
                     ha="center",

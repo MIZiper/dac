@@ -11,8 +11,9 @@ from dac.core.data import DataBase
 
 
 class EventLogEntry(DataBase):
-    """A single event defined by a time range, label, and optional colour.
+    """A single event defined by a time range and optional colour.
 
+    The entry's ``name`` (inherited from `DataNode`) serves as its label.
     All attributes are ``str`` (basic types) so they auto-serialise
     through the standard `DataNode` mechanism.
     """
@@ -23,13 +24,11 @@ class EventLogEntry(DataBase):
         uuid: str = None,
         start: str = "",
         end: str = "",
-        label: str = "",
         color: str = "",
     ) -> None:
         super().__init__(name, uuid)
         self.start = start
         self.end = end
-        self.label = label
         self.color = color
 
 
@@ -55,7 +54,6 @@ class EventLogCollection(DataBase):
             name=label or f"Event_{len(self.entries)}",
             start=str(start),
             end=str(end),
-            label=label or f"Event_{len(self.entries)}",
             color=color,
         )
         self.add_child(entry)

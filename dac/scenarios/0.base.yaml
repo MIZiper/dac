@@ -95,11 +95,11 @@ quick_actions: # [action_type, data_param_name, other_params, mode?]
   dac.modules.pch.TimeChannel:
   - [dac.modules.pch.actions.PreviewChannelAction, channels, {}]
   - [dac.modules.pch.actions.SelectTimeRangeAction, channels, {}]
-  - [dac.modules.pch.actions.SpecPlotAction, channels, {}]
-  - [dac.modules.event_log.actions.SelectEventRangeAction, channels, {}, "create"]
-  - [dac.modules.event_log.actions.PlotEventsAction, channels, {OverlayEventsAction: {events: null}}, true]
+  - [dac.modules.pch.actions.SpecPlotAction, channels, {}, "create"]
+  - [dac.modules.event_log.actions.SelectEventRangeAction, channels, {},]
+  - [dac.modules.event_log.actions.PlotEventsAction, channels, {OverlayEventsAction: {events: null}}, "create"]
   /me/EventLogCollection:
-  - [/me/actions.ExtractEventStatisticsAction, events, {channels: null}, true]
+  - [/me/actions.ExtractEventStatisticsAction, events, {channels: null}, "create"]
   /mv/data.FreqIntermediateData:
   - [/mv/actions.ViewFreqIntermediateAction, channel, {}]
   /mv/data.OrderSliceData:
