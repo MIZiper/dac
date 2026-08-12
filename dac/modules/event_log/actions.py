@@ -249,19 +249,19 @@ class ViewEventStatisticsAction(TAB):
                 for ev in events
             ]
             self.present({
-                "title": "Event Statistics",
+                "title": f"Event Statistics - {stat_name}",
                 "headers": {"row": events, "col": channels},
                 "data": data,
             })
         else:
-            col_labels = []
+            row_labels = []
             data = []
             for rec in statistics.records:
-                col_labels.append(f"{rec['channel']}/{rec['event']}")
+                row_labels.append(f"{rec['channel']}/{rec['event']}")
                 data.append([rec.get(s, "") for s in stat_names])
 
             self.present({
                 "title": "Event Statistics",
-                "headers": {"row": stat_names, "col": col_labels},
-                "data": list(zip(*data)),
+                "headers": {"row": row_labels, "col": stat_names},
+                "data": data,
             })
