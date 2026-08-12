@@ -291,10 +291,15 @@ class ActionNode(NodeBase):
                     cfg[key] = ActionNode.Annotation2Config(param.annotation)
                 else:
                     cfg[key] = "<Any>"
+            ret_ann = self._SIGNATURE.return_annotation
             if (
-                ret_ann := self._SIGNATURE.return_annotation
-            ) is not inspect._empty and ret_ann.__name__ != "list":
-                self.out_name = f"<{ret_ann.__name__}>"
+                ret_ann is not inspect._empty
+                and ret_ann is not None
+                and ret_ann is not type(None)
+            ):
+                name = getattr(ret_ann, "__name__", "")
+                if name != "list":
+                    self.out_name = f"<{name}>"
 
         com_config = {
             "name": self.name,

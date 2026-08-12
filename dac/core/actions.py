@@ -149,8 +149,14 @@ class SequenceActionBase(PAB, VAB):
                     cfg[key] = ActionNode.Annotation2Config(param.annotation)
                 else:
                     cfg[key] = "<Any>"
-            if (ret_ann:=sig.return_annotation) is not inspect._empty and getattr(ret_ann, '__name__', '')!="list":
-                ... # how to pass the return result?
+            ret_ann = sig.return_annotation
+            if (
+                ret_ann is not inspect._empty
+                and ret_ann is not None
+                and ret_ann is not type(None)
+                and getattr(ret_ann, "__name__", "") != "list"
+            ):
+                ...  # how to pass the return result?
         else:
             for subact_name, subact_sig in sig.items():
                 cfg[subact_name] = SequenceActionBase._GetCCFromS(subact_sig)
