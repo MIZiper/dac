@@ -4,19 +4,13 @@ Provides interactive range-selection for creating event log entries,
 visualisation with SpecPlot + event overlays, and statistical extraction.
 """
 
-import warnings
-
 import numpy as np
-from matplotlib import gridspec
 
 from dac.core.actions import ActionBase, VAB, PAB, SAB, TAB
-from dac.modules.pch import TimeChannel, TSChannel, time_to_str
-from dac.modules.pch.actions import SpecPlotAction
-from dac.modules.pch.plots import is_datetime_type, setup_datetime_axis
-from dac.modules.pch.spec import spec_from_dict, render_spec
+from dac.modules.pch import TimeChannel
+from dac.modules.pch.actions import SelectTimeRangeAction, SpecPlotAction
 
 from . import (
-    EventLogEntry,
     EventLogCollection,
     EventStatistics,
     parse_time,
@@ -72,233 +66,23 @@ class CreateEventLogAction(ActionBase):
 # ---------------------------------------------------------------------------
 
 
-class SelectEventRangeAction(VAB):
-    """Interactive time-range selection on TimeChannel previews.
+class SelectEventRangeAction(SelectTimeRangeAction):
+    """Interactive time-range selection for adding event log entries.
 
-    **Left-drag** selects a time range; **right-click** triggers the
-    :attr:`setup_handler` (typically an :class:`~dac.modules.event_log.tasks.AddEventLogTask`)
-    to add the selected range as an event log entry to a
-    :class:`CreateEventLogAction`.
-
-    Interaction mirrors :class:`~dac.modules.pch.actions.SelectTimeRangeAction`.
+    Reuses the interaction of
+    :class:`~dac.modules.pch.actions.SelectTimeRangeAction`; only the
+    hint/title text and the :attr:`setup_handler` differ.
     """
 
     CAPTION = "Select range to add event log"
 
+    _SUPTITLE = "Drag to select range  |  Right-click → Add event log"
+    _HINT = (
+        "Selection recorded.  Right-click this action "
+        "in the Action panel → 'Add event log entry'"
+    )
+
     setup_handler: "Callable[['SelectEventRangeAction'], None] | None" = None
-
-    def __call__(
-        self,
-        channels: list[TimeChannel | TSChannel],
-        target_fs: float = 1.0,
-    ) -> None:
-        if not channels:
-            return
-
-        self._channels = channels
-        self._t_start = None
-        self._t_end = None
-        self._press_xdata = None
-        self._span_patches = []
-        self._vlines = []
-        self._axes = []
-        self._dragging = False
-
-        fig = self.figure
-        fig.suptitle(
-            "Drag to select range  |  Right-click → Add event log"
-        )
-
-        unit_groups: list[tuple[str, list[TimeChannel]]] = []
-        seen_units: dict[str, int] = {}
-        for ch in channels:
-            idx = seen_units.get(ch.y_unit)
-            if idx is None:
-                idx = len(unit_groups)
-                unit_groups.append((ch.y_unit, []))
-                seen_units[ch.y_unit] = idx
-            unit_groups[idx][1].append(ch)
-
-        n_rows = len(unit_groups)
-        gs = gridspec.GridSpec(n_rows, 1, figure=fig)
-        gs.update(hspace=0.05)
-        axes = []
-        datetime_setup = False
-
-        self._all_times = []
-        all_y_flat = []
-
-        for i, (unit, grp) in enumerate(unit_groups):
-            ax = fig.add_subplot(gs[i], sharex=axes[0] if axes else None)
-            axes.append(ax)
-
-            for ch in grp:
-                t, y, _ = ch.get_merged_data(target_fs=target_fs)
-                if len(t) == 0:
-                    continue
-
-                if not datetime_setup and is_datetime_type(t):
-                    setup_datetime_axis(ax)
-                    datetime_setup = True
-
-                ax.plot(t, y, label=f"{ch.name}")
-                self._all_times.append(t)
-                all_y_flat.extend(y if len(y) else [0])
-
-            ax.set_ylabel(f"[{unit}]")
-            ax.legend(loc="upper right", fontsize="small")
-            if i < n_rows - 1:
-                ax.tick_params(labelbottom=False)
-
-        if not datetime_setup and axes:
-            axes[-1].set_xlabel("Time [s]")
-
-        self._axes = axes
-        self._y_min = float(np.min(all_y_flat)) if all_y_flat else 0
-        self._y_max = float(np.max(all_y_flat)) if all_y_flat else 0
-        self._y_span = self._y_max - self._y_min or 1.0
-
-        canvas = self.canvas
-
-        _ref_type = None
-        for ch in channels:
-            if ch._segments:
-                _ref_type = type(ch._segments[0].t0)
-                break
-        _is_datetime = _ref_type is np.datetime64
-
-        def _normalize_x(x):
-            if x is None:
-                return None
-            if _is_datetime:
-                import matplotlib.dates as _mdates
-
-                dt = _mdates.num2date(x).replace(tzinfo=None)
-                return np.datetime64(dt.isoformat())
-            return x
-
-        def _ax_for(event):
-            if event.inaxes is not None and event.inaxes in axes:
-                return event.inaxes
-            return None
-
-        def _show_hint():
-            _clear_hint()
-            hint = fig.text(
-                0.5, 0.01,
-                "Selection recorded.  Right-click this action "
-                "in the Action panel → 'Add event log entry'",
-                ha="center", fontsize=9,
-                bbox=dict(
-                    boxstyle="round,pad=0.3",
-                    facecolor="lightyellow",
-                    alpha=0.9,
-                ),
-            )
-            self._hint = hint
-            canvas.draw_idle()
-
-        def _clear_hint():
-            if hasattr(self, "_hint") and self._hint is not None:
-                self._hint.remove()
-                self._hint = None
-
-        def on_press(event):
-            if canvas.widgetlock.locked():
-                return
-            ax = _ax_for(event)
-            if ax is None:
-                return
-            if event.button == 1:
-                self._press_xdata = event.xdata
-                self._t_start = _normalize_x(event.xdata)
-                self._dragging = True
-                _clear_spans()
-                _clear_vlines()
-                for ax_i in axes:
-                    span = ax_i.axvspan(
-                        event.xdata, event.xdata,
-                        alpha=0.2, color="green",
-                    )
-                    self._span_patches.append(span)
-                canvas.draw_idle()
-
-        def on_motion(event):
-            if not self._dragging:
-                return
-            x = _normalize_x(event.xdata)
-            if x is None:
-                return
-            t0 = min(self._t_start, x)
-            t1 = max(self._t_start, x)
-            for span in self._span_patches:
-                span.remove()
-            self._span_patches.clear()
-            for ax_i in axes:
-                span = ax_i.axvspan(t0, t1, alpha=0.2, color="green")
-                self._span_patches.append(span)
-            canvas.draw_idle()
-
-        def on_release(event):
-            if not self._dragging and event.button != 3:
-                return
-            if event.button == 3:
-                if not canvas.widgetlock.locked():
-                    _on_right_click()
-                return
-            self._dragging = False
-            x = _normalize_x(event.xdata)
-            if self._t_start is None or x is None:
-                _clear_spans()
-                return
-            _clear_spans()
-            t_range = axes[0].get_xlim()
-            click_threshold = (t_range[1] - t_range[0]) * 0.005
-            if abs(event.xdata - self._press_xdata) < click_threshold:
-                self._t_end = self._t_start
-                for ax_i in axes:
-                    vline = ax_i.axvline(
-                        self._t_start, color="red", linestyle="--",
-                    )
-                    self._vlines.append(vline)
-            else:
-                self._t_end = x
-                t0, t1 = sorted([self._t_start, self._t_end])
-                self._t_start, self._t_end = t0, t1
-                for ax_i in axes:
-                    span = ax_i.axvspan(t0, t1, alpha=0.15, color="green")
-                    self._span_patches.append(span)
-            canvas.draw_idle()
-            _show_hint()
-
-        def _clear_spans():
-            for s in self._span_patches:
-                s.remove()
-            self._span_patches.clear()
-
-        def _clear_vlines():
-            for v in self._vlines:
-                v.remove()
-            self._vlines.clear()
-
-        def _on_right_click():
-            if self._t_start is None:
-                return
-            _clear_hint()
-            handler = SelectEventRangeAction.setup_handler
-            if handler is None:
-                warnings.warn(
-                    "SelectEventRangeAction.setup_handler is not set; "
-                    "cannot add event log entry from selection.",
-                    stacklevel=2,
-                )
-                return
-            handler.current_context = self.container.CurrentContext
-            handler(self)
-
-        self._cids.append(canvas.mpl_connect("button_press_event", on_press))
-        self._cids.append(canvas.mpl_connect("motion_notify_event", on_motion))
-        self._cids.append(canvas.mpl_connect("button_release_event", on_release))
 
 
 # ---------------------------------------------------------------------------

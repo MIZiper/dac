@@ -219,6 +219,15 @@ class SelectTimeRangeAction(VAB):
 
     CAPTION = "Select time range for analysis"
 
+    _SUPTITLE = (
+        "Drag to select time range  |  Click for a point  |  "
+        "Right-click action → Setup Analysis Context"
+    )
+    _HINT = (
+        "Selection recorded.  Right-click this action "
+        "in the Action panel → 'Setup Analysis Context'"
+    )
+
     setup_handler: Callable[["SelectTimeRangeAction"], None] = None
 
     def __call__(
@@ -239,10 +248,7 @@ class SelectTimeRangeAction(VAB):
         self._dragging = False
 
         fig = self.figure
-        fig.suptitle(
-            "Drag to select time range  |  Click for a point  |  "
-            "Right-click action → Setup Analysis Context"
-        )
+        fig.suptitle(self._SUPTITLE)
 
         # --- group channels by y_unit ---
         unit_groups: list[tuple[str, list[TimeChannel]]] = []
@@ -325,8 +331,7 @@ class SelectTimeRangeAction(VAB):
             _clear_hint()
             hint = fig.text(
                 0.5, 0.01,
-                "Selection recorded.  Right-click this action "
-                "in the Action panel → 'Setup Analysis Context'",
+                self._HINT,
                 ha="center", fontsize=9,
                 bbox=dict(boxstyle="round,pad=0.3", facecolor="lightyellow", alpha=0.9),
             )
@@ -420,12 +425,12 @@ class SelectTimeRangeAction(VAB):
             if self._t_start is None:
                 return
             _clear_hint()
-            handler = SelectTimeRangeAction.setup_handler
+            handler = type(self).setup_handler
             if handler is None:
                 import warnings
                 warnings.warn(
-                    "SelectTimeRangeAction.setup_handler is not set; "
-                    "cannot create analysis context from selection.",
+                    f"{type(self).__name__}.setup_handler is not set; "
+                    "cannot handle the selection.",
                     stacklevel=2,
                 )
                 return
