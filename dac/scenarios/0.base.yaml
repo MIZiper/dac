@@ -31,7 +31,6 @@ actions:
   - /me/actions.CreateEventLogAction
   - /me/actions.PlotEventsAction
   - /me/actions.ExtractEventStatisticsAction
-  - /me/actions.ViewEventStatisticsAction
   - "[Freq domain]"
   - /mv/actions.LoadCaseFreqIntermediateAverage
   - "[OrderSlice]"
@@ -94,12 +93,13 @@ quick_actions: # [action_type, data_param_name, other_params, mode?]
   - [/mv/actions.ViewFreqDomainAction, channels, {with_phase: true}]
   dac.modules.pch.TimeChannel:
   - [dac.modules.pch.actions.PreviewChannelAction, channels, {}]
-  - [dac.modules.pch.actions.SelectTimeRangeAction, channels, {}]
   - [dac.modules.pch.actions.SpecPlotAction, channels, {}, "create"]
-  - [dac.modules.event_log.actions.SelectEventRangeAction, channels, {},]
-  - [dac.modules.event_log.actions.PlotEventsAction, channels, {OverlayEventsAction: {events: null}}, "create"]
+  - [dac.modules.pch.actions.SelectTimeRangeAction, channels, {}]
+  - [dac.modules.event_log.actions.SelectEventRangeAction, channels, {}]
   /me/EventLogCollection:
-  - [/me/actions.ExtractEventStatisticsAction, events, {channels: null}, "create"]
+  - [/me/actions.ExtractEventStatisticsAction, events, {}, "create"]
+  /me/EventStatistics:
+  - [/me/actions.ViewEventStatisticsAction, statistics, {}]
   /mv/data.FreqIntermediateData:
   - [/mv/actions.ViewFreqIntermediateAction, channel, {}]
   /mv/data.OrderSliceData:

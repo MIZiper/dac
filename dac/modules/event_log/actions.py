@@ -156,7 +156,7 @@ class ExtractEventStatisticsAction(PAB):
         wanted = [s.strip() for s in stats.split(",") if s.strip()]
         wanted = [s for s in self._AVAILABLE_STATS if s in wanted]
 
-        result = EventStatistics(name=self.out_name or "Event Stats")
+        result = EventStatistics(name="Event Stats")
         total = len(channels) * len(events.entries)
         count = 0
 
@@ -230,14 +230,38 @@ class ViewEventStatisticsAction(TAB):
                 ordered[s] = None
         stat_names = list(ordered.keys())
 
-        col_labels = []
-        data = []
-        for rec in statistics.records:
-            col_labels.append(f"{rec['channel']}/{rec['event']}")
-            data.append([rec.get(s, "") for s in stat_names])
+        if len(stat_names) == 1:
+            stat_name = stat_names[0]
+            channels = []
+            events = []
+            for rec in statistics.records:
+                if rec["channel"] not in channels:
+                    channels.append(rec["channel"])
+                if rec["event"] not in events:
+                    events.append(rec["event"])
 
-        self.present({
-            "title": "Event Statistics",
-            "headers": {"row": stat_names, "col": col_labels},
-            "data": list(zip(*data)),
-        })
+            value_map = {
+                (rec["channel"], rec["event"]): rec.get(stat_name, "")
+                for rec in statistics.records
+            }
+            data = [
+                [value_map.get((ch, ev), "") for ch in channels]
+                for ev in events
+            ]
+            self.present({
+                "title": "Event Statistics",
+                "headers": {"row": events, "col": channels},
+                "data": data,
+            })
+        else:
+            col_labels = []
+            data = []
+            for rec in statistics.records:
+                col_labels.append(f"{rec['channel']}/{rec['event']}")
+                data.append([rec.get(s, "") for s in stat_names])
+
+            self.present({
+                "title": "Event Statistics",
+                "headers": {"row": stat_names, "col": col_labels},
+                "data": list(zip(*data)),
+            })
