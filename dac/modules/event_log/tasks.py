@@ -19,6 +19,18 @@ from .actions import CreateEventLogAction, SelectEventRangeAction
 _NEW_GROUP_MARKER = "  [ New Group … ]"
 
 
+def _group_name_of(act: CreateEventLogAction) -> str:
+    """Return the display name of a CreateEventLogAction.
+
+    Uses ``out_name`` when the user set it; falls back to the action name
+    when ``out_name`` is still the ``<...>`` placeholder.
+    """
+    on = act.out_name
+    if on and not (on.startswith("<") and on.endswith(">")):
+        return on
+    return act.name
+
+
 # ---------------------------------------------------------------------------
 # Dialog
 # ---------------------------------------------------------------------------
@@ -66,6 +78,11 @@ class _AddEventLogDialog(QtWidgets.QDialog):
         self._group_combo.currentTextChanged.connect(self._on_group_changed)
         layout.addWidget(self._group_combo)
 
+        # Initialise the edit-field visibility; when there are no existing
+        # groups the combo defaults to the "new group" marker and the signal
+        # above never fires during population.
+        self._on_group_changed(self._group_combo.currentText())
+
         self._new_group_edit = QtWidgets.QLineEdit()
         self._new_group_edit.setPlaceholderText("Enter new group name …")
         self._new_group_edit.setVisible(False)
@@ -96,7 +113,7 @@ class _AddEventLogDialog(QtWidgets.QDialog):
             return names
         for act in self._container.actions:
             if isinstance(act, CreateEventLogAction):
-                gname = act._construct_config.get("group_name", act.name)
+                gname = _group_name_of(act)
                 if gname and gname not in names:
                     names.append(gname)
         return names
@@ -172,7 +189,7 @@ class AddEventLogTask(TaskBase):
         target: CreateEventLogAction | None = None
         for act in container.actions:
             if isinstance(act, CreateEventLogAction):
-                if act._construct_config.get("group_name") == group_name:
+                if _group_name_of(act) == group_name:
                     target = act
                     break
 
@@ -180,9 +197,9 @@ class AddEventLogTask(TaskBase):
             target = CreateEventLogAction(context_key=action.context_key)
             target.container = container
             target.get_construct_config()
-            target._construct_config["group_name"] = group_name
+            target.out_name = group_name
             target._construct_config.setdefault("event_data", [])
-            target.apply_construct_config(target._construct_config)
+            target.status = CreateEventLogAction.ActionStatus.CONFIGURED
             container.actions.append(target)
             self.dac_win.message(f"Created event log group '{group_name}'")
 

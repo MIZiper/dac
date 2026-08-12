@@ -41,11 +41,9 @@ class CreateEventLogAction(ActionBase):
 
     def __call__(
         self,
-        group_name: str = "",
         event_data: list = None,
     ) -> EventLogCollection:
-        name = self.out_name or group_name or "EventLog"
-        coll = EventLogCollection(name=name)
+        coll = EventLogCollection(name="EventLog")
         if event_data:
             for item in event_data:
                 if not isinstance(item, (list, tuple)) or len(item) < 2:
