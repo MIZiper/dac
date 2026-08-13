@@ -7,6 +7,8 @@ user pick (or create) a ``CreateEventLogAction`` and enter a label for
 the selected time range.
 """
 
+import numpy as np
+
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
 
@@ -14,7 +16,14 @@ from dac.core.actions import ActionBase
 from dac.gui import TaskBase
 from dac.modules.pch import time_to_str
 
-from .actions import CreateEventLogAction, SelectEventRangeAction
+from .actions import (
+    CreateEventLogAction,
+    ExtractEventStatisticsAction,
+    InspectTimeRangeAction,
+    SelectEventRangeAction,
+    _compute_stats,
+    _nearest_sample,
+)
 
 _NEW_GROUP_MARKER = "  [ New Group … ]"
 
@@ -212,3 +221,88 @@ class AddEventLogTask(TaskBase):
         self.dac_win.message(
             f"Added event '{label}' to group '{group_name}'"
         )
+
+
+# ---------------------------------------------------------------------------
+# InspectSelectionTask — quick view of a selected range / point
+# ---------------------------------------------------------------------------
+
+
+class InspectSelectionTask(TaskBase):
+    """QUICK_TASK for ``InspectTimeRangeAction``.
+
+    On construction the task installs itself as the *setup handler* on
+    ``InspectTimeRangeAction`` so the canvas right-click triggers it.
+    """
+
+    def __init__(self, dac_win: "MainWindow", name: str, *args):
+        super().__init__(dac_win, name, *args)
+        InspectTimeRangeAction.setup_handler = self
+
+    def __call__(self, action: ActionBase):
+        t_start = getattr(action, "_t_start", None)
+        t_end = getattr(action, "_t_end", None)
+
+        if t_start is None:
+            QtWidgets.QMessageBox.information(
+                self.dac_win,
+                "No selection",
+                "Run the action first and select a time range on the plot.",
+            )
+            return
+
+        channels = getattr(action, "_channels", None) or []
+        if not channels:
+            QtWidgets.QMessageBox.information(
+                self.dac_win,
+                "No channels",
+                "No channels available to inspect.",
+            )
+            return
+
+        stats = getattr(action, "_stats", "mean,std,min,max,rms")
+
+        if t_start == t_end:
+            table = self._point_table(channels, t_start)
+        else:
+            table = self._range_table(channels, t_start, t_end, stats)
+
+        self.dac_win.show_stats(table)
+
+    def _range_table(self, channels, t_start, t_end, stats):
+        wanted = [s.strip() for s in stats.split(",") if s.strip()]
+        wanted = [
+            s for s in ExtractEventStatisticsAction._AVAILABLE_STATS if s in wanted
+        ]
+
+        rows, data = [], []
+        for ch in channels:
+            _t, y, _dt = ch.get_merged_data(t_start=t_start, t_end=t_end)
+            y_clean = y[~np.isnan(y)]
+            if len(y_clean) == 0:
+                continue
+            rec = _compute_stats(y_clean, wanted)
+            rows.append(f"{ch.name} [{ch.y_unit}]")
+            data.append([rec.get(s, "") for s in wanted])
+
+        return {
+            "title": f"Statistics  {time_to_str(t_start)} → {time_to_str(t_end)}",
+            "headers": {"row": rows, "col": wanted},
+            "data": data,
+        }
+
+    def _point_table(self, channels, t):
+        rows, data = [], []
+        for ch in channels:
+            t_sample, value = _nearest_sample(ch, t)
+            rows.append(f"{ch.name} [{ch.y_unit}]")
+            if t_sample is None:
+                data.append(["", ""])
+            else:
+                data.append([time_to_str(t_sample), value])
+
+        return {
+            "title": f"Values at  {time_to_str(t)}",
+            "headers": {"row": rows, "col": ["time", "value"]},
+            "data": data,
+        }

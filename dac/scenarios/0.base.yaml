@@ -96,6 +96,7 @@ quick_actions: # [action_type, data_param_name, other_params, mode?]
   - [dac.modules.pch.actions.SpecPlotAction, channels, {}, "create"]
   - [dac.modules.pch.actions.SelectTimeRangeAction, channels, {}]
   - [dac.modules.event_log.actions.SelectEventRangeAction, channels, {}]
+  - [dac.modules.event_log.actions.InspectTimeRangeAction, channels, {}]
   /me/EventLogCollection:
   - [/me/actions.ExtractEventStatisticsAction, events, {}, "create"]
   /me/EventStatistics:
@@ -114,6 +115,8 @@ quick_tasks:
   - [/mp/tasks.SetupAnalysisContextTask, "Setup Analysis Context"]
   /me/actions.SelectEventRangeAction:
   - [/me/tasks.AddEventLogTask, "Add event log entry"]
+  /me/actions.InspectTimeRangeAction:
+  - [/me/tasks.InspectSelectionTask, "Inspect selection"]
 
 drop_actions:
   ".tdms":

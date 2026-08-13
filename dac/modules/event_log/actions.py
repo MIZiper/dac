@@ -7,7 +7,7 @@ visualisation with SpecPlot + event overlays, and statistical extraction.
 import numpy as np
 
 from dac.core.actions import ActionBase, VAB, PAB, SAB, TAB
-from dac.modules.pch import TimeChannel
+from dac.modules.pch import TimeChannel, TSChannel
 from dac.modules.pch.actions import SelectTimeRangeAction, SpecPlotAction
 
 from . import (
@@ -16,6 +16,57 @@ from . import (
     parse_time,
 )
 from .plots import overlay_events
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+
+def _compute_stats(y_clean: np.ndarray, wanted: list[str]) -> dict:
+    """Compute *wanted* statistics on a clean (non-NaN) array."""
+    record: dict = {}
+    for name in wanted:
+        try:
+            if name == "mean":
+                record[name] = float(np.mean(y_clean))
+            elif name == "std":
+                record[name] = float(np.std(y_clean))
+            elif name == "min":
+                record[name] = float(np.min(y_clean))
+            elif name == "max":
+                record[name] = float(np.max(y_clean))
+            elif name == "rms":
+                record[name] = float(np.sqrt(np.mean(y_clean ** 2)))
+        except (ValueError, FloatingPointError):
+            record[name] = float("nan")
+    return record
+
+
+def _nearest_sample(ch: TimeChannel, t):
+    """Return ``(t_sample, value)`` of the sample nearest to time *t*.
+
+    Uses the nearest non-NaN sample; returns ``(None, None)`` when the
+    channel has no data.
+    """
+    t_axis, y, _ = ch.get_merged_data()
+    if len(t_axis) == 0:
+        return None, None
+
+    idx = int(np.searchsorted(t_axis, t))
+    best = None
+    for j in (idx - 1, idx, idx + 1):
+        if 0 <= j < len(t_axis):
+            val = y[j]
+            if np.isnan(val):
+                continue
+            dist = abs(t_axis[j] - t)
+            if best is None or dist < best[0]:
+                best = (dist, t_axis[j], val)
+
+    if best is None:
+        return None, None
+    return best[1], best[2]
 
 
 # ---------------------------------------------------------------------------
@@ -84,8 +135,40 @@ class SelectEventRangeAction(SelectTimeRangeAction):
 
 
 # ---------------------------------------------------------------------------
-# OverlayEventsAction — overlay event spans on existing axes
+# InspectTimeRangeAction — quick view of a range / point (quick_action)
 # ---------------------------------------------------------------------------
+
+
+class InspectTimeRangeAction(SelectTimeRangeAction):
+    """Interactive selection for quick-inspecting channel data.
+
+    Reuses the interaction of
+    :class:`~dac.modules.pch.actions.SelectTimeRangeAction`.  On
+    right-click the installed :attr:`setup_handler` (usually
+    ``InspectSelectionTask``) reads the selection and shows a table:
+    statistics per channel for a range, or the nearest sample value per
+    channel for a single point.  *stats* selects which statistics to
+    compute for the range case.
+    """
+
+    CAPTION = "Inspect time range"
+
+    _SUPTITLE = "Drag to select range  |  Click for a point  |  Right-click → Inspect"
+    _HINT = (
+        "Selection recorded.  Right-click this action "
+        "in the Action panel → 'Inspect selection'"
+    )
+
+    setup_handler: "Callable[['InspectTimeRangeAction'], None] | None" = None
+
+    def __call__(
+        self,
+        channels: list[TimeChannel | TSChannel],
+        target_fs: float = 1.0,
+        stats: str = "mean,std,min,max,rms",
+    ):
+        self._stats = stats
+        super().__call__(channels, target_fs=target_fs)
 
 
 class OverlayEventsAction(VAB):
@@ -182,20 +265,7 @@ class ExtractEventStatisticsAction(PAB):
                     "t_end": entry.end,
                     "n_samples": int(len(y_clean)),
                 }
-                for name in wanted:
-                    try:
-                        if name == "mean":
-                            record[name] = float(np.mean(y_clean))
-                        elif name == "std":
-                            record[name] = float(np.std(y_clean))
-                        elif name == "min":
-                            record[name] = float(np.min(y_clean))
-                        elif name == "max":
-                            record[name] = float(np.max(y_clean))
-                        elif name == "rms":
-                            record[name] = float(np.sqrt(np.mean(y_clean ** 2)))
-                    except (ValueError, FloatingPointError):
-                        record[name] = float("nan")
+                record.update(_compute_stats(y_clean, wanted))
 
                 result._records.append(record)
                 count += 1
