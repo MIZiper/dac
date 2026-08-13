@@ -447,11 +447,41 @@ class SelectTimeRangeAction(VAB):
 # ---------------------------------------------------------------------------
 
 
+def _default_spec(channels) -> dict:
+    """Build a default spec grouping *channels* by unit on shared-x subplots."""
+    groups: list[tuple[str, list[str]]] = []
+    seen: dict[str, int] = {}
+    for ch in channels:
+        unit = ch.y_unit or "-"
+        idx = seen.get(unit)
+        if idx is None:
+            idx = len(groups)
+            groups.append((unit, []))
+            seen[unit] = idx
+        groups[idx][1].append(ch.name)
+
+    layout = []
+    axes = {}
+    for i, (unit, ch_names) in enumerate(groups):
+        name = f"ax{i}"
+        layout.append([name])
+        axes[name] = {"chs": ch_names}
+        if i > 0:
+            axes[name]["share_x"] = "ax0"
+
+    return {"title": "Spec plot", "layout": layout, "axes": axes}
+
+
 class SpecPlotAction(VAB):
     """Render TimeChannels with a customisable chart specification.
 
     Edit the ``spec`` parameter in YAML config.  See
     :mod:`dac.modules.pch.spec` for the full configuration reference.
+
+    When ``spec`` is empty (or ``None``), a default chart is generated:
+    channels are grouped by *y_unit* onto separate subplots that share
+    an x-axis, and the generated ``spec`` is written back to the action's
+    construct config.
 
     Quick guide
     -----------
@@ -489,8 +519,18 @@ class SpecPlotAction(VAB):
 
     CAPTION = "Spec plot"
 
-    def __call__(self, channels: list[TimeChannel | TSChannel], spec: dict = {}):
+    def __call__(
+        self,
+        channels: list[TimeChannel | TSChannel],
+        spec: dict = None,
+    ):
         from .spec import spec_from_dict, render_spec
+
+        if not spec:
+            spec = _default_spec(channels)
+            self.get_construct_config()
+            self._construct_config["spec"] = spec
+
         chart = spec_from_dict(spec if isinstance(spec, dict) else {})
         render_spec(chart, channels, self.figure)
 

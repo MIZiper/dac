@@ -99,7 +99,7 @@ class OverlayEventsAction(VAB):
 
     def __call__(
         self,
-        events: list[EventLogCollection] = None,
+        events: list[EventLogCollection],
         label_axes_index: int = 0,
     ) -> None:
         if not events:
