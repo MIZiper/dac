@@ -6,9 +6,9 @@ Generic purpose, not used in DAC yet.
 
 import gc
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT, FigureCanvasQTAgg
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT, FigureCanvasQTAgg
 from matplotlib.backend_bases import NavigationToolbar2
 
 class MultiCanvasNavigation(NavigationToolbar2QT):
@@ -62,7 +62,7 @@ class CanvasDock(QtWidgets.QDockWidget):
 
     def deactivate_me(self):
         p = self.palette()
-        p.setColor(self.backgroundRole(), self.parent().palette().color(QtGui.QPalette.Background))
+        p.setColor(self.backgroundRole(), self.parent().palette().color(QtGui.QPalette.ColorRole.Window))
         self.setPalette(p)
 
 class MainWindowWithMCN(QtWidgets.QMainWindow):
@@ -72,7 +72,7 @@ class MainWindowWithMCN(QtWidgets.QMainWindow):
         self._mcn = MultiCanvasNavigation(self)
         self._current_canvasdock: CanvasDock = None
 
-        self.setDockOptions(self.AllowNestedDocks)
+        self.setDockOptions(QtWidgets.QMainWindow.DockOption.AllowNestedDocks)
         tb = self.addToolBar("Plot Navigation")
         tb.addWidget(self._mcn)
 

@@ -9,8 +9,8 @@ the selected time range.
 
 import numpy as np
 
-from PyQt5 import QtWidgets
-from PyQt5.QtCore import Qt
+from PyQt6 import QtWidgets
+from PyQt6.QtCore import Qt
 
 from dac.core.actions import ActionBase
 from dac.gui import TaskBase
@@ -189,7 +189,7 @@ class AddEventLogTask(TaskBase):
             return
 
         dlg = _AddEventLogDialog(t_start, t_end, container, parent=self.dac_win)
-        if not dlg.exec_():
+        if not dlg.exec():
             return
 
         group_name, label = dlg.result()

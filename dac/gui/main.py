@@ -5,7 +5,7 @@ import json, sys, click
 import os
 from os import path
 
-from PyQt5 import QtWidgets
+from PyQt6 import QtWidgets
 from dac.gui import MainWindow
 
 @click.command()

@@ -10,10 +10,10 @@ from collections import defaultdict
 from datetime import datetime
 from io import StringIO
 
-from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QCloseEvent, QMouseEvent, QDragEnterEvent, QDropEvent
-from PyQt5.QtWidgets import QMainWindow, QWidget
+from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QCloseEvent, QMouseEvent, QDragEnterEvent, QDropEvent
+from PyQt6.QtWidgets import QMainWindow, QWidget
 
 from dac.core.thread import ThreadWorker
 
@@ -40,7 +40,7 @@ class MainWindowBase(QMainWindow):
         self._log_widget = QtWidgets.QPlainTextEdit(parent=self) # the log Level selection?
         self._log_widget.appendHtml(f"<b>The log output:</b> @ {datetime.now():%Y-%m-%d} <br/>")
         self._log_widget.setReadOnly(True)
-        self._log_widget.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self._log_widget.setLineWrapMode(QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap)
         self._log_widget.hide()
 
     def _create_menu(self):
@@ -48,8 +48,8 @@ class MainWindowBase(QMainWindow):
         self._dac_menu = tool_menu = menubar.addMenu("&Tool")
 
         tool_menu.addSeparator()
-        tool_menu.addAction("Toggle log output", self.action_toggle_log_widget, shortcut=Qt.CTRL+Qt.Key_L)
-        tool_menu.addAction("Toggle IPyConsole", self.action_toggle_ipy_widget, shortcut=Qt.CTRL+Qt.Key_I)
+        tool_menu.addAction("Toggle log output", self.action_toggle_log_widget, shortcut=Qt.KeyboardModifier.ControlModifier | Qt.Key.Key_L)
+        tool_menu.addAction("Toggle IPyConsole", self.action_toggle_ipy_widget, shortcut=Qt.KeyboardModifier.ControlModifier | Qt.Key.Key_I)
         tool_menu.addSeparator()
         no_thread_action = QtWidgets.QAction("No threading", tool_menu)
         no_thread_action.setCheckable(True)

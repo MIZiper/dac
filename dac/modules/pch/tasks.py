@@ -8,8 +8,8 @@ need a different load pattern can subclass and override
 :meth:`SetupAnalysisContextTask.build_load_actions`.
 """
 
-from PyQt5 import QtWidgets, QtCore
-from PyQt5.QtCore import Qt
+from PyQt6 import QtWidgets, QtCore
+from PyQt6.QtCore import Qt
 
 from dac.core import ContextKeyNode
 from dac.core.actions import ActionBase
@@ -225,7 +225,7 @@ class SetupAnalysisContextTask(TaskBase):
 
         # show dialog
         dlg = SetupAnalysisDialog(t_start, t_end, matching, parent=self.dac_win)
-        if not dlg.exec_():
+        if not dlg.exec():
             return
 
         context_name, selected_channels = dlg.result()

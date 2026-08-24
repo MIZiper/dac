@@ -9,9 +9,9 @@ which is an optional dependency. The primary backend is pywebview.
 
 from __future__ import annotations
 
-from PyQt5.QtCore import QUrl
-from PyQt5.QtWidgets import QWidget
-from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
+from PyQt6.QtCore import QUrl
+from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 
 from .bridge import (
     BridgeMessage, BaseBridge, OnMessageCallback, OnClosedCallback,

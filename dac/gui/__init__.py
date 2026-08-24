@@ -22,13 +22,13 @@ from typing import Union as _Union, get_origin, get_args, Optional
 
 import yaml
 from matplotlib.backend_bases import key_press_handler
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
-from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.Qsci import QsciLexerPython, QsciLexerYAML, QsciScintilla
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QCloseEvent, QMouseEvent
-from PyQt5.QtWidgets import QMainWindow, QStyle, QTreeWidget, QTreeWidgetItem, QWidget
+from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6.Qsci import QsciLexerPython, QsciLexerYAML, QsciScintilla
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QCloseEvent, QMouseEvent
+from PyQt6.QtWidgets import QMainWindow, QStyle, QTreeWidget, QTreeWidgetItem, QWidget
 
 from importlib.metadata import version
 from dac import APPNAME, PYPI_NAME
@@ -250,7 +250,7 @@ class MainWindow(MainWindowBase):
         copy_action = tool_menu.addAction("Copy figure", self.action_copy_figure)
         tool_menu.insertAction(tool_menu.actions()[0], copy_action)
         tool_menu.addAction(
-            "Reload modules", self.action_reload_modules, shortcut=Qt.CTRL + Qt.Key_R
+            "Reload modules", self.action_reload_modules, shortcut=Qt.KeyboardModifier.ControlModifier | Qt.Key.Key_R
         )
 
         # TODO: debug mode {no thread; show action code; send data to ipy; reload modules}
@@ -602,10 +602,10 @@ class MainWindow(MainWindowBase):
                 reply = QtWidgets.QMessageBox.question(
                     self, "Replace Project",
                     "A project is currently open. Replace with the remote project?",
-                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-                    QtWidgets.QMessageBox.No,
+                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                    QtWidgets.QMessageBox.StandardButton.No,
                 )
-                if reply != QtWidgets.QMessageBox.Yes:
+                if reply != QtWidgets.QMessageBox.StandardButton.Yes:
                     return
 
             self.project_config_fpath = None
@@ -675,7 +675,7 @@ class DataListWidget(QTreeWidget):
         self.setColumnWidth(NAME, 150)
         self.setColumnWidth(TYPE, 200)
 
-        self.setSelectionMode(self.SelectionMode.ExtendedSelection)
+        self.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.action_context_requested)
         self.itemClicked.connect(self.action_item_clicked)
@@ -983,7 +983,7 @@ class DataListWidget(QTreeWidget):
             cb_activate(node_object)
 
     def mousePressEvent(self, e: QMouseEvent) -> None:
-        if (e.button() == Qt.MouseButton.MidButton) and (itm := self.itemAt(e.pos())):
+        if (e.button() == Qt.MouseButton.MidButton) and (itm := self.itemAt(e.position().toPoint())):
             name = itm.data(NAME, QUALIFIED_NAME_ROLE) or itm.text(NAME)
             QtWidgets.QApplication.clipboard().setText(name)
         return super().mousePressEvent(e)
@@ -1032,7 +1032,7 @@ class ActionListWidget(QTreeWidget):
         self.setHeaderLabels(["Name", "Output", "Remark"])
         self.setColumnWidth(NAME, 200)
         self.setColumnWidth(TYPE, 150)
-        self.setSelectionMode(self.SelectionMode.ExtendedSelection)
+        self.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
 
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.action_context_requested)
@@ -1341,7 +1341,7 @@ class ActionListWidget(QTreeWidget):
                     editor.setIndentationGuides(True)
                     editor.setTabWidth(4)
                     editor.setIndentationsUseTabs(False)
-                    editor.setMarginType(1, QsciScintilla.NumberMargin)
+                    editor.setMarginType(1, QsciScintilla.MarginType.NumberMargin)
                     editor.setWindowTitle(a.name)
                     editor.setText(src)
                     editor.show()
@@ -1399,7 +1399,7 @@ class NodeEditorWidget(QWidget):
         editor.setIndentationGuides(True)
         editor.setTabWidth(4)
         editor.setIndentationsUseTabs(False)
-        editor.setMarginType(1, QsciScintilla.NumberMargin)
+        editor.setMarginType(1, QsciScintilla.MarginType.NumberMargin)
 
         btn_layout = QtWidgets.QHBoxLayout()
         apply_btn = QtWidgets.QToolButton(self)
@@ -1446,7 +1446,7 @@ class MultipleItemsDialog(QtWidgets.QDialog):
 
         self.setWindowTitle(caption)
         self.item_list = item_list = QtWidgets.QListWidget(self)
-        item_list.setSelectionMode(item_list.SelectionMode.ExtendedSelection)
+        item_list.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
         item_list.addItems(items)
         cap_label = QtWidgets.QLabel(label, self)
 
@@ -1454,7 +1454,7 @@ class MultipleItemsDialog(QtWidgets.QDialog):
         layout.addWidget(cap_label)
         layout.addWidget(item_list)
         btn_box = QtWidgets.QDialogButtonBox(
-            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self
+            QtWidgets.QDialogButtonBox.StandardButton.Ok | QtWidgets.QDialogButtonBox.StandardButton.Cancel, self
         )
         layout.addWidget(btn_box)
 

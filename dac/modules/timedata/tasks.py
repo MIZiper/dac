@@ -4,7 +4,7 @@ Quick-task is used to help action node configuration.
 """
 
 from os import path
-from PyQt5 import QtWidgets, QtCore
+from PyQt6 import QtWidgets, QtCore
 from dac.core.actions import ActionBase
 from dac.gui import TaskBase
 from dac import APPNAME

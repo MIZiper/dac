@@ -143,7 +143,7 @@ class BridgeFactory:
         except ImportError:
             pass
         try:
-            from PyQt5.QtWebEngineWidgets import QWebEngineView  # noqa: F401
+            from PyQt6.QtWebEngineWidgets import QWebEngineView  # noqa: F401
             backends.append("qt")
         except ImportError:
             pass

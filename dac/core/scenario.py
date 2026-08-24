@@ -128,7 +128,7 @@ def use_scenario(setting_fpath: str, clean: bool=True, dac_win=None):
             if not action_type: continue
             Container.RegisterDropAction(ext, action_type, path_param_name, other_params)
 
-    if not hasattr(dac_win, "show"): # web-based cannot use PyQt5 and the tasks
+    if not hasattr(dac_win, "show"): # web-based cannot use PyQt6 and the tasks
         # return flat quick_actions
         if inherited_qa:
             return inherited_qa + quick_actions

@@ -1,11 +1,11 @@
-"""Thread utils using PyQt5.
+"""Thread utils using PyQt6.
 
 This is a generic util.
-Under DAC context, in desktop environment, `ProcessActionBase` use PyQt thread to run the calculation.
+Under DAC context, in desktop environment, `ProcessActionBase` use PyQt6 thread to run the calculation.
 """
 
 import traceback, sys, inspect
-from PyQt5.QtCore import QRunnable, QObject, pyqtSignal, pyqtSlot, QMutex
+from PyQt6.QtCore import QRunnable, QObject, pyqtSignal, pyqtSlot, QMutex
 
 # https://gist.github.com/ksvbka/1f26ada0c6201c2cf19f59b100d224a9
 

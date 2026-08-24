@@ -24,7 +24,7 @@ DAC requires **Python >= 3.12** and is published on PyPI as `miz-dac`.
 # Core only (headless)
 pip install miz-dac
 
-# With the PyQt5 desktop GUI
+# With the PyQt6 desktop GUI
 pip install "miz-dac[gui]"
 
 # With the embedded IPython / Jupyter console

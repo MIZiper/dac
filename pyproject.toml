@@ -10,9 +10,9 @@ license = { text = "Apache-2.0" }
 keywords = ["data", "context", "analysis"]
 
 [project.optional-dependencies]
-gui = ["pyqt5-qt5==5.15.2; platform_system == 'Windows'", "pyqt5", "qscintilla"]
-ipy = ["pyqt5", "qscintilla", "qtconsole"]
-remote = ["pyqt5", "qscintilla", "pywebview"]
+gui = ["pyqt6", "pyqt6-qscintilla"]
+ipy = ["pyqt6", "pyqt6-qscintilla", "qtconsole"]
+remote = ["pyqt6", "pyqt6-qscintilla", "pywebview"]
 
 [project.urls]
 Homepage = "http://mizip.net/"
