@@ -5,7 +5,7 @@ import json, sys, click
 import os
 from os import path
 
-from PyQt6 import QtWidgets
+from PyQt6 import QtWidgets, QtCore
 from dac.gui import MainWindow
 
 @click.command()
@@ -13,6 +13,7 @@ from dac.gui import MainWindow
 @click.option("--scenario-file", help="YAML file for scenarios")
 def main(project_file: str, scenario_file: str):
     app = QtWidgets.QApplication(sys.argv)
+    app.styleHints().setColorScheme(QtCore.Qt.ColorScheme.Light)
     win = MainWindow()
 
     # add splash progress for module loading

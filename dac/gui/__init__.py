@@ -250,7 +250,7 @@ class MainWindow(MainWindowBase):
         copy_action = tool_menu.addAction("Copy figure", self.action_copy_figure)
         tool_menu.insertAction(tool_menu.actions()[0], copy_action)
         tool_menu.addAction(
-            "Reload modules", self.action_reload_modules, shortcut=Qt.KeyboardModifier.ControlModifier | Qt.Key.Key_R
+            "Reload modules", "Ctrl+R", self.action_reload_modules,
         )
 
         # TODO: debug mode {no thread; show action code; send data to ipy; reload modules}
@@ -983,7 +983,7 @@ class DataListWidget(QTreeWidget):
             cb_activate(node_object)
 
     def mousePressEvent(self, e: QMouseEvent) -> None:
-        if (e.button() == Qt.MouseButton.MidButton) and (itm := self.itemAt(e.position().toPoint())):
+        if (e.button() == Qt.MouseButton.MiddleButton) and (itm := self.itemAt(e.position().toPoint())):
             name = itm.data(NAME, QUALIFIED_NAME_ROLE) or itm.text(NAME)
             QtWidgets.QApplication.clipboard().setText(name)
         return super().mousePressEvent(e)

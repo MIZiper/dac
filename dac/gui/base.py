@@ -48,10 +48,10 @@ class MainWindowBase(QMainWindow):
         self._dac_menu = tool_menu = menubar.addMenu("&Tool")
 
         tool_menu.addSeparator()
-        tool_menu.addAction("Toggle log output", self.action_toggle_log_widget, shortcut=Qt.KeyboardModifier.ControlModifier | Qt.Key.Key_L)
-        tool_menu.addAction("Toggle IPyConsole", self.action_toggle_ipy_widget, shortcut=Qt.KeyboardModifier.ControlModifier | Qt.Key.Key_I)
+        tool_menu.addAction("Toggle log output", "Ctrl+L", self.action_toggle_log_widget)
+        tool_menu.addAction("Toggle IPyConsole", "Ctrl+I", self.action_toggle_ipy_widget)
         tool_menu.addSeparator()
-        no_thread_action = QtWidgets.QAction("No threading", tool_menu)
+        no_thread_action = QtGui.QAction("No threading", tool_menu)
         no_thread_action.setCheckable(True)
         no_thread_action.triggered.connect(lambda: self.action_toggle_setting("no_thread"))
         tool_menu.addAction(no_thread_action)
