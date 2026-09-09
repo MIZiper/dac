@@ -20,6 +20,12 @@ class FillFpathsTask(TaskBase):
         ----------
         action : ActionBase
             The ActionBase instance who has key 'fpaths'.
+
+        Returns
+        -------
+        bool
+            True when files were selected (dialog accepted); falsy otherwise.
+            Flash quick actions use this to decide whether to run the action.
         """
 
         fpaths, fext = QtWidgets.QFileDialog.getOpenFileNames(
@@ -31,3 +37,4 @@ class FillFpathsTask(TaskBase):
         APPSETTING.setValue(SET_RECENTDIR, path.dirname(fpaths[0]))
 
         action._construct_config['fpaths'] = fpaths
+        return True

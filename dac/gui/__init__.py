@@ -45,6 +45,22 @@ NAME, TYPE, REMARK = range(3)
 QUALIFIED_NAME_ROLE = Qt.ItemDataRole.UserRole + 1
 SET_RECENTDIR = "RecentDir"
 
+CREATE = "create"  # quick-action mode: create the action, don't run
+FLASH = "flash"  # quick-action mode: run default_task first, then run, no trace
+
+
+def quick_action_flags(mode):
+    """Map a quick-action scenario mode to run/save/flash decisions.
+
+    mode: False -> run only; True -> run + save; "create" -> save only;
+          "flash" -> run after default_task dialog, without saving.
+    """
+    if mode == CREATE:
+        return False, True, False
+    if mode == FLASH:
+        return True, False, True
+    return mode is not False, mode is True, False
+
 
 class _RemoteBridgeHandler(QtCore.QObject):
     """Thread-safe wrapper: bridge callbacks arrive from daemon threads
@@ -76,6 +92,12 @@ class TaskBase:
         return list(self.current_context.nodes_of_type(node_type))
 
     def __call__(self, action: ActionBase):
+        """Run the task for `action`.
+
+        Tasks invoked by a "flash" quick action should return a truthy value
+        when the task completed (dialog accepted) so the action is run, and a
+        falsy value when the user cancelled/aborted.
+        """
         pass
 
 
@@ -855,15 +877,19 @@ class DataListWidget(QTreeWidget):
                 qat: tuple[type[ActionBase], str, dict]
                 act_type = qat[0]
                 mode = qat[3] if len(qat) > 3 else False
-                if mode == "create":
+                if mode == CREATE:
                     caption = f"+ {act_type.CAPTION}"
                 elif mode is True:
                     caption = f"+> {act_type.CAPTION}"
+                elif mode == FLASH:
+                    caption = f"!> {act_type.CAPTION}"
                 else:
                     caption = act_type.CAPTION
-                menu.addAction(caption).triggered.connect(
-                    cb_quickaction_gen(qat, nodes)
-                )
+                act_item = menu.addAction(caption)
+                if mode == FLASH and getattr(act_type, "DEFAULT_TASK", None) is None:
+                    act_item.setEnabled(False)
+                else:
+                    act_item.triggered.connect(cb_quickaction_gen(qat, nodes))
             menu.addSeparator()
 
         def cb_pushnode_gen(key_object):
@@ -1155,22 +1181,16 @@ class ActionListWidget(QTreeWidget):
         if (container := self._container) is None:
             return
 
-        do_run = mode != "create"
-        do_save = mode is True or mode == "create"
+        if mode == FLASH:
+            self._run_flash_action(act, params)
+            return
 
-        def _value_to_persistable(v):
-            if isinstance(v, DataNode):
-                return container.CurrentContext.get_qualified_name(v)
-            if isinstance(v, list):
-                return [_value_to_persistable(x) for x in v]
-            if isinstance(v, dict):
-                return {k: _value_to_persistable(x) for k, x in v.items()}
-            return v
+        do_run, do_save, _ = quick_action_flags(mode)
 
         if do_save:
             act.get_construct_config()
             act._construct_config.update(
-                {k: _value_to_persistable(v) for k, v in params.items()}
+                {k: self._value_to_persistable(container, v) for k, v in params.items()}
             )
             container.actions.append(act)
             self.refresh()
@@ -1178,6 +1198,41 @@ class ActionListWidget(QTreeWidget):
 
         if do_run:
             self.run_action(act, params=params)
+
+    @staticmethod
+    def _value_to_persistable(container: Container, v):
+        if isinstance(v, DataNode):
+            return container.CurrentContext.get_qualified_name(v)
+        if isinstance(v, list):
+            return [ActionListWidget._value_to_persistable(container, x) for x in v]
+        if isinstance(v, dict):
+            return {
+                k: ActionListWidget._value_to_persistable(container, x)
+                for k, x in v.items()
+            }
+        return v
+
+    def _run_flash_action(self, act, params):
+        """Run action's DEFAULT_TASK dialog first, then run without leaving a trace.
+
+        The task returns a truthy value to proceed (dialog accepted); a falsy
+        value (None/False) aborts — the action is never added to the container.
+        """
+        if (container := self._container) is None:
+            return
+        if (task := getattr(act, "DEFAULT_TASK", None)) is None:
+            self.dac_win.message(f"[{act.name}] has no default task for flash mode.")
+            return
+
+        act.get_construct_config()  # force init defaults / out_name
+        act._construct_config.update(
+            {k: self._value_to_persistable(container, v) for k, v in params.items()}
+        )
+        task.current_context = container.CurrentContext
+        if not task(act):
+            return  # cancelled / not completed, leave no trace
+        self.run_action(act)
+
 
     def action_context_requested(self, pos: QtCore.QPoint):
         if (container := self._container) is None:

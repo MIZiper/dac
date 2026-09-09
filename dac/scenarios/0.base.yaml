@@ -84,6 +84,7 @@ quick_actions: # [action_type, data_param_name, other_params, mode?]
   # mode: false (default) → run only
   #       true            → run + save to action list
   #       "create"        → save to action list, don't run
+  #       "flash"         → run the action's default_task dialog first, then run, without saving
   # For SAB: data nodes go to the first sub-action. other_params holds config for other sub-actions.
   #   e.g. [/da/A1A2, sec, {A2: {amp: 5.0}}]
   /mt/TimeData:

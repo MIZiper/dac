@@ -132,6 +132,12 @@ actions:
 quick_actions:             # right-click actions on data nodes
   /mt/TimeData:
   - [/mt/actions.ShowTimeDataAction, channels, {}]
+  # entries may take an optional 4th mode element:
+  #   false (default) -> run only
+  #   true            -> run + save to action list
+  #   "create"        -> save to action list, don't run
+  #   "flash"         -> run the action's default_task dialog first, then run, without saving
+  # e.g. - [/mt/actions.LoadAction, channels, {}, "flash"]
 
 quick_tasks:               # task helpers for action parameter input
   /mt/actions.LoadAction:
