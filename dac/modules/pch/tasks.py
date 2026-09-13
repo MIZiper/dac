@@ -17,6 +17,21 @@ from dac.core.data import SimpleDefinition
 from dac.gui import TaskBase
 from . import TimeChannel, time_to_str
 from .actions import LoadAndCropAction, SelectTimeRangeAction
+from .plots import STATISTICS
+
+
+_CMAPS = ["jet", "viridis", "plasma", "inferno", "magma", "turbo", "coolwarm"]
+
+
+def _parse_bins(text: str):
+    """Parse "start, end, step" into a 3-float list, or ``None`` when blank."""
+    text = (text or "").strip()
+    if not text:
+        return None
+    parts = [p.strip() for p in text.split(",")]
+    if len(parts) != 3:
+        raise ValueError("expected 'start, end, step'")
+    return [float(p) for p in parts]
 
 
 class SetupAnalysisDialog(QtWidgets.QDialog):
@@ -259,6 +274,144 @@ class SetupAnalysisContextTask(TaskBase):
         self.dac_win.message(
             f"Created context '{context_name}' with {len(fpaths)} file(s)"
         )
+
+
+# ---------------------------------------------------------------------------
+# XYStatisticTask — configure the XY statistic color plot
+# ---------------------------------------------------------------------------
+
+
+class XYStatisticDialog(QtWidgets.QDialog):
+    """Modal dialog to configure an :class:`XYStatisticPlotAction`.
+
+    The clicked channel is fixed as x; the user picks y, an optional z,
+    the averaging window, bin specs, and the statistic.
+    """
+
+    def __init__(
+        self,
+        x_channel: TimeChannel,
+        channels: list[TimeChannel],
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.setWindowTitle("XY statistic color plot")
+        self.setMinimumWidth(420)
+
+        self._x_channel = x_channel
+        self._channels = channels
+        self._result = None
+
+        form = QtWidgets.QFormLayout(self)
+
+        form.addRow("X channel:", QtWidgets.QLabel(x_channel.name))
+
+        self._y_combo = QtWidgets.QComboBox()
+        for ch in channels:
+            self._y_combo.addItem(ch.name, ch)
+        for i in range(self._y_combo.count()):
+            if self._y_combo.itemData(i) is not x_channel:
+                self._y_combo.setCurrentIndex(i)
+                break
+        form.addRow("Y channel:", self._y_combo)
+
+        self._z_combo = QtWidgets.QComboBox()
+        self._z_combo.addItem("<None>", None)
+        for ch in channels:
+            self._z_combo.addItem(ch.name, ch)
+        form.addRow("Z channel:", self._z_combo)
+
+        self._avg_spin = QtWidgets.QDoubleSpinBox()
+        self._avg_spin.setRange(0.001, 1e9)
+        self._avg_spin.setValue(1.0)
+        self._avg_spin.setSuffix(" s")
+        form.addRow("Average window:", self._avg_spin)
+
+        self._x_bins_edit = QtWidgets.QLineEdit()
+        self._x_bins_edit.setPlaceholderText("start, end, step  (blank = auto)")
+        form.addRow("X bins:", self._x_bins_edit)
+
+        self._y_bins_edit = QtWidgets.QLineEdit()
+        self._y_bins_edit.setPlaceholderText("start, end, step  (blank = auto)")
+        form.addRow("Y bins:", self._y_bins_edit)
+
+        self._stat_combo = QtWidgets.QComboBox()
+        self._stat_combo.addItems(list(STATISTICS))
+        form.addRow("Statistic:", self._stat_combo)
+
+        self._cmap_combo = QtWidgets.QComboBox()
+        self._cmap_combo.addItems(_CMAPS)
+        form.addRow("Colormap:", self._cmap_combo)
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok
+            | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def _on_accept(self):
+        try:
+            x_bins = _parse_bins(self._x_bins_edit.text())
+            y_bins = _parse_bins(self._y_bins_edit.text())
+        except ValueError as e:
+            QtWidgets.QMessageBox.warning(self, "Invalid bins", str(e))
+            return
+
+        y_ch = self._y_combo.currentData()
+        if y_ch is None:
+            QtWidgets.QMessageBox.warning(self, "Missing channel", "Pick a Y channel.")
+            return
+
+        self._result = {
+            "y_channel": y_ch.name,
+            "z_channel": (self._z_combo.currentData().name
+                          if self._z_combo.currentData() is not None else None),
+            "avg_seconds": self._avg_spin.value(),
+            "x_bins": x_bins,
+            "y_bins": y_bins,
+            "statistic": self._stat_combo.currentText(),
+            "cmap": self._cmap_combo.currentText(),
+        }
+        self.accept()
+
+    def result(self):
+        return self._result
+
+
+class XYStatisticTask(TaskBase):
+    """DEFAULT_TASK for ``XYStatisticPlotAction`` (flash quick action).
+
+    The channel the user right-clicked is already stored as ``x_channel``
+    in the action config; this task collects the remaining parameters.
+    """
+
+    def __call__(self, action: ActionBase):
+        container = self.dac_win.container
+        if container is None:
+            return
+
+        channels = list(container.CurrentContext.nodes_of_type(TimeChannel))
+        if not channels:
+            QtWidgets.QMessageBox.information(
+                self.dac_win, "No channels", "No TimeChannels in the current context."
+            )
+            return
+
+        raw_x = action._construct_config.get("x_channel")
+        x_channel = raw_x
+        if isinstance(raw_x, str):
+            x_channel = container.CurrentContext.get_node_of_type(raw_x, TimeChannel)
+        if x_channel is None:
+            x_channel = channels[0]
+
+        dlg = XYStatisticDialog(x_channel, channels, parent=self.dac_win)
+        if not dlg.exec_():
+            return
+
+        action._construct_config.update(dlg.result())
+        return True
 
 
 # ---------------------------------------------------------------------------

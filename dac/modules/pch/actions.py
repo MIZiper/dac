@@ -651,3 +651,107 @@ class ChopOffSpikesAction(PAB):
             ret.append(new_ch)
             self.progress(i + 1, len(channels))
         return ret
+
+
+# ---------------------------------------------------------------------------
+# XY statistic color plot
+# ---------------------------------------------------------------------------
+
+
+class XYStatisticPlotAction(PAB, VAB):
+    """Color plot of two channels over averaged time windows.
+
+    The overlapping time range of *x_channel* and *y_channel* is split into
+    fixed windows of ``avg_seconds``.  Each window is reduced to
+    ``(mean(x), mean(y))``.  Without *z_channel* the color shows the total
+    dwell time of each x-y bin; with *z_channel* it shows *statistic* of the
+    per-window z means.
+
+    Channels are scanned segment-by-segment (never merged into one array),
+    so memory use stays proportional to the number of windows.
+
+    Quick guide
+    -----------
+    ``x_bins`` / ``y_bins`` – ``[start, end, step]``; omit for auto (~50 bins)
+    ``avg_seconds`` – averaging window length
+    ``statistic`` – ``mean`` / ``min`` / ``max`` / ``std`` / ``rms``
+    """
+
+    CAPTION = "XY statistic color plot"
+
+    def __call__(
+        self,
+        x_channel: TimeChannel,
+        y_channel: TimeChannel,
+        z_channel: TimeChannel = None,
+        avg_seconds: float = 1.0,
+        x_bins: list[float] = None,
+        y_bins: list[float] = None,
+        statistic: str = "mean",
+        t_start=None,
+        t_end=None,
+        cmap: str = "jet",
+        clim: tuple = None,
+    ):
+        from .plots import STATISTICS, compute_windowed_xy_map
+
+        if statistic not in STATISTICS:
+            self.message(
+                f"Unknown statistic '{statistic}', expected one of {STATISTICS}"
+            )
+            return
+
+        z_part = (
+            f" by {statistic} of {z_channel.name}"
+            if z_channel is not None
+            else " by dwell time"
+        )
+        self.message(
+            f"Binning {x_channel.name} vs {y_channel.name}{z_part} "
+            f"(avg {avg_seconds:g}s)"
+        )
+
+        x_edges, y_edges, values, counts = compute_windowed_xy_map(
+            x_channel,
+            y_channel,
+            z_channel,
+            avg_seconds=avg_seconds,
+            x_bins=x_bins,
+            y_bins=y_bins,
+            statistic=statistic,
+            t_start=t_start,
+            t_end=t_end,
+            on_step=self.progress,
+        )
+
+        if not np.any(np.isfinite(values)):
+            self.message("No data in the overlap / selected bins")
+            return
+
+        fig = self.figure
+        ax = fig.gca()
+        vmin = vmax = None
+        if clim is not None:
+            vmin, vmax = clim
+
+        mesh = ax.pcolormesh(
+            x_edges,
+            y_edges,
+            np.ma.masked_invalid(values).T,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+        )
+        cb = fig.colorbar(mesh, ax=ax)
+
+        ax.set_xlabel(f"{x_channel.name} [{x_channel.y_unit}]")
+        ax.set_ylabel(f"{y_channel.name} [{y_channel.y_unit}]")
+        if z_channel is None:
+            fig.suptitle(f"Dwell time: {y_channel.name} vs {x_channel.name}")
+            cb.set_label("Duration [s]")
+        else:
+            fig.suptitle(
+                f"{statistic} of {z_channel.name}: "
+                f"{y_channel.name} vs {x_channel.name}"
+            )
+            cb.set_label(f"{statistic} of {z_channel.name} [{z_channel.y_unit}]")

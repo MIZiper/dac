@@ -26,6 +26,7 @@ actions:
   - /mp/actions.PreviewChannelAction
   - /mp/actions.SelectTimeRangeAction
   - /mp/actions.SpecPlotAction
+  - /mp/actions.XYStatisticPlotAction
   - /mp/actions.ChopOffSpikesAction
   - "[Event Log]"
   - /me/actions.CreateEventLogAction
@@ -96,6 +97,7 @@ quick_actions: # [action_type, data_param_name, other_params, mode?]
   - [dac.modules.pch.actions.PreviewChannelAction, channels, {}]
   - [dac.modules.pch.actions.SpecPlotAction, channels, {}, "create"]
   - [dac.modules.pch.actions.SelectTimeRangeAction, channels, {}]
+  - [dac.modules.pch.actions.XYStatisticPlotAction, x_channel, {}, "flash"]
   - [dac.modules.event_log.actions.SelectEventRangeAction, channels, {}]
   - [dac.modules.event_log.actions.InspectTimeRangeAction, channels, {}]
   /me/EventLogCollection:
@@ -118,6 +120,10 @@ quick_tasks:
   - [/me/tasks.AddEventLogTask, "Add event log entry"]
   /me/actions.InspectTimeRangeAction:
   - [/me/tasks.InspectSelectionTask, "Inspect selection"]
+
+default_task:
+  /mp/actions.XYStatisticPlotAction:
+  - [/mp/tasks.XYStatisticTask, "Configure XY statistic plot"]
 
 drop_actions:
   ".tdms":
