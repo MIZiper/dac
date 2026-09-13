@@ -7,7 +7,7 @@ visualisation with SpecPlot + event overlays, and statistical extraction.
 import numpy as np
 
 from dac.core.actions import ActionBase, VAB, PAB, SAB, TAB
-from dac.modules.pch import TimeChannel, TSChannel
+from dac.modules.pch import TimeChannel, TSChannel, time_to_str
 from dac.modules.pch.actions import SelectTimeRangeAction, SpecPlotAction
 
 from . import (
@@ -16,6 +16,7 @@ from . import (
     parse_time,
 )
 from .plots import overlay_events
+from .stability import epoch_to_time, intersect_intervals, stable_intervals
 
 
 # ---------------------------------------------------------------------------
@@ -335,3 +336,94 @@ class ViewEventStatisticsAction(TAB):
                 "headers": {"row": row_labels, "col": stat_names},
                 "data": data,
             })
+
+
+# ---------------------------------------------------------------------------
+# ExtractStableEventsAction — events from stable channel segments
+# ---------------------------------------------------------------------------
+
+
+class ExtractStableEventsAction(PAB):
+    """Extract events from stable segments of one or more TimeChannels.
+
+    A channel is stable wherever its rolling standard deviation over
+    *win_seconds* stays at or below its tolerance.  With several channels
+    only the time intervals where **all** channels are stable are kept
+    (interval intersection).
+
+    Tolerances are per channel, given by name in *tolerances*; the scalar
+    *tolerance* is a fallback for channels not listed there.
+
+    Parameters
+    ----------
+    channels : list[TimeChannel]
+        Channels to analyse.
+    tolerances : dict[str, float], optional
+        Per-channel tolerance keyed by channel name.
+    tolerance : float, optional
+        Fallback tolerance for channels missing from *tolerances*.
+    win_seconds : float
+        Rolling-window length used for the standard deviation.
+    min_duration : float
+        Minimum event duration in seconds; shorter stable runs are dropped.
+    """
+
+    CAPTION = "Extract stable-segment events"
+
+    def __call__(
+        self,
+        channels: list[TimeChannel],
+        tolerances: dict[str, float] = None,
+        tolerance: float = None,
+        win_seconds: float = 1.0,
+        min_duration: float = 1.0,
+    ) -> EventLogCollection:
+        result = EventLogCollection(name="Stable Events")
+        if not channels:
+            self.message("No channels provided")
+            return result
+
+        tol_map = dict(tolerances or {})
+        resolved: dict[str, float] = {}
+        missing = []
+        for ch in channels:
+            tol = tol_map.get(ch.name)
+            if tol is None:
+                tol = tolerance
+            if tol is None:
+                missing.append(ch.name)
+            else:
+                resolved[ch.name] = float(tol)
+        if missing:
+            self.message(
+                "No tolerance for channel(s): "
+                + ", ".join(missing)
+                + " — set 'tolerances' or 'tolerance'."
+            )
+            return result
+
+        per_channel = []
+        total = len(channels)
+        for i, ch in enumerate(channels):
+            ivs = stable_intervals(
+                ch, resolved[ch.name], win_seconds, min_duration
+            )
+            per_channel.append(ivs)
+            self.message(f"{ch.name}: {len(ivs)} stable interval(s)")
+            self.progress(i + 1, total)
+
+        common = intersect_intervals(per_channel)
+        is_datetime = any(
+            isinstance(ch.time_range[0], np.datetime64) for ch in channels
+        )
+        for i, (s, e) in enumerate(common):
+            result.add_entry(
+                time_to_str(epoch_to_time(s, is_datetime)),
+                time_to_str(epoch_to_time(e, is_datetime)),
+                label=f"Stable_{i + 1}",
+            )
+
+        self.message(
+            f"{len(common)} common stable event(s) from {total} channel(s)"
+        )
+        return result

@@ -32,6 +32,7 @@ actions:
   - /me/actions.CreateEventLogAction
   - /me/actions.PlotEventsAction
   - /me/actions.ExtractEventStatisticsAction
+  - /me/actions.ExtractStableEventsAction
   - "[Freq domain]"
   - /mv/actions.LoadCaseFreqIntermediateAverage
   - "[OrderSlice]"
