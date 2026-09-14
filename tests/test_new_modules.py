@@ -36,6 +36,43 @@ class TestTimeDataNewMethods:
         y_dc = td.y - np.mean(td.y)
         assert abs(np.mean(y_dc)) < 1e-10
 
+    def test_select_range_closed(self):
+        td = TimeData('test', y=np.arange(100.0), dt=0.1)
+        sel = td.select_range(1.0, 2.0)
+        assert isinstance(sel, TimeData)
+        assert sel.name == 'test-Sel'
+        assert sel.dt == 0.1
+        assert np.array_equal(sel.y, np.arange(10, 21, dtype=float))
+
+    def test_select_range_open_ended(self):
+        td = TimeData('test', y=np.arange(100.0), dt=0.1)
+        assert len(td.select_range(t_start=5.0).y) == 50
+        assert len(td.select_range(t_end=5.0).y) == 51
+        assert np.array_equal(td.select_range().y, td.y)
+
+    def test_statistics_with_range(self):
+        y = np.arange(100.0)
+        td = TimeData('test', y=y, dt=0.1)
+        stats = td.statistics(t_range=(1.0, 2.0))
+        subset = y[10:21]
+        assert abs(stats['mean'] - np.mean(subset)) < 1e-10
+        assert abs(stats['rms'] - np.sqrt(np.mean(subset**2))) < 1e-10
+        assert stats['min'] == np.min(subset)
+        assert stats['max'] == np.max(subset)
+
+    def test_statistics_full_range_matches_default(self):
+        td = TimeData('test', y=np.random.randn(200), dt=0.01)
+        default = td.statistics()
+        ranged = td.statistics(t_range=(0.0, td.x[-1]))
+        for key in ('mean', 'std', 'rms', 'skewness', 'kurtosis'):
+            assert abs(default[key] - ranged[key]) < 1e-10
+
+    def test_statistics_empty_range_is_nan(self):
+        td = TimeData('test', y=np.arange(10.0), dt=0.1)
+        stats = td.statistics(t_range=(5.0, 4.0))
+        for key in ('mean', 'std', 'min', 'max', 'rms', 'crest_factor', 'skewness', 'kurtosis'):
+            assert np.isnan(stats[key])
+
 
 class TestFreqDomainData:
     def test_effective_value_with_fmin_fmax(self):

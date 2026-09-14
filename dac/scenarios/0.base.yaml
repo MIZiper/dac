@@ -54,6 +54,7 @@ actions:
   - dac.modules.timedata.actions.DifferentiateTimeAction
   - /mt/actions.DCOffsetRemovalAction
   - /mt/actions.StatisticsAction
+  - /mt/actions.SelectRangeStatisticsAction
   - "[<]"
   - "[Freq domain]"
   - /mv/actions.ToFreqDomainAction
@@ -92,6 +93,7 @@ quick_actions: # [action_type, data_param_name, other_params, mode?]
   /mt/TimeData:
   - [/mt/actions.ShowTimeDataAction, channels, {}]
   - [/mt/actions.StatisticsAction, channels, {}]
+  - [/mt/actions.SelectRangeStatisticsAction, channels, {}]
   /mv/data.FreqDomainData:
   - [/mv/actions.ViewFreqDomainAction, channels, {with_phase: true}]
   dac.modules.pch.TimeChannel:

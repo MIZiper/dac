@@ -49,6 +49,32 @@ class TimeData(DataBase):
     def effective_value(self):
         return np.sqrt(np.mean(self.y**2))
 
+    def _index_range(self, t_start: float = None, t_end: float = None) -> tuple[int, int]:
+        """Returns the clamped sample index range ``[i_start, i_end)`` for a time span.
+
+        ``None`` means open-ended (from the beginning / to the end).
+        """
+        x = self.x
+        i_start = np.searchsorted(x, t_start, side="left") if t_start is not None else 0
+        i_end = np.searchsorted(x, t_end, side="right") if t_end is not None else self.length
+        i_start = int(np.clip(i_start, 0, self.length))
+        i_end = int(np.clip(i_end, 0, self.length))
+        return i_start, i_end
+
+    def select_range(self, t_start: float = None, t_end: float = None) -> "TimeData":
+        """Returns a new `TimeData` containing only the ``[t_start, t_end]`` span.
+
+        Times are in seconds (see `x`). ``None`` leaves that end open.
+        """
+        i_start, i_end = self._index_range(t_start, t_end)
+        return TimeData(
+            name=f"{self.name}-Sel",
+            y=self.y[i_start:i_end],
+            dt=self.dt,
+            y_unit=self.y_unit,
+            comment=self.comment,
+        )
+
     def integrate(self):
         y_int = cumulative_trapezoid(self.y, self.x, initial=0)
         return TimeData(
@@ -69,8 +95,26 @@ class TimeData(DataBase):
             comment=self.comment,
         )
 
-    def statistics(self):
+    def statistics(self, t_range: tuple[float, float] = None) -> dict:
+        """Computes statistics, optionally restricted to ``t_range=(start, end)`` seconds."""
         y = self.y
+        if t_range is not None:
+            i_start, i_end = self._index_range(*t_range)
+            y = y[i_start:i_end]
+
+        if len(y) == 0:
+            return {
+                "name": self.name,
+                "mean": float("nan"),
+                "std": float("nan"),
+                "min": float("nan"),
+                "max": float("nan"),
+                "rms": float("nan"),
+                "crest_factor": float("nan"),
+                "skewness": float("nan"),
+                "kurtosis": float("nan"),
+            }
+
         rms = np.sqrt(np.mean(y**2))
         return {
             "name": self.name,

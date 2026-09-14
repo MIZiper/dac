@@ -592,25 +592,127 @@ class DCOffsetRemovalAction(ActionBase):
             ))
         return rst
 
+_STAT_ROWS = ["mean", "std", "min", "max", "rms", "crest_factor", "skewness", "kurtosis"]
+
+def _present_statistics(action, channels: list[TimeData], t_range: tuple[float, float] = None):
+    cols = []
+    data = []
+    for channel in channels:
+        stats = channel.statistics(t_range=t_range)
+        cols.append(stats["name"])
+        data.append([f"{stats[key]:.4g}" for key in _STAT_ROWS])
+
+    title = "TimeData Statistics"
+    if t_range is not None:
+        title += f" [{t_range[0]:.3f}, {t_range[1]:.3f}] s"
+    action.present({
+        "title": title,
+        "headers": {"row": list(_STAT_ROWS), "col": cols},
+        "data": list(zip(*data)),
+    })
+
 class StatisticsAction(TAB):
     CAPTION = "Show statistics of TimeData"
     def __call__(self, channels: list[TimeData]):
-        rows = ["mean", "std", "min", "max", "rms", "crest_factor", "skewness", "kurtosis"]
-        cols = []
-        data = []
+        _present_statistics(self, channels)
+
+class SelectRangeStatisticsAction(VAB, TAB):
+    CAPTION = "Select range and show statistics"
+    def __call__(self, channels: list[TimeData], plot_dt: float=None):
+        """Displays TimeData channels and computes statistics on a dragged range.
+
+        Drag with the left mouse button to select a time range; on release the
+        statistics of each channel over that range are shown in a table.
+        Data is only downsampled for display, statistics use the full-resolution
+        samples within the selected range.
+
+        Parameters
+        ----------
+        channels : list[TimeData]
+            A list of TimeData objects to plot.
+        plot_dt : float, optional
+            If provided, downsamples the data for plotting to this time interval
+            to speed up rendering, by default None (no downsampling).
+        """
+        fig = self.figure
+        fig.suptitle("Drag to select a time range for statistics")
+
+        ax = fig.gca()
+        ax.set_xlabel("Time [s]")
+
+        self._channels = channels
+        self._t_start = None
+        self._t_end = None
+        self._spans = []
+        self._dragging = False
+        self._press_x = None
+
+        x_min = x_max = None
         for channel in channels:
-            stats = channel.statistics()
-            cols.append(stats["name"])
-            row_vals = []
-            for key in rows:
-                row_vals.append(f"{stats[key]:.4g}")
-            data.append(row_vals)
-        stats = {
-            "title": "TimeData Statistics",
-            "headers": {"row": rows, "col": cols},
-            "data": list(zip(*data)),
-        }
-        self.present(stats)
+            x, y = channel.x, channel.y
+            if plot_dt is not None:
+                interval = int(plot_dt // channel.dt)
+                if interval > 1:
+                    x = x[::interval]
+                    y = y[::interval]
+
+            ax.plot(x, y, label=f"{channel.name} [{channel.y_unit}]")
+            if len(x):
+                x_min = x[0] if x_min is None else min(x_min, x[0])
+                x_max = x[-1] if x_max is None else max(x_max, x[-1])
+
+        ax.legend(loc="upper right")
+        fig.text(0.5, 0.01, "Drag to select a time range",
+                 ha="center", fontsize=9)
+
+        canvas = self.canvas
+        click_threshold = (x_max - x_min) * 0.005 if x_min is not None and x_max is not None else 0.0
+
+        def draw_span(t0, t1):
+            for span in self._spans:
+                span.remove()
+            self._spans.clear()
+            span = ax.axvspan(t0, t1, alpha=0.2, color="green")
+            self._spans.append(span)
+
+        def on_press(event):
+            if event.inaxes is not ax or event.button != 1 or event.xdata is None:
+                return
+            if canvas.widgetlock.locked():
+                return
+            self._press_x = event.xdata
+            self._dragging = True
+
+        def on_motion(event):
+            if not self._dragging or event.xdata is None:
+                return
+            t0, t1 = sorted([self._press_x, event.xdata])
+            draw_span(t0, t1)
+            canvas.draw_idle()
+
+        def on_release(event):
+            if not self._dragging or event.button != 1:
+                return
+            self._dragging = False
+            x = event.xdata
+            if x is None or self._press_x is None:
+                return
+            if abs(x - self._press_x) < click_threshold:
+                for span in self._spans:
+                    span.remove()
+                self._spans.clear()
+                canvas.draw_idle()
+                return
+
+            t0, t1 = sorted([self._press_x, x])
+            self._t_start, self._t_end = t0, t1
+            draw_span(t0, t1)
+            _present_statistics(self, channels, t_range=(t0, t1))
+            canvas.draw_idle()
+
+        self._cids.append(canvas.mpl_connect("button_press_event", on_press))
+        self._cids.append(canvas.mpl_connect("motion_notify_event", on_motion))
+        self._cids.append(canvas.mpl_connect("button_release_event", on_release))
 
 class OpAction(ActionBase):
     CAPTION = "Operation on TimeData"
