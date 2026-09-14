@@ -59,7 +59,7 @@ def quick_action_flags(mode):
         return False, True, False
     if mode == FLASH:
         return True, False, True
-    return mode is not False, mode is True, False
+    return mode != CREATE, mode is True, False
 
 
 class _RemoteBridgeHandler(QtCore.QObject):
