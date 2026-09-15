@@ -1121,6 +1121,22 @@ class ActionListWidget(QTreeWidget):
             if callable(complete_cb):
                 complete_cb()
 
+        def run_on_main(prepared=None):
+            # heavy data acquisition (if any) already finished in a worker;
+            # detach from that worker's signals before drawing on the main thread
+            action._prepared = prepared
+            action._progress = lambda i, n: None
+            action._message = self.dac_win.message
+            action._cancel_check = None
+
+            action.pre_run()
+            rst = action(**params)
+            action.post_run()
+            if complete_cb is not None:
+                QtCore.QTimer.singleShot(0, lambda: completed(rst))
+            else:
+                completed(rst)
+
         action.container = container
         self.dac_win.message(f"[{action.name}]")
 
@@ -1145,14 +1161,21 @@ class ActionListWidget(QTreeWidget):
             worker.signals.result.connect(completed)
             worker.signals.error.connect(failed)
             self.dac_win.start_thread_worker(worker)
+        elif type(action).prepare is not ActionNode.prepare:
+            # non-threaded action with a heavy prepare phase: acquire data in
+            # the pool, then render on the main thread
+            def prep_fn(p, progress_emitter, logger, cancel_check=None):
+                action._progress = progress_emitter
+                action._message = logger
+                action._cancel_check = cancel_check
+                return action.prepare(**p)
+
+            worker = ThreadWorker(fn=prep_fn, caption=action.name, p=params)
+            worker.signals.result.connect(run_on_main)
+            worker.signals.error.connect(failed)
+            self.dac_win.start_thread_worker(worker)
         else:
-            action.pre_run()
-            rst = action(**params)
-            action.post_run()
-            if complete_cb is not None:
-                QtCore.QTimer.singleShot(0, lambda: completed(rst))
-            else:
-                completed(rst)
+            run_on_main(None)
 
     def run_all_actions(
         self,

@@ -21,6 +21,12 @@ class ActionBase(ActionNode): # needs thread
     # the tasks to assist config input (e.g. browse files instead of filling manually)
     # NOTE: no thread for running the tasks, keep them simple
 
+    def progress(self, i, n):
+        self._progress(i, n)
+
+    def message(self, s):
+        self._message(f"[{self.name}]>{s}")
+
 # TODO: add batch processing: read data, process with predefined parameters, process, save or export, clean and free memory
 
 class ProcessActionBase(ActionBase):
@@ -28,11 +34,6 @@ class ProcessActionBase(ActionBase):
         super().__init__(context_key, name, uuid)
         self._progress = lambda i, n: self._message(f"Progress: {i}/{n}")
         self._message = print
-
-    def progress(self, i, n):
-        self._progress(i, n)
-    def message(self, s):
-        self._message(f"[{self.name}]>{s}")
 
 class VisualizeActionBase(ActionBase):
     def __init__(self, context_key: ContextKeyNode, name: str = None, uuid: str = None) -> None:

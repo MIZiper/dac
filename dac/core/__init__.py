@@ -266,6 +266,11 @@ class ActionNode(NodeBase):
         self.status = ActionNode.ActionStatus.INIT
         self.out_name = None
 
+        self._prepared = None  # result of `prepare()`, consumed by `__call__`
+        self._progress = lambda i, n: None
+        self._message = print
+        self._cancel_check = None
+
         self.context_key = context_key
         self.container: Container = None  # for the actions require external resources, normally when context_key is GCK
 
@@ -340,6 +345,17 @@ class ActionNode(NodeBase):
     def pre_run(self, *args, **kwargs): ...
 
     def post_run(self, *args, **kwargs): ...
+
+    def prepare(self, **params):
+        """Optional heavy data-acquisition step.
+
+        In the GUI this runs inside the thread pool *before* ``__call__`` for
+        actions that are not themselves threaded (e.g. visualizations). The
+        return value is stored on ``self._prepared`` so ``__call__`` can render
+        it on the main thread. Headless callers may skip it and call
+        ``__call__`` directly, which falls back to loading inline.
+        """
+        return None
 
 
 class DataContext(dict[type[DataNode], dict[str, DataNode]]):

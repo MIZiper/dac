@@ -123,6 +123,24 @@ class PreviewChannelAction(VAB):
 
     CAPTION = "Preview channels"
 
+    def prepare(
+        self,
+        channels: list[TimeChannel | TSChannel],
+        target_fs: float = 1.0,
+        t_start=None,
+        t_end=None,
+    ):
+        """Load and downsample every channel (runs in a worker in the GUI)."""
+        prepared = []
+        n = len(channels)
+        for i, ch in enumerate(channels):
+            t, y, _ = ch.get_merged_data(
+                t_start=t_start, t_end=t_end, target_fs=target_fs
+            )
+            prepared.append((ch, t, y))
+            self.progress(i + 1, n)
+        return prepared
+
     def __call__(
         self,
         channels: list[TimeChannel | TSChannel],
@@ -130,16 +148,17 @@ class PreviewChannelAction(VAB):
         t_start=None,
         t_end=None,
     ):
+        data = self._prepared
+        if data is None:
+            data = self.prepare(channels, target_fs=target_fs, t_start=t_start, t_end=t_end)
+
         fig = self.figure
         fig.suptitle("Channel preview")
 
         ax = fig.gca()
         _datetime_configured = False
 
-        for ch in channels:
-            t, y, _ = ch.get_merged_data(
-                t_start=t_start, t_end=t_end, target_fs=target_fs
-            )
+        for ch, t, y in data:
             if len(t) == 0:
                 continue
 
@@ -230,6 +249,21 @@ class SelectTimeRangeAction(VAB):
 
     setup_handler: Callable[["SelectTimeRangeAction"], None] = None
 
+    def prepare(
+        self,
+        channels: list[TimeChannel | TSChannel],
+        target_fs: float = 1.0,
+        **kwargs,
+    ):
+        """Load and downsample every channel (runs in a worker in the GUI)."""
+        prepared = {}
+        n = len(channels)
+        for i, ch in enumerate(channels):
+            t, y, _ = ch.get_merged_data(target_fs=target_fs)
+            prepared[id(ch)] = (t, y)
+            self.progress(i + 1, n)
+        return prepared
+
     def __call__(
         self,
         channels: list[TimeChannel | TSChannel],
@@ -237,6 +271,10 @@ class SelectTimeRangeAction(VAB):
     ):
         if not channels:
             return
+
+        data = self._prepared
+        if data is None:
+            data = self.prepare(channels, target_fs=target_fs)
 
         self._channels = channels
         self._t_start = None
@@ -275,7 +313,7 @@ class SelectTimeRangeAction(VAB):
             axes.append(ax)
 
             for ch in grp:
-                t, y, _ = ch.get_merged_data(target_fs=target_fs)
+                t, y = data[id(ch)]
                 if len(t) == 0:
                     continue
 
@@ -519,12 +557,13 @@ class SpecPlotAction(VAB):
 
     CAPTION = "Spec plot"
 
-    def __call__(
+    def prepare(
         self,
         channels: list[TimeChannel | TSChannel],
         spec: dict = None,
     ):
-        from .spec import spec_from_dict, render_spec
+        """Resolve the chart spec and fetch all arrays (runs in a worker)."""
+        from .spec import spec_from_dict, collect_spec_data
 
         if not spec:
             spec = _default_spec(channels)
@@ -532,7 +571,23 @@ class SpecPlotAction(VAB):
             self._construct_config["spec"] = spec
 
         chart = spec_from_dict(spec if isinstance(spec, dict) else {})
-        render_spec(chart, channels, self.figure)
+        data = collect_spec_data(chart, channels, progress=self.progress)
+        return {"chart": chart, "data": data}
+
+    def __call__(
+        self,
+        channels: list[TimeChannel | TSChannel],
+        spec: dict = None,
+    ):
+        from .spec import render_spec
+
+        prepared = self._prepared
+        if prepared is None:
+            prepared = self.prepare(channels, spec)
+
+        render_spec(
+            prepared["chart"], channels, self.figure, preloaded=prepared["data"]
+        )
 
 
 # ---------------------------------------------------------------------------

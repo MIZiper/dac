@@ -219,10 +219,88 @@ def spec_from_dict(d: dict) -> ChartSpec:
 # Rendering
 # ---------------------------------------------------------------------------
 
+def _resolve_xlim(ax_spec: ChannelSpec, col: int, col_xlim):
+    """X-limits for a subplot, honouring per-column ``xs`` windows."""
+    xlim = ax_spec.xlim
+    if col_xlim is not None and col < len(col_xlim) and col_xlim[col] is not None:
+        xlim = col_xlim[col]
+    return xlim
+
+
+def _iter_plot_requests(spec: ChartSpec):
+    """Yield ``(channel_name, xlim, target_fs)`` for every channel plotted.
+
+    Mirrors the traversal in :func:`render_spec` so that
+    :func:`collect_spec_data` fetches exactly the arrays the renderer needs.
+    Duplicates (a channel shown on several axes/columns) are expected.
+    """
+    layout = spec.layout
+    axes = spec.axes
+    if not layout:
+        return
+
+    n_cols = max(len(row) for row in layout)
+
+    col_xlim = None
+    if spec.xs and n_cols > 1:
+        try:
+            col_xlim = [tuple([float(v) for v in pair]) for pair in spec.xs]
+            col_xlim += [None] * (n_cols - len(col_xlim))
+        except (ValueError, TypeError):
+            col_xlim = None
+
+    target_fs = (1.0 / spec.ds_step) if spec.ds_step else None
+
+    for r in range(len(layout)):
+        for c in range(len(layout[r])):
+            ax_spec = axes.get(layout[r][c])
+            if ax_spec is None:
+                continue
+            xlim = _resolve_xlim(ax_spec, c, col_xlim)
+            for ch_name in ax_spec.chs:
+                yield ch_name, xlim, target_fs
+            if ax_spec.coax is not None:
+                for ch_name in ax_spec.coax.chs:
+                    yield ch_name, xlim, target_fs
+
+
+def collect_spec_data(
+    spec: ChartSpec,
+    channels: list[TimeChannel | TSChannel],
+    progress=None,
+) -> dict:
+    """Pre-fetch every ``(t, y)`` array :func:`render_spec` will plot.
+
+    Returns a dict keyed by ``(channel_name, xlim, target_fs)``. This is the
+    heavy, disk-touching part and is meant to run in a worker thread; the
+    resulting mapping is then passed to :func:`render_spec` as *preloaded*.
+    """
+    ch_by_name = {ch.name: ch for ch in channels}
+    requests = list(_iter_plot_requests(spec))
+    data: dict = {}
+    for ch_name, xlim, target_fs in requests:
+        key = (ch_name, xlim, target_fs)
+        if key in data:
+            continue
+        ch = ch_by_name.get(ch_name)
+        if ch is None:
+            continue
+        t, y, _dt = ch.get_merged_data(
+            t_start=xlim[0] if xlim else None,
+            t_end=xlim[1] if xlim else None,
+            target_fs=target_fs,
+        )
+        data[key] = (t, y)
+        if progress is not None:
+            progress(len(data), len(requests))
+    return data
+
+
 def render_spec(
     spec: ChartSpec,
     channels: list[TimeChannel | TSChannel],
     figure: Figure,
+    preloaded: dict | None = None,
 ) -> None:
     """Render *spec* on *figure* using data from *channels*.
 
@@ -230,6 +308,11 @@ def render_spec(
     2. Create ``GridSpec`` subplots with shared-axes references.
     3. Plot each channel, handling twin axes and downsampling.
     4. Apply styling: limits, grid, legend, tick dedup.
+
+    *preloaded* is an optional mapping produced by :func:`collect_spec_data`
+    (``(channel_name, xlim, target_fs) -> (t, y)``). When given, the arrays
+    are used instead of calling ``get_merged_data`` — this lets the heavy
+    loading/merging run in a worker thread and keeps only plotting here.
     """
     _ch_by_name = {ch.name: ch for ch in channels}
     layout = spec.layout
@@ -310,21 +393,19 @@ def render_spec(
             coax_ax = mpl_coax.get(name)
 
             # Resolve xlim
-            xlim = ax_spec.xlim
-            if col_xlim is not None and c < len(col_xlim) and col_xlim[c] is not None:
-                xlim = col_xlim[c]
+            xlim = _resolve_xlim(ax_spec, c, col_xlim)
 
             # Collect channel names to plot (primary + coax)
             _plot_channels(
                 ax, ax_spec.chs, _ch_by_name, xlim, spec.ds_step,
-                color_cycle, color_idx, coax_ax is not None,
+                color_cycle, color_idx, coax_ax is not None, preloaded,
             )
             color_idx += len(ax_spec.chs)
 
             if coax_ax is not None and ax_spec.coax is not None:
                 _plot_channels(
                     coax_ax, ax_spec.coax.chs, _ch_by_name, xlim,
-                    spec.ds_step, color_cycle, color_idx, False,
+                    spec.ds_step, color_cycle, color_idx, False, preloaded,
                 )
                 color_idx += len(ax_spec.coax.chs)
 
@@ -438,18 +519,30 @@ def _plot_channels(
     color_cycle: list,
     base_color_idx: int,
     is_coax: bool,
+    preloaded: dict | None = None,
 ):
-    """Plot *ch_names* on *ax*, looking up data from *ch_by_name*."""
+    """Plot *ch_names* on *ax*, looking up data from *ch_by_name*.
+
+    When *preloaded* (see :func:`collect_spec_data`) contains the required
+    ``(name, xlim, target_fs)`` entry, its ``(t, y)`` is used directly and no
+    data loading happens here.
+    """
+    target_fs = (1.0 / ds_step) if ds_step else None
+
     for i, ch_name in enumerate(ch_names):
         ch = ch_by_name.get(ch_name)
         if ch is None:
             continue
 
-        t, y, _dt = ch.get_merged_data(
-            t_start=xlim[0] if xlim else None,
-            t_end=xlim[1] if xlim else None,
-            target_fs=(1.0 / ds_step) if ds_step else None,
-        )
+        key = (ch_name, xlim, target_fs)
+        if preloaded is not None and key in preloaded:
+            t, y = preloaded[key]
+        else:
+            t, y, _dt = ch.get_merged_data(
+                t_start=xlim[0] if xlim else None,
+                t_end=xlim[1] if xlim else None,
+                target_fs=target_fs,
+            )
         if len(y) == 0:
             continue
 
