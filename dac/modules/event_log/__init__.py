@@ -5,6 +5,8 @@ DataBase subclasses that integrate with the DAC data context and action
 resolution system.
 """
 
+import re
+
 import numpy as np
 
 from dac.core.data import DataBase
@@ -84,10 +86,18 @@ class EventStatistics(DataBase):
 # ---------------------------------------------------------------------------
 
 
+_TZ_SUFFIX = re.compile(r"(?:Z|[+-]\d{2}:?\d{2})$", re.IGNORECASE)
+
+
 def parse_time(s: str):
     """Parse a time string to ``float`` or ``np.datetime64``.
 
     Returns ``None`` for empty / unparseable input.
+
+    A trailing timezone designator (``Z`` or ``±HH:MM`` / ``±HHMM``) is
+    removed before conversion so the *recorded wall clock* is kept instead
+    of being shifted to UTC — ``np.datetime64`` would otherwise convert a
+    numeric offset.  This matches TPL's local-time-with-offset storage.
     """
     if not s or not s.strip():
         return None
@@ -97,7 +107,7 @@ def parse_time(s: str):
     except (ValueError, TypeError):
         pass
     try:
-        return np.datetime64(s)
+        return np.datetime64(_TZ_SUFFIX.sub("", s))
     except (ValueError, TypeError):
         pass
     return None

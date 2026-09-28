@@ -4,6 +4,9 @@ Provides interactive range-selection for creating event log entries,
 visualisation with SpecPlot + event overlays, and statistical extraction.
 """
 
+import json
+from os import path
+
 import numpy as np
 
 from dac.core.actions import ActionBase, VAB, PAB, SAB, TAB
@@ -108,6 +111,138 @@ class CreateEventLogAction(ActionBase):
                 else:
                     s0, s1 = "", ""
                 coll.add_entry(s0, s1, label)
+        return coll
+
+
+# ---------------------------------------------------------------------------
+# LoadEventLogAction — import an exported TPL execution log
+# ---------------------------------------------------------------------------
+
+
+def _iter_export_events(data) -> list[dict]:
+    """Normalise a loaded JSON object into a flat list of event dicts.
+
+    Accepts the TPL export (``{"events": [...]}``) and, as a fallback, a
+    raw TPL execution document (``{"entries": [{"executions": [...]}]}``).
+    Each returned dict carries ``step_title``, ``run_index``,
+    ``required_executions``, ``status`` and ``start`` / ``end`` strings.
+    """
+    if not isinstance(data, dict):
+        return []
+
+    events = data.get("events")
+    if isinstance(events, list):
+        return [e for e in events if isinstance(e, dict)]
+
+    out: list[dict] = []
+    entries = data.get("entries")
+    if isinstance(entries, list):
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            title = entry.get("step_title") or entry.get("title") or ""
+            runs = entry.get("executions") or []
+            for i, run in enumerate(runs):
+                if not isinstance(run, dict):
+                    continue
+                out.append({
+                    "step_title": title,
+                    "entry_type": entry.get("type", "planned"),
+                    "run_index": i + 1,
+                    "required_executions": entry.get("required_executions", 1),
+                    "status": run.get("status"),
+                    "start": run.get("started_at"),
+                    "end": run.get("completed_at"),
+                    "notes": run.get("notes"),
+                })
+    return out
+
+
+def _event_label(ev: dict) -> str:
+    """Build a human-readable, per-run label for an imported event."""
+    label = str(ev.get("step_title") or "").strip() or "event"
+    try:
+        idx = int(ev.get("run_index") or 1)
+    except (TypeError, ValueError):
+        idx = 1
+    try:
+        required = int(ev.get("required_executions") or 1)
+    except (TypeError, ValueError):
+        required = 1
+    if idx > 1 or required > 1:
+        label += f" #{idx}"
+    if str(ev.get("status") or "").lower() == "skipped":
+        label += " [skipped]"
+    return label
+
+
+class LoadEventLogAction(PAB):
+    """Import one or more exported TPL execution logs as an EventLogCollection.
+
+    Reads JSON files produced by the TPL logging module
+    (``format == "tpl.execution-log"``); a bare object with an ``events``
+    list or a raw TPL execution document (``entries`` → ``executions``) is
+    accepted too.  Every completed/skipped run becomes one
+    :class:`~dac.modules.event_log.EventLogEntry` spanning its start/end
+    timestamps, so the whole execution can be overlaid on measurement data.
+
+    The collection name is ``out_name`` when set, otherwise the export's
+    document name (falling back to the file stem).
+    """
+
+    CAPTION = "Load TPL execution log"
+
+    def __call__(self, fpaths: list[str]) -> EventLogCollection:
+        default_name = "Exec Log"
+        all_events: list[dict] = []
+
+        for i, fpath in enumerate(fpaths or []):
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (OSError, ValueError) as e:
+                self.message(f"Failed to read '{fpath}': {e}")
+                continue
+
+            if isinstance(data, dict) and default_name == "Exec Log":
+                doc = data.get("document")
+                if isinstance(doc, dict) and doc.get("name"):
+                    default_name = str(doc["name"])
+                else:
+                    default_name = path.splitext(path.basename(fpath))[0]
+
+            all_events.extend(_iter_export_events(data))
+            self.progress(i + 1, len(fpaths))
+
+        name = self.out_name
+        if not name or (name.startswith("<") and name.endswith(">")):
+            name = default_name
+        coll = EventLogCollection(name=name)
+
+        seen: set[str] = set()
+        skipped = 0
+        for ev in all_events:
+            start = ev.get("start")
+            end = ev.get("end")
+            if start in (None, "") or end in (None, ""):
+                skipped += 1
+                continue
+            if parse_time(str(start)) is None or parse_time(str(end)) is None:
+                skipped += 1
+                continue
+
+            label = _event_label(ev)
+            base, k = label, 2
+            while label in seen:
+                label = f"{base} ({k})"
+                k += 1
+            seen.add(label)
+            coll.add_entry(str(start), str(end), label)
+
+        self.message(
+            f"Loaded {len(coll.entries)} event(s) from {len(fpaths or [])} file(s)"
+            + (f" ({skipped} skipped)" if skipped else "")
+        )
         return coll
 
 

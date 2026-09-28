@@ -1,12 +1,15 @@
+import json
+
 import numpy as np
 import pytest
 
 from dac.core import GCK
 from dac.modules.pch import TimeChannel, TimeSegment
-from dac.modules.event_log import EventLogCollection
+from dac.modules.event_log import EventLogCollection, parse_time
 from dac.modules.event_log.actions import (
     ExtractStableEventsAction,
     InspectTimeRangeAction,
+    LoadEventLogAction,
     _compute_stats,
     _nearest_sample,
 )
@@ -23,6 +26,28 @@ def _channel(y, t0=0.0, dt=0.1, unit="m/s2", name="Ch"):
     ch = TimeChannel(name=name, y_unit=unit)
     ch.add_segment(seg)
     return ch
+
+
+class TestParseTime:
+    def test_positive_offset_is_stripped_not_shifted(self):
+        # numpy would otherwise convert +08:00 to 10:05 UTC; the wall clock must stay.
+        assert parse_time("2026-09-28T18:05:00.123+08:00") == np.datetime64(
+            "2026-09-28T18:05:00.123"
+        )
+
+    def test_negative_offset_is_stripped(self):
+        assert parse_time("2026-09-28T18:05:00-05:30") == np.datetime64(
+            "2026-09-28T18:05:00"
+        )
+
+    def test_utc_z_keeps_wall_clock(self):
+        assert parse_time("2026-09-28T18:05:00.123Z") == np.datetime64(
+            "2026-09-28T18:05:00.123"
+        )
+
+    def test_float_and_empty(self):
+        assert parse_time("12.3") == pytest.approx(12.3)
+        assert parse_time("") is None
 
 
 class TestComputeStats:
@@ -199,4 +224,96 @@ class TestExtractStableEventsAction:
         coll = act([a], tolerance=0.1, win_seconds=0.1, min_duration=0.0)
         assert len(coll.entries) == 1
         assert parse_time(coll.entries[0].start) == t0
+
+
+class TestLoadEventLogAction:
+    @staticmethod
+    def _write(tmp_path, data, name="exec.json"):
+        fpath = tmp_path / name
+        fpath.write_text(json.dumps(data), encoding="utf-8")
+        return str(fpath)
+
+    def test_loads_export_events(self, tmp_path):
+        export = {
+            "format": "tpl.execution-log",
+            "version": 1,
+            "document": {"id": "d1", "name": "Bench run", "description": None},
+            "events": [
+                {
+                    "step_title": "Warm up",
+                    "run_index": 1,
+                    "required_executions": 1,
+                    "status": "completed",
+                    "start": "2026-09-28T10:00:00.000Z",
+                    "end": "2026-09-28T10:05:00.000Z",
+                },
+                {
+                    "step_title": "Load",
+                    "run_index": 2,
+                    "required_executions": 2,
+                    "status": "skipped",
+                    "start": "2026-09-28T10:05:00.000Z",
+                    "end": "2026-09-28T10:06:00.000Z",
+                },
+            ],
+        }
+        fpath = self._write(tmp_path, export)
+        coll = LoadEventLogAction(GCK)([fpath])
+
+        assert isinstance(coll, EventLogCollection)
+        assert coll.name == "Bench run"
+        assert len(coll.entries) == 2
+        assert coll.entries[0].name == "Warm up"
+        assert coll.entries[1].name == "Load #2 [skipped]"
+        assert parse_time(coll.entries[0].start) == np.datetime64("2026-09-28T10:00:00")
+
+    def test_raw_execution_doc_fallback(self, tmp_path):
+        doc = {
+            "version": 1,
+            "status": "completed",
+            "entries": [
+                {
+                    "id": "e1",
+                    "plan_step_id": None,
+                    "step_title": "Step A",
+                    "type": "planned",
+                    "required_executions": 1,
+                    "executions": [
+                        {
+                            "id": "r1",
+                            "status": "completed",
+                            "started_at": "2026-09-28T10:00:00.000Z",
+                            "completed_at": "2026-09-28T10:01:00.000Z",
+                        }
+                    ],
+                }
+            ],
+        }
+        fpath = self._write(tmp_path, doc)
+        coll = LoadEventLogAction(GCK)([fpath])
+
+        assert coll.name == "exec"
+        assert len(coll.entries) == 1
+        assert coll.entries[0].name == "Step A"
+
+    def test_skips_incomplete_events_and_bad_files(self, tmp_path):
+        export = {
+            "events": [
+                {"step_title": "No end", "start": "2026-09-28T10:00:00Z", "end": None},
+                {"step_title": "No start", "start": None, "end": "2026-09-28T10:01:00Z"},
+            ]
+        }
+        fpath = self._write(tmp_path, export)
+        coll = LoadEventLogAction(GCK)([fpath, str(tmp_path / "missing.json")])
+
+        assert coll.name == "exec"
+        assert len(coll.entries) == 0
+
+    def test_out_name_overrides_collection_name(self, tmp_path):
+        export = {"document": {"name": "Doc name"}, "events": []}
+        fpath = self._write(tmp_path, export)
+        act = LoadEventLogAction(GCK)
+        act.out_name = "My events"
+        coll = act([fpath])
+        assert coll.name == "My events"
 

@@ -30,6 +30,7 @@ actions:
   - /mp/actions.ChopOffSpikesAction
   - "[Event Log]"
   - /me/actions.CreateEventLogAction
+  - /me/actions.LoadEventLogAction
   - /me/actions.PlotEventsAction
   - /me/actions.ExtractEventStatisticsAction
   - /me/actions.ExtractStableEventsAction
@@ -121,12 +122,16 @@ quick_tasks:
   - [/mp/tasks.SetupAnalysisContextTask, "Setup Analysis Context"]
   /me/actions.SelectEventRangeAction:
   - [/me/tasks.AddEventLogTask, "Add event log entry"]
+  /me/actions.LoadEventLogAction:
+  - [/mt/tasks.FillFpathsTask, "Select TPL execution log JSON"]
   /me/actions.InspectTimeRangeAction:
   - [/me/tasks.InspectSelectionTask, "Inspect selection"]
 
 default_task:
   /mp/actions.XYStatisticPlotAction:
   - [/mp/tasks.XYStatisticTask, "Configure XY statistic plot"]
+  /me/actions.LoadEventLogAction:
+  - [/mt/tasks.FillFpathsTask, "Select TPL execution log JSON"]
 
 drop_actions:
   ".tdms":
