@@ -128,10 +128,8 @@ quick_tasks:
   - [/me/tasks.InspectSelectionTask, "Inspect selection"]
 
 default_task:
-  /mp/actions.XYStatisticPlotAction:
-  - [/mp/tasks.XYStatisticTask, "Configure XY statistic plot"]
-  /me/actions.LoadEventLogAction:
-  - [/mt/tasks.FillFpathsTask, "Select TPL execution log JSON"]
+  /mp/actions.XYStatisticPlotAction: [/mp/tasks.XYStatisticTask, "Configure XY statistic plot"]
+  /me/actions.LoadEventLogAction: [/mt/tasks.FillFpathsTask, "Select TPL execution log JSON"]
 
 drop_actions:
   ".tdms":
