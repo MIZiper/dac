@@ -57,6 +57,14 @@ class VisualizeActionBase(ActionBase):
         # when a figure assigned to visualization, need to clean the previous events and widgets (that have events)
         canvas = fig.canvas
         self._figure = fig
+        # tear down any live interaction layers attached to the old figure
+        manager = getattr(canvas, "_dac_manager", None)
+        if manager is not None:
+            try:
+                manager.clear()
+            except Exception:
+                pass
+            canvas._dac_manager = None
         if hasattr(canvas, "_cids"):
             for cid in canvas._cids:
                 canvas.mpl_disconnect(cid)

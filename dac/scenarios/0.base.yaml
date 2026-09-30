@@ -8,6 +8,7 @@ alias:
   md: dac.modules.drivetrain
   mp: dac.modules.pch
   me: dac.modules.event_log
+  mi: dac.modules.interactive
 
 data:
   _: # for now only add data to global context
@@ -26,6 +27,7 @@ actions:
   - /mp/actions.PreviewChannelAction
   - /mp/actions.SelectTimeRangeAction
   - /mp/actions.SpecPlotAction
+  - /mi/InteractiveTimePlotAction
   - /mp/actions.XYStatisticPlotAction
   - /mp/actions.ChopOffSpikesAction
   - "[Event Log]"
@@ -83,6 +85,7 @@ actions:
   - /mv/actions.ShowSpectrumWithGuesser
   - "[PCH]"
   - /mp/actions.LoadAndCropAction
+  - /mi/InteractiveTimePlotAction
 
 quick_actions: # [action_type, data_param_name, other_params, mode?]
   # mode: false (default) → run only
@@ -97,9 +100,11 @@ quick_actions: # [action_type, data_param_name, other_params, mode?]
   - [/mt/actions.SelectRangeStatisticsAction, channels, {}]
   /mv/data.FreqDomainData:
   - [/mv/actions.ViewFreqDomainAction, channels, {with_phase: true}]
+  - [/mi/InteractiveSpectrumPlotAction, channels, {}, "create"]
   dac.modules.pch.TimeChannel:
   - [dac.modules.pch.actions.PreviewChannelAction, channels, {}]
   - [dac.modules.pch.actions.SpecPlotAction, channels, {}, "create"]
+  - [/mi/InteractiveTimePlotAction, channels, {}, "create"]
   - [dac.modules.pch.actions.SelectTimeRangeAction, channels, {}]
   - [dac.modules.pch.actions.XYStatisticPlotAction, x_channel, {}, "flash"]
   - [dac.modules.event_log.actions.SelectEventRangeAction, channels, {}]

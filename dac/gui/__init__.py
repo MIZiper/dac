@@ -34,6 +34,7 @@ from importlib.metadata import version
 from dac import APPNAME, PYPI_NAME
 from dac.core import GCK, ActionNode, Container, DataNode, NodeBase, ContextKeyNode, DataContext
 from dac.core.actions import PAB, VAB, TAB, ActionBase, Stat
+from dac.core.interact import InteractivePlotAction
 from dac.core.thread import ThreadWorker
 from dac.core.scenario import use_scenario
 from dac.gui.base import MainWindowBase
@@ -149,8 +150,14 @@ class MainWindow(MainWindowBase):
         )
         canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
+        self.interaction_toolbar = QtWidgets.QToolBar("Interactions", self)
+        self.interaction_toolbar.setMovable(False)
+        self.interaction_toolbar.setVisible(False)
+        self._interaction_manager = None
+
         center_widget = QtWidgets.QWidget(self)
         vlayout = QtWidgets.QVBoxLayout(center_widget)
+        vlayout.addWidget(self.interaction_toolbar)
         vlayout.addWidget(canvas)
         vlayout.addWidget(navibar)
 
@@ -483,6 +490,60 @@ class MainWindow(MainWindowBase):
         layout.addWidget(table)
         dlg.resize(600, 400)
         dlg.show()
+
+    def clear_interaction_toolbar(self):
+        """Tear down any live interaction layers and empty the toolbar."""
+        manager = getattr(self, "_interaction_manager", None)
+        canvas_manager = getattr(getattr(self, "canvas", None), "_dac_manager", None)
+        for mgr in (manager, canvas_manager):
+            if mgr is not None:
+                try:
+                    mgr.clear()
+                except Exception:
+                    pass
+        self._interaction_manager = None
+        if getattr(self, "canvas", None) is not None:
+            self.canvas._dac_manager = None
+        if getattr(self, "interaction_toolbar", None) is not None:
+            self.interaction_toolbar.clear()
+            self.interaction_toolbar.setVisible(False)
+
+    def install_interactions(self, manager, entries):
+        """Populate the interaction toolbar from a ``PlotInteractionManager``.
+
+        *entries* is a list of
+        ``(name, caption, group, active, available)`` tuples.
+        """
+        self.clear_interaction_toolbar()
+        self._interaction_manager = manager
+        toolbar = self.interaction_toolbar
+        action_group = QtWidgets.QActionGroup(toolbar)
+        try:
+            action_group.setExclusionPolicy(
+                QtWidgets.QActionGroup.ExclusionPolicy.ExclusiveOptional
+            )
+        except AttributeError:
+            pass
+
+        for name, caption, group_name, active, available in entries:
+            act = QtWidgets.QAction(caption, toolbar)
+            act.setCheckable(True)
+            act.setChecked(active)
+            if not available:
+                act.setEnabled(False)
+                act.setToolTip("Not available in the current context")
+            if group_name == "tool":
+                act.setActionGroup(action_group)
+                act.triggered.connect(
+                    lambda checked, n=name: manager.set_tool(n if checked else None)
+                )
+            else:
+                act.triggered.connect(
+                    lambda checked, n=name: manager.toggle(n, checked)
+                )
+            toolbar.addAction(act)
+
+        toolbar.setVisible(bool(entries))
 
     def use_scenario(self, setting_fpath: str, clean: bool = True):
         use_scenario(setting_fpath, clean, dac_win=self)
@@ -1091,6 +1152,10 @@ class ActionListWidget(QTreeWidget):
     def run_action(self, action: ActionNode, complete_cb: callable = None, params: dict = None):
         if (container := self._container) is None:
             return
+        # a new run replaces the previous plot, so drop stale interactions
+        self.dac_win.clear_interaction_toolbar()
+        if isinstance(action, InteractivePlotAction):
+            action.ui_host = self.dac_win
         if params is None:
             params = container.prepare_params_for_action(
                 action._SIGNATURE, action._construct_config

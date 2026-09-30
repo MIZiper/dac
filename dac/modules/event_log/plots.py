@@ -18,7 +18,7 @@ def overlay_events(
     label_axes_index: int = 0,
     color_cycle: list[str] | None = None,
     figure: "Figure | None" = None,
-) -> None:
+) -> list:
     """Draw event ranges as ``axvspan`` patches on all axes of *figure*.
 
     Text labels are placed only on the axis at *label_axes_index*
@@ -36,6 +36,11 @@ def overlay_events(
         List of colour strings used for auto-assignment.
     figure:
         Target figure; defaults to ``plt.gcf()``.
+
+    Returns
+    -------
+    list
+        The artists created, so callers can remove them again.
     """
     if figure is None:
         import matplotlib.pyplot as plt
@@ -44,10 +49,11 @@ def overlay_events(
 
     all_axes = figure.get_axes()
     if not all_axes:
-        return
+        return []
 
     label_ax = all_axes[min(label_axes_index, len(all_axes) - 1)]
     colors = color_cycle or _DEFAULT_COLORS
+    artists: list = []
 
     for i, coll in enumerate(events):
         if not isinstance(coll, EventLogCollection):
@@ -62,18 +68,22 @@ def overlay_events(
                 continue
 
             for ax in all_axes:
-                ax.axvspan(t0, t1, alpha=0.15, color=color)
+                artists.append(ax.axvspan(t0, t1, alpha=0.15, color=color))
 
             if entry.name:
                 mid = time_midpoint(t0, t1)
                 _, y_max = label_ax.get_ylim()
-                label_ax.text(
-                    mid,
-                    y_max * 0.95,
-                    entry.name,
-                    color=color,
-                    fontsize=8,
-                    ha="center",
-                    va="top",
-                    rotation=90,
+                artists.append(
+                    label_ax.text(
+                        mid,
+                        y_max * 0.95,
+                        entry.name,
+                        color=color,
+                        fontsize=8,
+                        ha="center",
+                        va="top",
+                        rotation=90,
+                    )
                 )
+
+    return artists
