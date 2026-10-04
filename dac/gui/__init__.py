@@ -34,6 +34,7 @@ from importlib.metadata import version
 from dac import APPNAME, PYPI_NAME
 from dac.core import GCK, ActionNode, Container, DataNode, NodeBase, ContextKeyNode, DataContext
 from dac.core.actions import PAB, VAB, TAB, ActionBase, Stat
+from dac.core.interact import InteractivePlotAction, InteractionEntry
 from dac.core.thread import ThreadWorker
 from dac.core.scenario import use_scenario
 from dac.gui.base import MainWindowBase
@@ -149,8 +150,14 @@ class MainWindow(MainWindowBase):
         )
         canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
+        self.interaction_toolbar = QtWidgets.QToolBar("Interactions", self)
+        self.interaction_toolbar.setMovable(False)
+        self.interaction_toolbar.setVisible(False)
+        self._interaction_manager = None
+
         center_widget = QtWidgets.QWidget(self)
         vlayout = QtWidgets.QVBoxLayout(center_widget)
+        vlayout.addWidget(self.interaction_toolbar)
         vlayout.addWidget(canvas)
         vlayout.addWidget(navibar)
 
@@ -483,6 +490,64 @@ class MainWindow(MainWindowBase):
         layout.addWidget(table)
         dlg.resize(600, 400)
         dlg.show()
+
+    # -- interaction host protocol (see dac.core.interact) ----------------
+
+    supports_dialogs = True
+
+    def install_interactions(self, manager, entries):
+        """Populate the interaction toolbar from a ``PlotInteractionManager``.
+
+        *entries* is a list of :class:`~dac.core.interact.InteractionEntry`.
+        """
+        self._interaction_manager = manager
+        toolbar = self.interaction_toolbar
+        toolbar.clear()
+        if not entries:
+            toolbar.setVisible(False)
+            return
+
+        action_group = QtWidgets.QActionGroup(toolbar)
+        try:
+            action_group.setExclusionPolicy(
+                QtWidgets.QActionGroup.ExclusionPolicy.ExclusiveOptional
+            )
+        except AttributeError:
+            pass
+
+        for entry in entries:
+            if not isinstance(entry, InteractionEntry):
+                name, caption, group_name, active, available = entry[:5]
+                requires_dialog = entry[5] if len(entry) > 5 else False
+                entry = InteractionEntry(
+                    name, caption, group_name, active, available, requires_dialog
+                )
+            act = QtWidgets.QAction(entry.caption, toolbar)
+            act.setCheckable(True)
+            act.setChecked(entry.active)
+            if not entry.available:
+                act.setEnabled(False)
+                act.setToolTip("Not available in the current context")
+            if entry.group == "tool":
+                act.setActionGroup(action_group)
+                act.triggered.connect(
+                    lambda checked, n=entry.name: manager.set_tool(n if checked else None)
+                )
+            else:
+                act.triggered.connect(
+                    lambda checked, n=entry.name: manager.toggle(n, checked)
+                )
+            toolbar.addAction(act)
+
+        toolbar.setVisible(True)
+
+    def clear_interactions(self):
+        """Empty the interaction toolbar (called when the plot is replaced)."""
+        self._interaction_manager = None
+        toolbar = getattr(self, "interaction_toolbar", None)
+        if toolbar is not None:
+            toolbar.clear()
+            toolbar.setVisible(False)
 
     def use_scenario(self, setting_fpath: str, clean: bool = True):
         use_scenario(setting_fpath, clean, dac_win=self)
@@ -1139,6 +1204,9 @@ class ActionListWidget(QTreeWidget):
 
         action.container = container
         self.dac_win.message(f"[{action.name}]")
+
+        if isinstance(action, InteractivePlotAction):
+            action.ui_host = self.dac_win
 
         if isinstance(action, VAB):
             action.figure = self.dac_win.figure
