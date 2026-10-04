@@ -41,7 +41,7 @@ from __future__ import annotations
 import inspect
 import weakref
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Optional, Protocol, get_args, get_origin, runtime_checkable
 
 import numpy as np
 from matplotlib.figure import Figure
@@ -124,6 +124,20 @@ class InteractionEntry:
     requires_dialog: bool = False
 
 
+def _is_list_annotation(ann) -> bool:
+    """Whether *ann* describes a list (including ``Optional[list[...]]``)."""
+    if ann is list:
+        return True
+    if get_origin(ann) is list:
+        return True
+    for arg in get_args(ann):
+        if arg is type(None):
+            continue
+        if _is_list_annotation(arg):
+            return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Manager registry (per canvas)
 # ---------------------------------------------------------------------------
@@ -169,11 +183,17 @@ class InteractionContext:
         container: Container = None,
         ui: Any = None,
         base_action: Any = None,
+        host_action: Any = None,
+        plot_axes: list = None,
     ) -> None:
         self.figure = figure
         self.container = container
         self.ui = ui
         self.base_action = base_action
+        self.host_action = host_action
+        # axes that belong to the base plot (captured before interaction
+        # panels/widgets are added); tools should select over these only
+        self.plot_axes = plot_axes
 
     @property
     def axes(self) -> list:
@@ -265,6 +285,86 @@ class PlotInteraction:
         tracked artists / cids are cleaned up.
         """
         self._cleanup()
+
+    def reconfigure(self) -> None:
+        """Rebuild the interaction in place (detach + attach) after a
+        parameter change, without touching the base plot."""
+        if not self._active:
+            return
+        self.detach()
+        self.auto_bind()
+        self.attach()
+
+    # -- runtime parameters (tool-level editing) --------------------------
+
+    def param_options(self, name: str) -> list:
+        """Candidate values for runtime parameter *name* (default: none).
+
+        Subclasses override this so parameters can be auto-bound from the
+        current context and offered for editing.
+        """
+        return []
+
+    def auto_bind(self) -> None:
+        """Fill still-unset parameters from :meth:`param_options`.
+
+        Only ``None`` parameters are touched, so explicit choices survive
+        repeated attach cycles.  List-annotated parameters take all
+        candidates, others the first.
+        """
+        for name, param in self._SIGNATURE.parameters.items():
+            if name not in self._VALID_PARAM_NAMES:
+                continue
+            if getattr(self, name, None) is not None:
+                continue
+            options = self.param_options(name)
+            if not options:
+                continue
+            if _is_list_annotation(param.annotation):
+                setattr(self, name, list(options))
+            else:
+                setattr(self, name, options[0])
+
+    def _config_value(self, value):
+        """Serialise a runtime value to a YAML/basic-type representation."""
+        if isinstance(value, DataNode):
+            container = self.ctx.container
+            if container is not None:
+                return container.CurrentContext.get_qualified_name(value)
+            return value.name
+        if isinstance(value, (list, tuple)):
+            return [self._config_value(v) for v in value]
+        if isinstance(value, dict):
+            return {k: self._config_value(v) for k, v in value.items()}
+        return value
+
+    def get_construct_config(self) -> dict:
+        """Current parameter values as a YAML-friendly dict.
+
+        DataNodes become qualified names.  Still-unset parameters are
+        emitted as their default (usually ``None``) rather than an
+        annotation hint, so an unedited apply stays parseable.
+        """
+        cfg: dict = {}
+        for name, param in self._SIGNATURE.parameters.items():
+            value = getattr(self, name, None)
+            if value is None:
+                cfg[name] = param.default if param.default is not inspect._empty else None
+            else:
+                cfg[name] = self._config_value(value)
+        return cfg
+
+    def apply_construct_config(self, resolved: dict, reconfigure: bool = True) -> None:
+        """Apply already-resolved parameter values to this live instance.
+
+        *resolved* maps parameter names to Python values (DataNodes, not
+        names).  Unknown keys are ignored.
+        """
+        for name, value in (resolved or {}).items():
+            if name in self._VALID_PARAM_NAMES:
+                setattr(self, name, value)
+        if reconfigure:
+            self.reconfigure()
 
     # -- helpers -----------------------------------------------------------
 
@@ -385,7 +485,7 @@ class RangeSelectTool(ToolBase):
     # -- lifecycle ---------------------------------------------------------
 
     def attach(self) -> None:
-        self._axes = list(self.ctx.axes)
+        self._axes = list(self.ctx.plot_axes or self.ctx.axes)
         self._is_datetime = _axes_have_datetime(self._axes)
         self.t_start = None
         self.t_end = None
@@ -510,6 +610,7 @@ class PlotInteractionManager:
         self._interactions: dict[str, PlotInteraction] = {}
         self._order: list[str] = []
         self._active_tool: str | None = None
+        self._current: str | None = None
         self._observers: list = []
 
         canvas = ctx.figure.canvas
@@ -552,8 +653,10 @@ class PlotInteractionManager:
         if on is None:
             on = not it._active
         if on and not it._active:
+            it.auto_bind()
             it.attach()
             it._active = True
+            self._current = name
             self._notify(name, True)
         elif not on and it._active:
             it.detach()
@@ -573,6 +676,29 @@ class PlotInteractionManager:
     @property
     def active_tool(self) -> str | None:
         return self._active_tool
+
+    @property
+    def current_name(self) -> str | None:
+        """Name of the last activated interaction (tool or overlay)."""
+        return self._current
+
+    @property
+    def current_interaction(self) -> Optional[PlotInteraction]:
+        if self._current is None:
+            return None
+        return self._interactions.get(self._current)
+
+    def refresh_current(self) -> None:
+        """Re-notify observers for the current interaction (editor reload)."""
+        if self._current is not None and self.is_active(self._current):
+            self._notify(self._current, True)
+
+    def apply_config(self, name: str, resolved: dict, reconfigure: bool = True) -> None:
+        """Apply resolved parameters to a registered interaction."""
+        it = self._interactions.get(name)
+        if it is None:
+            return
+        it.apply_construct_config(resolved, reconfigure=reconfigure)
 
     # -- observers (for toolbar sync) -------------------------------------
 
@@ -601,6 +727,7 @@ class PlotInteractionManager:
         self._interactions.clear()
         self._order.clear()
         self._active_tool = None
+        self._current = None
         ui = self.ctx.ui
         if ui is not None and hasattr(ui, "clear_interactions"):
             try:
@@ -729,6 +856,8 @@ class InteractivePlotAction(VAB):
             container=self.container,
             ui=ui,
             base_action=base,
+            host_action=self,
+            plot_axes=list(figure.get_axes()),
         )
         manager = PlotInteractionManager(ctx)
 
@@ -769,3 +898,65 @@ class InteractivePlotAction(VAB):
 
         if ui is not None and hasattr(ui, "install_interactions"):
             ui.install_interactions(manager, entries)
+
+    # -- tool-level configuration -----------------------------------------
+
+    def interaction_class(self, name: str) -> Optional[type[PlotInteraction]]:
+        for inter_cls in self._INTERACTIONS:
+            if inter_cls.__name__ == name:
+                return inter_cls
+        return None
+
+    def get_tool_construct_config(self, name: str) -> dict:
+        """Current YAML-friendly config of interaction *name*.
+
+        Prefers the live instance (so temporary changes are visible when
+        the user re-opens the tool); falls back to the persisted action
+        config merged over the parameter defaults.
+        """
+        inter = self._manager.get(name) if self._manager is not None else None
+        if inter is not None:
+            return inter.get_construct_config()
+
+        inter_cls = self.interaction_class(name)
+        if inter_cls is None:
+            return {}
+        cfg = SequenceActionBase._GetCCFromS(inter_cls._SIGNATURE)
+        raw = self._construct_config.get(name)
+        if isinstance(raw, dict):
+            cfg.update(raw)
+        return cfg
+
+    def apply_tool_config(self, name: str, raw_cfg: dict, persist: bool = False) -> bool:
+        """Apply an interaction's YAML config to the live instance.
+
+        ``persist=False`` (apply) only updates the running interaction;
+        ``persist=True`` (apply+run) also writes the raw config back into
+        the action config, so it survives re-runs / project save.
+        Returns ``True`` on success.
+        """
+        inter = self._manager.get(name) if self._manager is not None else None
+        if inter is None:
+            self._message(f"Interaction '{name}' is not available.")
+            return False
+        if self.container is None:
+            self._message(f"Cannot resolve '{name}' without a container.")
+            return False
+
+        try:
+            resolved = self.container.prepare_params_for_action(
+                type(inter)._SIGNATURE, raw_cfg or {}
+            )
+        except Exception as e:
+            self._message(f"Invalid config for '{name}': {e}")
+            return False
+
+        try:
+            inter.apply_construct_config(resolved, reconfigure=True)
+        except Exception as e:
+            self._message(f"Failed to apply '{name}': {e}")
+            return False
+
+        if persist:
+            self._construct_config[name] = dict(raw_cfg or {})
+        return True

@@ -314,6 +314,9 @@ class MainWindow(MainWindowBase):
         self.node_editor.sig_return_node.connect(
             self.action_list_widget.action_apply_node_config
         )
+        self.node_editor.sig_return_tool_config.connect(
+            self.action_list_widget.action_apply_tool_config
+        )
         self.sig_files_dropped.connect(self._on_files_dropped)
 
     def action_copy_figure(self):
@@ -507,6 +510,9 @@ class MainWindow(MainWindowBase):
             toolbar.setVisible(False)
             return
 
+        # switching / activating an interaction pushes its config to the editor
+        manager.add_observer(self._on_interaction_changed)
+
         action_group = QtWidgets.QActionGroup(toolbar)
         try:
             action_group.setExclusionPolicy(
@@ -540,6 +546,19 @@ class MainWindow(MainWindowBase):
             toolbar.addAction(act)
 
         toolbar.setVisible(True)
+
+        # show the initially-active interaction (if any) in the editor
+        if manager.current_name is not None:
+            self._on_interaction_changed(manager.current_name, True)
+
+    def _on_interaction_changed(self, name: str, active: bool):
+        if not active or name is None:
+            return
+        manager = self._interaction_manager
+        host = getattr(manager.ctx, "host_action", None) if manager is not None else None
+        if host is None:
+            return
+        self.node_editor.edit_tool(host, name)
 
     def clear_interactions(self):
         """Empty the interaction toolbar (called when the plot is replaced)."""
@@ -1525,9 +1544,29 @@ class ActionListWidget(QTreeWidget):
         else:
             self.refresh()
 
+    def action_apply_tool_config(
+        self, host_action, name: str, config: dict, fire: bool = False
+    ):
+        """Apply an editor config to a live interaction.
+
+        ``fire=False`` (✔) applies temporarily; ``fire=True`` (🔥) also
+        writes the config back into the action config.
+        """
+        try:
+            ok = host_action.apply_tool_config(name, config, persist=fire)
+        except Exception as e:
+            self.dac_win.message(f"Failed to apply '{name}': {e}")
+            return
+        if ok:
+            # reflect the (possibly auto-bound) live values back to the editor
+            self.dac_win.node_editor.edit_tool(host_action, name)
+            verb = "saved" if fire else "applied"
+            self.dac_win.message(f"Tool '{name}' {verb}")
+
 
 class NodeEditorWidget(QWidget):
     sig_return_node = QtCore.pyqtSignal(NodeBase, dict, bool)
+    sig_return_tool_config = QtCore.pyqtSignal(object, str, dict, bool)
 
     def __init__(self, parent: MainWindow):
         super().__init__(parent)
@@ -1564,21 +1603,42 @@ class NodeEditorWidget(QWidget):
         vlayout.addLayout(btn_layout)
 
         self._current_node = None
+        self._current_tool = None  # (host_action, interaction_name)
 
     def edit_node(self, node: NodeBase):
         s = yaml.dump(node.get_construct_config(), allow_unicode=True, sort_keys=False)
         self.editor.setText(s + "\n# " + type(node).__name__)
         self._current_node = node
+        self._current_tool = None
+
+    def edit_tool(self, host_action, name: str):
+        """Load an interaction's live config (auto-pushed on tool switch)."""
+        try:
+            cfg = host_action.get_tool_construct_config(name)
+        except Exception as e:
+            parent = self.window()
+            if hasattr(parent, "message"):
+                parent.message(f"Failed to read '{name}': {e}")
+            return
+        s = yaml.dump(cfg, allow_unicode=True, sort_keys=False)
+        self.editor.setText(s + f"\n# Tool: {name}")
+        self._current_node = None
+        self._current_tool = (host_action, name)
 
     def action_apply(self, fire=True):
-        if self._current_node is None:
-            return
         try:
             config = yaml.load(StringIO(self.editor.text()), Loader=yaml.FullLoader)
         except yaml.YAMLError as e:
             parent = self.window()
             if hasattr(parent, "message"):
                 parent.message(f"Invalid YAML: {e}")
+            return
+
+        if self._current_tool is not None:
+            host_action, name = self._current_tool
+            self.sig_return_tool_config.emit(host_action, name, config or {}, fire)
+            return
+        if self._current_node is None:
             return
         self.sig_return_node.emit(self._current_node, config, fire)
 

@@ -399,6 +399,7 @@ class TestInteractiveHost:
         assert any(
             e.name == "SelectContextTool" and not e.available for e in ui.entries
         )
+        assert manager.current_name == "EventRangesOverlay"
         assert fig.axes
 
     def test_switch_tool_does_not_replot(self):
@@ -425,6 +426,106 @@ class TestInteractiveHost:
         act()
         assert ui.cleared == cleared_before
         assert host._manager.is_active("EventRangesOverlay")
+
+
+# ---------------------------------------------------------------------------
+# Tool-level runtime configuration
+# ---------------------------------------------------------------------------
+
+
+class TestToolConfig:
+    def _make_host(self):
+        return TestInteractiveHost()._make_host()
+
+    def test_auto_bind_fills_none_only(self):
+        from dac.modules.event_log.interactions import EventRangesOverlay
+
+        container = Container()
+        coll = EventLogCollection(name="Log")
+        coll.add_entry("1.0", "2.5", "Knock")
+        container.CurrentContext.add_node(coll)
+        fig = _new_figure()
+        fig.add_subplot(111)
+        ctx = InteractionContext(fig, container)
+        overlay = EventRangesOverlay(ctx)
+
+        overlay.auto_bind()
+        assert overlay.events == [coll]
+        # explicit value survives a second auto_bind
+        overlay.events = []
+        overlay.auto_bind()
+        assert overlay.events == []
+
+    def test_get_construct_config_serialises_names(self):
+        host, ui, fig, container = self._make_host()
+        cfg = host.get_tool_construct_config("EventRangesOverlay")
+        assert cfg["events"] == ["Log"]
+        assert cfg["label_axes_index"] == 0
+
+    def test_apply_tool_config_persist_flag(self):
+        host, ui, fig, container = self._make_host()
+        before = dict(host._construct_config["RangeStatsTool"])
+
+        ok = host.apply_tool_config(
+            "RangeStatsTool", {"channels": ["AccelX"], "plot_dt": 0.25}, persist=False
+        )
+        assert ok
+        assert host._construct_config["RangeStatsTool"] == before
+        assert host._manager.get("RangeStatsTool").channels[0] is container.get_node_of_type(
+            "AccelX", TimeChannel
+        )
+        assert host._manager.get("RangeStatsTool").plot_dt == 0.25
+
+        ok = host.apply_tool_config(
+            "RangeStatsTool", {"channels": ["AccelX"], "plot_dt": 0.5}, persist=True
+        )
+        assert ok
+        assert host._construct_config["RangeStatsTool"]["plot_dt"] == 0.5
+
+    def test_reconfigure_rebuilds_overlay(self):
+        from dac.modules.event_log.interactions import EventRangesOverlay
+
+        container = Container()
+        coll = EventLogCollection(name="Log")
+        coll.add_entry("1.0", "2.5", "Knock")
+        container.CurrentContext.add_node(coll)
+        fig = _new_figure()
+        ax = fig.add_subplot(111)
+        ctx = InteractionContext(fig, container)
+        overlay = EventRangesOverlay(ctx)
+        overlay._active = True
+        overlay.attach()
+        with_spans = len(ax.get_children())
+        assert with_spans > 0
+
+        overlay.apply_construct_config({"events": [], "label_axes_index": 0})
+        assert len(ax.get_children()) < with_spans
+        overlay.detach()
+
+    def test_unedited_config_applies(self):
+        # an editor round-trip without changes must stay parseable
+        host, ui, fig, container = self._make_host()
+        cfg = host.get_tool_construct_config("FreqLinesTimeTool")
+        assert cfg["stages"] is None
+        assert host.apply_tool_config("FreqLinesTimeTool", cfg, persist=False)
+
+    def test_plot_axes_snapshot(self):
+        host, ui, fig, container = self._make_host()
+        n_plot = len(host._manager.ctx.plot_axes)
+        fig.add_axes([0.0, 0.0, 0.1, 0.1])
+        assert len(fig.get_axes()) == n_plot + 1
+        assert len(host._manager.ctx.plot_axes) == n_plot
+
+    def test_switch_pushes_to_observer(self):
+        # the GUI registers an observer that reloads the editor on switch
+        host, ui, fig, container = self._make_host()
+        events = []
+        host._manager.add_observer(lambda name, active: events.append((name, active)))
+        host._manager.set_tool("RangeStatsTool")
+        assert ("RangeStatsTool", True) in events
+        events.clear()
+        host._manager.refresh_current()
+        assert events == [("RangeStatsTool", True)]
 
 
 # ---------------------------------------------------------------------------

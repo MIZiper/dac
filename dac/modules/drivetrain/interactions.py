@@ -17,16 +17,6 @@ from dac.modules.timedata import TimeData
 from dac.modules.drivetrain import GearboxDefinition
 
 
-def _resolve(context, gearbox, speed_channel):
-    if gearbox is None:
-        nodes = context.find_nodes(GearboxDefinition)
-        gearbox = nodes[0] if nodes else None
-    if speed_channel is None:
-        nodes = context.find_nodes(TimeData)
-        speed_channel = nodes[0] if nodes else None
-    return gearbox, speed_channel
-
-
 class _FreqLinesBase(ToolBase):
     _DEFAULT_STAGES = [1, 2]
     _DEFAULT_FMT_LINES = ["{f_1}", "{f_2}-{f_1}"]
@@ -56,10 +46,15 @@ class _FreqLinesBase(ToolBase):
             and bool(ctx.find_nodes(TimeData))
         )
 
+    def param_options(self, name: str) -> list:
+        if name == "gearbox":
+            return list(self.ctx.find_nodes(GearboxDefinition))
+        if name == "speed_channel":
+            return list(self.ctx.find_nodes(TimeData))
+        return []
+
     def attach(self) -> None:
-        self.gearbox, self.speed_channel = _resolve(
-            self.ctx, self.gearbox, self.speed_channel
-        )
+        self.auto_bind()
         self._lines = []
         if self.stages is None:
             self.stages = list(self._DEFAULT_STAGES)

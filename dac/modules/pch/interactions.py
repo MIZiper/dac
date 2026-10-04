@@ -91,7 +91,7 @@ class RangeStatsTool(RangeSelectTool):
     def __init__(
         self,
         ctx,
-        channels: list = None,
+        channels: list[TimeChannel | TSChannel | TimeData] = None,
         plot_dt: float = None,
     ) -> None:
         super().__init__(ctx)
@@ -102,13 +102,18 @@ class RangeStatsTool(RangeSelectTool):
     def available(cls, ctx) -> bool:
         return super().available(ctx) and bool(_time_channels(ctx))
 
+    def param_options(self, name: str) -> list:
+        if name == "channels":
+            return _time_channels(self.ctx)
+        return []
+
     def _announce_selection(self) -> None:
         if self.t_start is None or self.t_end is None or self.t_start == self.t_end:
             return
         ui = self.ctx.ui
         if ui is None or not hasattr(ui, "show_stats"):
             return
-        channels = self.channels or _time_channels(self.ctx)
+        channels = self.channels if self.channels is not None else _time_channels(self.ctx)
         if not channels:
             return
         present_statistics(ui.show_stats, channels, t_range=(self.t_start, self.t_end))

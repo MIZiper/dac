@@ -44,8 +44,13 @@ class EventRangesOverlay(OverlayBase):
     def available(cls, ctx) -> bool:
         return super().available(ctx) and bool(ctx.find_nodes(EventLogCollection))
 
+    def param_options(self, name: str) -> list:
+        if name == "events":
+            return list(self.ctx.find_nodes(EventLogCollection))
+        return []
+
     def _resolve_events(self) -> list:
-        if self.events:
+        if self.events is not None:
             return list(self.events)
         return list(self.ctx.find_nodes(EventLogCollection))
 
@@ -132,6 +137,11 @@ class InspectTool(RangeSelectTool):
     @classmethod
     def available(cls, ctx) -> bool:
         return super().available(ctx) and bool(_time_channels(ctx))
+
+    def param_options(self, name: str) -> list:
+        if name == "channels":
+            return _time_channels(self.ctx)
+        return []
 
     def on_confirm(self) -> None:
         ui = self.ctx.ui
