@@ -331,27 +331,69 @@ class TestRangeSelectTool:
 
 
 class TestRangeStatsTool:
-    def test_presents_stats(self):
+    def _setup(self, gap=False):
+        from dac.modules.pch import TimeSegment
         from dac.modules.pch.interactions import RangeStatsTool
 
         container = Container()
-        container.CurrentContext.add_node(_channel(name="AccelX", dt=0.1, unit="g"))
+        ch = TimeChannel(name="AccelX", y_unit="g")
+        if gap:
+            s1 = TimeSegment(name="AccelX", t0=0.0, length=50, dt=0.1, y_unit="g")
+            s1._y = np.sin(np.arange(50) * 0.1)
+            s2 = TimeSegment(name="AccelX", t0=10.0, length=50, dt=0.1, y_unit="g")
+            s2._y = np.cos(np.arange(50) * 0.1)
+            ch.add_segment(s1)
+            ch.add_segment(s2)
+        else:
+            ch = _channel(name="AccelX", dt=0.1, unit="g")
+        container.CurrentContext.add_node(ch)
+
         fig = _new_figure()
         ax = fig.add_subplot(111)
-        x = np.arange(100) * 0.1
-        ax.plot(x, np.sin(x))
-
+        ax.plot(np.arange(100) * 0.1, np.sin(np.arange(100) * 0.1))
         ui = _UIStub()
         ctx = InteractionContext(fig, container, ui=ui)
         tool = RangeStatsTool(ctx)
         assert RangeStatsTool.available(ctx)
         tool.attach()
+        return tool, ui
+
+    def test_range_table(self):
+        tool, ui = self._setup()
         tool.t_start = 1.0
         tool.t_end = 2.0
         tool._announce_selection()
         assert ui.stats is not None
-        assert ui.stats["headers"]["row"] == ["mean", "std", "min", "max", "rms"]
-        assert ui.stats["headers"]["col"] == ["AccelX"]
+        assert ui.stats["headers"]["row"] == ["AccelX [g]"]
+        assert ui.stats["headers"]["col"] == ["mean", "std", "min", "max", "rms"]
+        tool.detach()
+
+    def test_custom_stats(self):
+        tool, ui = self._setup()
+        tool.stats = "mean,rms"
+        tool.t_start = 1.0
+        tool.t_end = 2.0
+        tool._announce_selection()
+        assert ui.stats["headers"]["col"] == ["mean", "rms"]
+        tool.detach()
+
+    def test_point_table(self):
+        tool, ui = self._setup()
+        tool.t_start = 2.0
+        tool.t_end = 2.0
+        tool._announce_selection()
+        assert ui.stats is not None
+        assert ui.stats["headers"]["col"] == ["time", "value"]
+        assert ui.stats["headers"]["row"] == ["AccelX [g]"]
+        assert ui.stats["data"][0][1] != ""
+        tool.detach()
+
+    def test_point_in_gap_is_blank(self):
+        tool, ui = self._setup(gap=True)
+        tool.t_start = 7.0  # between the two segments
+        tool.t_end = 7.0
+        tool._announce_selection()
+        assert ui.stats["data"][0] == ["", ""]
         tool.detach()
 
 
@@ -571,6 +613,16 @@ class TestToolConfig:
 # ---------------------------------------------------------------------------
 
 
+def _pch_speed(name="SpeedCh", t0=0.0, dt=0.1, n=100, value=3000.0):
+    from dac.modules.pch import TimeSegment
+
+    seg = TimeSegment(name=name, t0=t0, length=n, dt=dt, y_unit="rpm")
+    seg._y = np.full(n, value)
+    ch = TimeChannel(name=name, y_unit="rpm")
+    ch.add_segment(seg)
+    return ch
+
+
 class TestDrivetrainTools:
     def _setup(self):
         from dac.modules.drivetrain import GearboxDefinition, GearStage
@@ -586,10 +638,11 @@ class TestDrivetrainTools:
         speed = TimeData(name="speed", y=np.full(100, 3000.0), dt=0.1)
         container = Container()
         container.CurrentContext.add_node(gb)
+        container.CurrentContext.add_node(_pch_speed())
         container.CurrentContext.add_node(speed)
         fig = _new_figure()
         ax = fig.add_subplot(111)
-        ax.plot(np.arange(100))
+        ax.plot(np.arange(100) * 0.1, np.sin(np.arange(100) * 0.1))
         return container, fig, ax
 
     def test_time_tool_draws_lines(self):
@@ -600,10 +653,70 @@ class TestDrivetrainTools:
         assert FreqLinesTimeTool.available(ctx)
         tool = FreqLinesTimeTool(ctx)
         tool.attach()
-        tool.on_press(_Event(inaxes=ax, xdata=10.0, button=1))
+        tool.on_press(_Event(inaxes=ax, xdata=5.0, button=1))
         assert len(tool._lines) > 0
         tool.detach()
         assert tool._lines == []
+
+    def test_time_tool_gap_draws_nothing(self):
+        from dac.modules.drivetrain import GearboxDefinition, GearStage
+        from dac.modules.drivetrain.interactions import FreqLinesTimeTool
+        from dac.modules.pch import TimeSegment
+
+        gb = GearboxDefinition(
+            "test",
+            stages=[GearStage({"Wheel": 50, "Pinion": 25})],
+        )
+        ch = TimeChannel(name="SpeedCh", y_unit="rpm")
+        for t0 in (0.0, 10.0):
+            seg = TimeSegment(name="SpeedCh", t0=t0, length=50, dt=0.1, y_unit="rpm")
+            seg._y = np.full(50, 3000.0)
+            ch.add_segment(seg)
+
+        container = Container()
+        container.CurrentContext.add_node(gb)
+        container.CurrentContext.add_node(ch)
+        fig = _new_figure()
+        ax = fig.add_subplot(111)
+        ax.plot(np.arange(100) * 0.1, np.sin(np.arange(100) * 0.1))
+
+        ctx = InteractionContext(fig, container)
+        tool = FreqLinesTimeTool(ctx)
+        tool.attach()
+        tool.on_press(_Event(inaxes=ax, xdata=7.0, button=1))  # gap
+        assert tool._lines == []
+        tool.detach()
+
+    def test_time_tool_datetime_offset_in_days(self):
+        import matplotlib.dates as mdates
+        from dac.modules.drivetrain import GearboxDefinition, GearStage
+        from dac.modules.drivetrain.interactions import FreqLinesTimeTool
+
+        gb = GearboxDefinition(
+            "test",
+            stages=[GearStage({"Wheel": 50, "Pinion": 25})],
+        )
+        base = np.datetime64("2024-01-01T00:00:00")
+        ch = _pch_speed(t0=base)
+        container = Container()
+        container.CurrentContext.add_node(gb)
+        container.CurrentContext.add_node(ch)
+        fig = _new_figure()
+        ax = fig.add_subplot(111)
+        t_axis, y_axis, _ = ch.get_merged_data()
+        ax.plot(t_axis, y_axis)
+
+        ctx = InteractionContext(fig, container)
+        tool = FreqLinesTimeTool(ctx)
+        tool.attach()
+        moment = base + np.timedelta64(5, "s")
+        xnum = float(mdates.date2num(moment.astype("datetime64[ms]").astype(object)))
+        tool.on_press(_Event(inaxes=ax, xdata=xnum, button=1))
+        offsets = [abs(a.get_xdata()[0] - xnum) for a in tool._lines if hasattr(a, "get_xdata")]
+        assert offsets
+        # frequency-line offsets must be seconds expressed in days (< 1e-3 d)
+        assert max(offsets) < 1e-3
+        tool.detach()
 
     def test_spectrum_tool_draws_lines(self):
         from dac.modules.drivetrain.interactions import FreqLinesSpectrumTool
@@ -616,31 +729,3 @@ class TestDrivetrainTools:
         assert len(tool._lines) > 0
         tool.detach()
         assert tool._lines == []
-
-
-# ---------------------------------------------------------------------------
-# Event log inspect tool (non-dialog)
-# ---------------------------------------------------------------------------
-
-
-class TestInspectTool:
-    def test_range_table(self):
-        from dac.modules.event_log.interactions import InspectTool
-
-        container = Container()
-        container.CurrentContext.add_node(_channel(name="AccelX", dt=0.1, unit="g"))
-        fig = _new_figure()
-        ax = fig.add_subplot(111)
-        ax.plot(np.arange(100) * 0.1, np.sin(np.arange(100) * 0.1))
-
-        ui = _UIStub()
-        ctx = InteractionContext(fig, container, ui=ui)
-        tool = InspectTool(ctx)
-        assert InspectTool.available(ctx)
-        tool.attach()
-        tool.t_start = 1.0
-        tool.t_end = 2.0
-        tool.on_confirm()
-        assert ui.stats is not None
-        assert ui.stats["headers"]["row"] == ["AccelX [g]"]
-        tool.detach()

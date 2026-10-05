@@ -18,7 +18,6 @@ from dac.modules.nvh.actions import ViewFreqDomainAction
 from dac.modules.event_log.interactions import (
     AddEventLogTool,
     EventRangesOverlay,
-    InspectTool,
 )
 from dac.modules.drivetrain.interactions import (
     FreqLinesSpectrumTool,
@@ -35,14 +34,13 @@ class InteractiveTimePlotAction(
         RangeStatsTool,
         SelectContextTool,
         AddEventLogTool,
-        InspectTool,
     ],
 ):
     """Spec plot with switchable event-log / frequency / statistics tools.
 
     Overlays (event ranges) stack; tools (frequency lines, range
-    statistics, context creation, add event, inspect) are mutually
-    exclusive and own the mouse.
+    statistics, context creation, add event) are mutually exclusive and
+    own the mouse.
     """
 
     CAPTION = "Interactive time plot"

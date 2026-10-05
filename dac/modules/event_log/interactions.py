@@ -9,13 +9,10 @@ importable in headless / web environments; dialogs are imported lazily
 inside the dialog-driven tool only.
 """
 
-import numpy as np
-
 from dac.core.interact import OverlayBase, RangeSelectTool
 from dac.modules.pch import TimeChannel, TSChannel, time_to_str
 
 from . import EventLogCollection
-from .actions import _compute_stats, _nearest_sample
 from .plots import overlay_events
 
 
@@ -123,77 +120,3 @@ class AddEventLogTool(RangeSelectTool):
             ui.action_list_widget.refresh()
         ui.message(f"Added event '{label}' to group '{group_name}'")
 
-
-class InspectTool(RangeSelectTool):
-    """Select a range/point and show a statistics table of the channels."""
-
-    CAPTION = "Inspect selection"
-    _HINT = "Drag to select a range  |  Click for a point  |  Right-click → Inspect"
-
-    def __init__(self, ctx, stats: str = "mean,std,min,max,rms") -> None:
-        super().__init__(ctx)
-        self.stats = stats
-
-    @classmethod
-    def available(cls, ctx) -> bool:
-        return super().available(ctx) and bool(_time_channels(ctx))
-
-    def param_options(self, name: str) -> list:
-        if name == "channels":
-            return _time_channels(self.ctx)
-        return []
-
-    def on_confirm(self) -> None:
-        ui = self.ctx.ui
-        if ui is None or self.t_start is None:
-            return
-        channels = _time_channels(self.ctx)
-        if not channels:
-            return
-
-        if self.t_start == self.t_end:
-            table = self._point_table(channels, self.t_start)
-        else:
-            table = self._range_table(channels, self.t_start, self.t_end, self.stats)
-        if hasattr(ui, "show_stats"):
-            ui.show_stats(table)
-
-    def _range_table(self, channels, t_start, t_end, stats):
-        from .actions import ExtractEventStatisticsAction
-
-        wanted = [s.strip() for s in stats.split(",") if s.strip()]
-        wanted = [
-            s for s in ExtractEventStatisticsAction._AVAILABLE_STATS if s in wanted
-        ]
-
-        rows, data = [], []
-        for ch in channels:
-            _t, y, _dt = ch.get_merged_data(t_start=t_start, t_end=t_end)
-            y_clean = y[~np.isnan(y)]
-            if len(y_clean) == 0:
-                continue
-            rec = _compute_stats(y_clean, wanted)
-            rows.append(f"{ch.name} [{ch.y_unit}]")
-            data.append([rec.get(s, "") for s in wanted])
-
-        return {
-            "title": f"Statistics  {time_to_str(t_start)} → {time_to_str(t_end)}",
-            "headers": {"row": rows, "col": wanted},
-            "data": data,
-        }
-
-    def _point_table(self, channels, t):
-        rows, data = [], []
-        for ch in channels:
-            t_sample, value = _nearest_sample(ch, t)
-            rows.append(f"{ch.name} [{ch.y_unit}]")
-            if t_sample is None:
-                data.append(["", ""])
-            else:
-                data.append([time_to_str(t_sample), value])
-
-        return {
-            "title": f"Values at  {time_to_str(t)}",
-            "headers": {"row": rows, "col": ["time", "value"]},
-            "data": data,
-        }
