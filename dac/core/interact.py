@@ -287,13 +287,22 @@ class PlotInteraction:
         self._cleanup()
 
     def reconfigure(self) -> None:
-        """Rebuild the interaction in place (detach + attach) after a
-        parameter change, without touching the base plot."""
+        """Rebuild the interaction in place (detach + attach + redraw) after
+        a parameter change, without touching the base plot."""
         if not self._active:
             return
         self.detach()
         self.auto_bind()
         self.attach()
+        self.redraw()
+
+    def is_ready(self) -> bool:
+        """Instance-level readiness check run at activation time.
+
+        Available before any auto-binding; subclasses may override to
+        require specific parameters.  Default: always ready.
+        """
+        return True
 
     # -- runtime parameters (tool-level editing) --------------------------
 
@@ -654,6 +663,18 @@ class PlotInteractionManager:
             on = not it._active
         if on and not it._active:
             it.auto_bind()
+            # availability is evaluated at activation time, so data added
+            # after the plot was rendered is picked up
+            try:
+                ready = bool(type(it).available(self.ctx)) and it.is_ready()
+            except Exception:
+                ready = False
+            if not ready:
+                self._message(
+                    f"{type(it).CAPTION} is not available "
+                    "(missing required data or unsupported)."
+                )
+                return
             it.attach()
             it._active = True
             self._current = name
@@ -664,14 +685,25 @@ class PlotInteractionManager:
             self._notify(name, False)
         it.redraw()
 
+    def _message(self, text: str) -> None:
+        ui = self.ctx.ui
+        if ui is not None and hasattr(ui, "message"):
+            try:
+                ui.message(text, log=False)
+            except TypeError:
+                ui.message(text)
+
     def set_tool(self, name: str | None) -> None:
         if self._active_tool == name:
             return
         if self._active_tool is not None:
             self.toggle(self._active_tool, False)
-        self._active_tool = name
+            self._active_tool = None
         if name is not None:
             self.toggle(name, True)
+            # only record it if activation actually succeeded
+            if self.is_active(name):
+                self._active_tool = name
 
     @property
     def active_tool(self) -> str | None:

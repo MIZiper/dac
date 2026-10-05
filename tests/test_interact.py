@@ -502,6 +502,44 @@ class TestToolConfig:
         assert len(ax.get_children()) < with_spans
         overlay.detach()
 
+    def test_reconfigure_redraws(self):
+        from dac.modules.event_log.interactions import EventRangesOverlay
+
+        container = Container()
+        coll = EventLogCollection(name="Log")
+        coll.add_entry("1.0", "2.5", "Knock")
+        container.CurrentContext.add_node(coll)
+        fig = _new_figure()
+        fig.add_subplot(111)
+        ctx = InteractionContext(fig, container)
+        overlay = EventRangesOverlay(ctx)
+        overlay._active = True
+        overlay.attach()
+
+        calls = []
+        fig.canvas.draw_idle = lambda *a, **k: calls.append(1)
+        overlay.apply_construct_config(
+            {"events": list(container.CurrentContext.nodes_of_type(EventLogCollection)),
+             "label_axes_index": 0}
+        )
+        assert calls
+        overlay.detach()
+
+    def test_activation_refused_when_unavailable(self):
+        from dac.modules.event_log.interactions import EventRangesOverlay
+
+        container = Container()  # no EventLogCollection
+        fig = _new_figure()
+        fig.add_subplot(111)
+        ui = _UIStub()
+        ctx = InteractionContext(fig, container, ui=ui)
+        manager = PlotInteractionManager(ctx)
+        manager.add(EventRangesOverlay(ctx))
+        manager.set_tool("EventRangesOverlay")
+        assert not manager.is_active("EventRangesOverlay")
+        assert manager.active_tool is None
+        assert ui.messages
+
     def test_unedited_config_applies(self):
         # an editor round-trip without changes must stay parseable
         host, ui, fig, container = self._make_host()

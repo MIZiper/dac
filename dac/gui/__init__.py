@@ -102,6 +102,50 @@ class TaskBase:
         pass
 
 
+class InteractionButton(QtWidgets.QToolButton):
+    """Toolbar button for one interaction.
+
+    Left single click requests to view/edit its config; double click or
+    right click requests toggling it active/inactive.
+    """
+
+    viewRequested = QtCore.pyqtSignal(str)
+    toggleRequested = QtCore.pyqtSignal(str)
+
+    def __init__(self, name: str, caption: str, parent=None):
+        super().__init__(parent)
+        self._interaction_name = name
+        self.setText(caption)
+        self.setCheckable(True)
+        self.setAutoRaise(True)
+        self.setToolTip(f"{caption} — click: edit, double/right-click: toggle")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton:
+            self.setDown(False)
+            self.toggleRequested.emit(self._interaction_name)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            # don't call super(): it would auto-toggle the check state
+            self.setDown(False)
+            self.viewRequested.emit(self._interaction_name)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.setDown(False)
+            self.toggleRequested.emit(self._interaction_name)
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+
 class MainWindow(MainWindowBase):
     APPTITLE = APPNAME
     APPSETTING = QtCore.QSettings(APPNAME, "Main")
@@ -154,6 +198,7 @@ class MainWindow(MainWindowBase):
         self.interaction_toolbar.setMovable(False)
         self.interaction_toolbar.setVisible(False)
         self._interaction_manager = None
+        self._interaction_buttons = {}
 
         center_widget = QtWidgets.QWidget(self)
         vlayout = QtWidgets.QVBoxLayout(center_widget)
@@ -502,24 +547,22 @@ class MainWindow(MainWindowBase):
         """Populate the interaction toolbar from a ``PlotInteractionManager``.
 
         *entries* is a list of :class:`~dac.core.interact.InteractionEntry`.
+
+        Each interaction gets a button: **single click** loads its config
+        into the editor, **double click / right click** toggles it on or
+        off.  Buttons are never disabled; availability is checked when the
+        interaction is actually activated.
         """
         self._interaction_manager = manager
         toolbar = self.interaction_toolbar
         toolbar.clear()
+        self._interaction_buttons = {}
         if not entries:
             toolbar.setVisible(False)
             return
 
-        # switching / activating an interaction pushes its config to the editor
+        # keep the button check state in sync with the manager
         manager.add_observer(self._on_interaction_changed)
-
-        action_group = QtWidgets.QActionGroup(toolbar)
-        try:
-            action_group.setExclusionPolicy(
-                QtWidgets.QActionGroup.ExclusionPolicy.ExclusiveOptional
-            )
-        except AttributeError:
-            pass
 
         for entry in entries:
             if not isinstance(entry, InteractionEntry):
@@ -528,41 +571,50 @@ class MainWindow(MainWindowBase):
                 entry = InteractionEntry(
                     name, caption, group_name, active, available, requires_dialog
                 )
-            act = QtWidgets.QAction(entry.caption, toolbar)
-            act.setCheckable(True)
-            act.setChecked(entry.active)
+            btn = InteractionButton(entry.name, entry.caption, toolbar)
+            btn.setChecked(entry.active)
             if not entry.available:
-                act.setEnabled(False)
-                act.setToolTip("Not available in the current context")
-            if entry.group == "tool":
-                act.setActionGroup(action_group)
-                act.triggered.connect(
-                    lambda checked, n=entry.name: manager.set_tool(n if checked else None)
-                )
-            else:
-                act.triggered.connect(
-                    lambda checked, n=entry.name: manager.toggle(n, checked)
-                )
-            toolbar.addAction(act)
+                btn.setToolTip("Not available in the current context (checked on activation)")
+            btn.viewRequested.connect(self._on_interaction_view)
+            btn.toggleRequested.connect(self._on_interaction_toggle)
+            self._interaction_buttons[entry.name] = btn
+            toolbar.addWidget(btn)
 
         toolbar.setVisible(True)
 
-        # show the initially-active interaction (if any) in the editor
-        if manager.current_name is not None:
-            self._on_interaction_changed(manager.current_name, True)
-
-    def _on_interaction_changed(self, name: str, active: bool):
-        if not active or name is None:
-            return
+    def _on_interaction_view(self, name: str):
+        """Single click: push the interaction's live config to the editor."""
         manager = self._interaction_manager
         host = getattr(manager.ctx, "host_action", None) if manager is not None else None
         if host is None:
             return
         self.node_editor.edit_tool(host, name)
 
+    def _on_interaction_toggle(self, name: str):
+        """Double / right click: activate or deactivate the interaction."""
+        manager = self._interaction_manager
+        if manager is None:
+            return
+        it = manager.get(name)
+        if it is None:
+            return
+        if it.GROUP == "tool":
+            manager.set_tool(None if manager.active_tool == name else name)
+        else:
+            manager.toggle(name)
+
+    def _on_interaction_changed(self, name: str, active: bool):
+        """Manager observer: reflect activation state on the buttons."""
+        btn = getattr(self, "_interaction_buttons", {}).get(name)
+        if btn is not None:
+            btn.blockSignals(True)
+            btn.setChecked(active)
+            btn.blockSignals(False)
+
     def clear_interactions(self):
         """Empty the interaction toolbar (called when the plot is replaced)."""
         self._interaction_manager = None
+        self._interaction_buttons = {}
         toolbar = getattr(self, "interaction_toolbar", None)
         if toolbar is not None:
             toolbar.clear()
