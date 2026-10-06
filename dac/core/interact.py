@@ -41,7 +41,7 @@ from __future__ import annotations
 import inspect
 import weakref
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol, get_args, get_origin, runtime_checkable
+from typing import Any, Optional, Protocol, runtime_checkable
 
 import numpy as np
 from matplotlib.figure import Figure
@@ -122,20 +122,6 @@ class InteractionEntry:
     active: bool
     available: bool
     requires_dialog: bool = False
-
-
-def _is_list_annotation(ann) -> bool:
-    """Whether *ann* describes a list (including ``Optional[list[...]]``)."""
-    if ann is list:
-        return True
-    if get_origin(ann) is list:
-        return True
-    for arg in get_args(ann):
-        if arg is type(None):
-            continue
-        if _is_list_annotation(arg):
-            return True
-    return False
 
 
 # ---------------------------------------------------------------------------
@@ -292,47 +278,19 @@ class PlotInteraction:
         if not self._active:
             return
         self.detach()
-        self.auto_bind()
         self.attach()
         self.redraw()
 
     def is_ready(self) -> bool:
         """Instance-level readiness check run at activation time.
 
-        Available before any auto-binding; subclasses may override to
-        require specific parameters.  Default: always ready.
+        Subclasses override this to require specific parameters (e.g. a
+        selected node).  Parameters are configured explicitly through the
+        editor; nothing is auto-filled.  Default: always ready.
         """
         return True
 
     # -- runtime parameters (tool-level editing) --------------------------
-
-    def param_options(self, name: str) -> list:
-        """Candidate values for runtime parameter *name* (default: none).
-
-        Subclasses override this so parameters can be auto-bound from the
-        current context and offered for editing.
-        """
-        return []
-
-    def auto_bind(self) -> None:
-        """Fill still-unset parameters from :meth:`param_options`.
-
-        Only ``None`` parameters are touched, so explicit choices survive
-        repeated attach cycles.  List-annotated parameters take all
-        candidates, others the first.
-        """
-        for name, param in self._SIGNATURE.parameters.items():
-            if name not in self._VALID_PARAM_NAMES:
-                continue
-            if getattr(self, name, None) is not None:
-                continue
-            options = self.param_options(name)
-            if not options:
-                continue
-            if _is_list_annotation(param.annotation):
-                setattr(self, name, list(options))
-            else:
-                setattr(self, name, options[0])
 
     def _config_value(self, value):
         """Serialise a runtime value to a YAML/basic-type representation."""
@@ -662,17 +620,26 @@ class PlotInteractionManager:
         if on is None:
             on = not it._active
         if on and not it._active:
-            it.auto_bind()
-            # availability is evaluated at activation time, so data added
-            # after the plot was rendered is picked up
+            # availability/readiness are evaluated at activation time, so
+            # data added after the plot was rendered is picked up
             try:
-                ready = bool(type(it).available(self.ctx)) and it.is_ready()
+                available = bool(type(it).available(self.ctx))
+            except Exception:
+                available = False
+            try:
+                ready = bool(it.is_ready())
             except Exception:
                 ready = False
-            if not ready:
+            if not available:
                 self._message(
                     f"{type(it).CAPTION} is not available "
                     "(missing required data or unsupported)."
+                )
+                return
+            if not ready:
+                self._message(
+                    f"{type(it).CAPTION} needs configuration "
+                    "(open it in the editor and set its parameters)."
                 )
                 return
             it.attach()

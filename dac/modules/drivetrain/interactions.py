@@ -101,18 +101,14 @@ class _FreqLinesBase(ToolBase):
 
     # -- config / availability --------------------------------------------
 
-    def param_options(self, name: str) -> list:
-        if name == "gearbox":
-            return list(self.ctx.find_nodes(GearboxDefinition))
-        if name == "speed_channel":
-            return self._speed_candidates()
-        return []
+    def is_ready(self) -> bool:
+        """Both a gearbox and a speed reference must be configured.
 
-    def _speed_candidates(self) -> list:
-        return []
+        Nothing is auto-filled; choose them explicitly in the editor.
+        """
+        return self.gearbox is not None and self.speed_channel is not None
 
     def attach(self) -> None:
-        self.auto_bind()
         self._lines = []
         if self.stages is None:
             self.stages = list(self._DEFAULT_STAGES)
@@ -204,11 +200,6 @@ class FreqLinesTimeTool(_FreqLinesBase):
             and (bool(ctx.find_nodes(TimeChannel)) or bool(ctx.find_nodes(TSChannel)))
         )
 
-    def _speed_candidates(self) -> list:
-        return list(self.ctx.find_nodes(TimeChannel)) + list(
-            self.ctx.find_nodes(TSChannel)
-        )
-
     def _speed_value(self, moment=None):
         if moment is None or self.speed_channel is None:
             return None
@@ -292,9 +283,6 @@ class FreqLinesSpectrumTool(_FreqLinesBase):
             and bool(ctx.find_nodes(GearboxDefinition))
             and bool(ctx.find_nodes(TimeData))
         )
-
-    def _speed_candidates(self) -> list:
-        return list(self.ctx.find_nodes(TimeData))
 
     def _speed_value(self, moment=None):
         if self.speed_channel is None:

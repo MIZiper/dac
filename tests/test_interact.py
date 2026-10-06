@@ -479,7 +479,7 @@ class TestToolConfig:
     def _make_host(self):
         return TestInteractiveHost()._make_host()
 
-    def test_auto_bind_fills_none_only(self):
+    def test_no_auto_binding_null_means_all(self):
         from dac.modules.event_log.interactions import EventRangesOverlay
 
         container = Container()
@@ -487,21 +487,21 @@ class TestToolConfig:
         coll.add_entry("1.0", "2.5", "Knock")
         container.CurrentContext.add_node(coll)
         fig = _new_figure()
-        fig.add_subplot(111)
+        ax = fig.add_subplot(111)
         ctx = InteractionContext(fig, container)
-        overlay = EventRangesOverlay(ctx)
 
-        overlay.auto_bind()
-        assert overlay.events == [coll]
-        # explicit value survives a second auto_bind
-        overlay.events = []
-        overlay.auto_bind()
-        assert overlay.events == []
+        overlay = EventRangesOverlay(ctx)
+        assert overlay.events is None  # not auto-filled
+        overlay._active = True
+        overlay.attach()
+        assert len(ax.get_children()) > 1  # null -> overlay all collections
+        overlay.detach()
 
     def test_get_construct_config_serialises_names(self):
         host, ui, fig, container = self._make_host()
         cfg = host.get_tool_construct_config("EventRangesOverlay")
-        assert cfg["events"] == ["Log"]
+        # events is left null (meaning "all"); nothing is auto-selected
+        assert cfg["events"] is None
         assert cfg["label_axes_index"] == 0
 
     def test_apply_tool_config_persist_flag(self):
@@ -635,28 +635,44 @@ class TestDrivetrainTools:
                 GearStage({"Wheel": 40, "Pinion": 20}),
             ],
         )
-        speed = TimeData(name="speed", y=np.full(100, 3000.0), dt=0.1)
+        speed_pch = _pch_speed()
+        speed_td = TimeData(name="speed", y=np.full(100, 3000.0), dt=0.1)
         container = Container()
         container.CurrentContext.add_node(gb)
-        container.CurrentContext.add_node(_pch_speed())
-        container.CurrentContext.add_node(speed)
+        container.CurrentContext.add_node(speed_pch)
+        container.CurrentContext.add_node(speed_td)
         fig = _new_figure()
         ax = fig.add_subplot(111)
         ax.plot(np.arange(100) * 0.1, np.sin(np.arange(100) * 0.1))
-        return container, fig, ax
+        return container, fig, ax, gb, speed_pch, speed_td
 
     def test_time_tool_draws_lines(self):
         from dac.modules.drivetrain.interactions import FreqLinesTimeTool
 
-        container, fig, ax = self._setup()
+        container, fig, ax, gb, speed_pch, _ = self._setup()
         ctx = InteractionContext(fig, container)
         assert FreqLinesTimeTool.available(ctx)
-        tool = FreqLinesTimeTool(ctx)
+        tool = FreqLinesTimeTool(ctx, gearbox=gb, speed_channel=speed_pch)
+        assert tool.is_ready()
         tool.attach()
         tool.on_press(_Event(inaxes=ax, xdata=5.0, button=1))
         assert len(tool._lines) > 0
         tool.detach()
         assert tool._lines == []
+
+    def test_time_tool_unconfigured_needs_config(self):
+        from dac.modules.drivetrain.interactions import FreqLinesTimeTool
+
+        container, fig, ax, gb, speed_pch, _ = self._setup()
+        ui = _UIStub()
+        ctx = InteractionContext(fig, container, ui=ui)
+        tool = FreqLinesTimeTool(ctx)  # nothing configured, no auto-bind
+        assert not tool.is_ready()
+        manager = PlotInteractionManager(ctx)
+        manager.add(tool)
+        manager.set_tool("FreqLinesTimeTool")
+        assert not manager.is_active("FreqLinesTimeTool")
+        assert ui.messages
 
     def test_time_tool_gap_draws_nothing(self):
         from dac.modules.drivetrain import GearboxDefinition, GearStage
@@ -681,7 +697,7 @@ class TestDrivetrainTools:
         ax.plot(np.arange(100) * 0.1, np.sin(np.arange(100) * 0.1))
 
         ctx = InteractionContext(fig, container)
-        tool = FreqLinesTimeTool(ctx)
+        tool = FreqLinesTimeTool(ctx, gearbox=gb, speed_channel=ch)
         tool.attach()
         tool.on_press(_Event(inaxes=ax, xdata=7.0, button=1))  # gap
         assert tool._lines == []
@@ -707,7 +723,7 @@ class TestDrivetrainTools:
         ax.plot(t_axis, y_axis)
 
         ctx = InteractionContext(fig, container)
-        tool = FreqLinesTimeTool(ctx)
+        tool = FreqLinesTimeTool(ctx, gearbox=gb, speed_channel=ch)
         tool.attach()
         moment = base + np.timedelta64(5, "s")
         xnum = float(mdates.date2num(moment.astype("datetime64[ms]").astype(object)))
@@ -721,10 +737,11 @@ class TestDrivetrainTools:
     def test_spectrum_tool_draws_lines(self):
         from dac.modules.drivetrain.interactions import FreqLinesSpectrumTool
 
-        container, fig, ax = self._setup()
+        container, fig, ax, gb, _, speed_td = self._setup()
         ctx = InteractionContext(fig, container)
         assert FreqLinesSpectrumTool.available(ctx)
-        tool = FreqLinesSpectrumTool(ctx)
+        tool = FreqLinesSpectrumTool(ctx, gearbox=gb, speed_channel=speed_td)
+        assert tool.is_ready()
         tool.attach()
         assert len(tool._lines) > 0
         tool.detach()

@@ -41,12 +41,12 @@ class EventRangesOverlay(OverlayBase):
     def available(cls, ctx) -> bool:
         return super().available(ctx) and bool(ctx.find_nodes(EventLogCollection))
 
-    def param_options(self, name: str) -> list:
-        if name == "events":
-            return list(self.ctx.find_nodes(EventLogCollection))
-        return []
-
     def _resolve_events(self) -> list:
+        """Collections to overlay.
+
+        ``events: null`` means "all EventLogCollection currently in
+        context"; an explicit list (including ``[]``) is used as-is.
+        """
         if self.events is not None:
             return list(self.events)
         return list(self.ctx.find_nodes(EventLogCollection))

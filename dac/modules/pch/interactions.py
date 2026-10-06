@@ -166,10 +166,15 @@ class RangeStatsTool(RangeSelectTool):
     def available(cls, ctx) -> bool:
         return super().available(ctx) and bool(_time_channels(ctx))
 
-    def param_options(self, name: str) -> list:
-        if name == "channels":
-            return _time_channels(self.ctx)
-        return []
+    def _selected_channels(self) -> list:
+        """Channels to inspect.
+
+        ``channels: null`` means "all time channels currently in context";
+        an explicit list (including ``[]``) is used as-is.
+        """
+        if self.channels is not None:
+            return list(self.channels)
+        return _time_channels(self.ctx)
 
     # -- selection handling ------------------------------------------------
 
@@ -179,9 +184,7 @@ class RangeStatsTool(RangeSelectTool):
         ui = self.ctx.ui
         if ui is None or not hasattr(ui, "show_stats"):
             return
-        channels = (
-            self.channels if self.channels is not None else _time_channels(self.ctx)
-        )
+        channels = self._selected_channels()
         if not channels:
             return
 
