@@ -396,6 +396,82 @@ class TestRangeStatsTool:
         assert ui.stats["data"][0] == ["", ""]
         tool.detach()
 
+    def test_null_all_is_local_only(self):
+        from dac.core.data import SimpleDefinition
+        from dac.modules.pch.interactions import RangeStatsTool
+
+        container = Container()
+        case = SimpleDefinition(name="Case")
+        container.context_keys.add_node(case)
+        container.activate_context(case)
+        container.CurrentContext.add_node(_channel(name="Local"))
+        container.contexts[GCK].add_node(_channel(name="Global"))
+        fig = _new_figure()
+        fig.add_subplot(111)
+        ui = _UIStub()
+        ctx = InteractionContext(fig, container, ui=ui)
+        tool = RangeStatsTool(ctx)  # channels None -> "all" in the hit tier
+        tool.attach()
+        tool.t_start = 1.0
+        tool.t_end = 2.0
+        tool._announce_selection()
+        assert ui.stats["headers"]["row"] == ["Local [g]"]
+        tool.detach()
+
+
+# ---------------------------------------------------------------------------
+# find_nodes layered fallback
+# ---------------------------------------------------------------------------
+
+
+class TestFindNodesFallback:
+    def _ctx(self):
+        from dac.core.data import SimpleDefinition
+
+        container = Container()
+        case = SimpleDefinition(name="Case")
+        container.context_keys.add_node(case)
+        container.activate_context(case)  # so CurrentContext != global context
+        fig = _new_figure()
+        fig.add_subplot(111)
+        return InteractionContext(fig, container)
+
+    def test_local_first(self):
+        ctx = self._ctx()
+        ctx.container.CurrentContext.add_node(_channel(name="Local"))
+        ctx.container.contexts[GCK].add_node(_channel(name="Global"))
+        ctx.container.context_keys.add_node(_channel(name="Defined"))
+        assert [n.name for n in ctx.find_nodes(TimeChannel)] == ["Local"]
+
+    def test_global_fallback(self):
+        ctx = self._ctx()
+        ctx.container.contexts[GCK].add_node(_channel(name="Global"))
+        ctx.container.context_keys.add_node(_channel(name="Defined"))
+        assert [n.name for n in ctx.find_nodes(TimeChannel)] == ["Global"]
+
+    def test_definition_fallback(self):
+        from dac.modules.drivetrain import GearboxDefinition, GearStage
+
+        ctx = self._ctx()
+        gb = GearboxDefinition(
+            "gb", stages=[GearStage({"Wheel": 50, "Pinion": 25})]
+        )
+        ctx.container.context_keys.add_node(gb)
+        assert ctx.find_nodes(GearboxDefinition) == [gb]
+
+    def test_drivetrain_available_from_definition(self):
+        from dac.modules.drivetrain import GearboxDefinition, GearStage
+        from dac.modules.drivetrain.interactions import FreqLinesTimeTool
+
+        ctx = self._ctx()
+        gb = GearboxDefinition(
+            "gb", stages=[GearStage({"Wheel": 50, "Pinion": 25})]
+        )
+        ctx.container.context_keys.add_node(gb)
+        ctx.container.CurrentContext.add_node(_pch_speed(name="SpeedCh"))
+        assert ctx.find_nodes(GearboxDefinition) == [gb]
+        assert FreqLinesTimeTool.available(ctx)
+
 
 # ---------------------------------------------------------------------------
 # Host end-to-end (headless)

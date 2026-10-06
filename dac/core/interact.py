@@ -192,20 +192,31 @@ class InteractionContext:
     def find_nodes(self, node_type: type) -> list[DataNode]:
         """All nodes of *node_type* visible from the current context.
 
-        Searches the active context first, then the global context.
+        Layered fallback (mirrors ``Container.get_node_of_type_for``):
+        the first tier that yields any node wins, so callers that treat an
+        empty result as "all in scope" stay scoped to that tier.  Tiers are
+        the active context, the global context, then the global definitions
+        (``context_keys``).
         """
         if self.container is None:
             return []
-        found: list[DataNode] = []
-        seen: set[int] = set()
-        for ctx in (self.container.CurrentContext, self.container.contexts.get(GCK)):
+        sources = (
+            self.container.CurrentContext,
+            self.container.contexts.get(GCK),
+            self.container.context_keys,
+        )
+        for ctx in sources:
             if ctx is None:
                 continue
+            found: list[DataNode] = []
+            seen: set[int] = set()
             for node in ctx.nodes_of_type(node_type):
                 if id(node) not in seen:
                     seen.add(id(node))
                     found.append(node)
-        return found
+            if found:
+                return found
+        return []
 
 
 # ---------------------------------------------------------------------------
