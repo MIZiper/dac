@@ -728,13 +728,30 @@ class TestDrivetrainTools:
         container, fig, ax, gb, speed_pch, _ = self._setup()
         ctx = InteractionContext(fig, container)
         assert FreqLinesTimeTool.available(ctx)
-        tool = FreqLinesTimeTool(ctx, gearbox=gb, speed_channel=speed_pch)
+        tool = FreqLinesTimeTool(
+            ctx, gearbox=gb, speed_channel=speed_pch, stages=[1]
+        )
         assert tool.is_ready()
         tool.attach()
         tool.on_press(_Event(inaxes=ax, xdata=5.0, button=1))
-        assert len(tool._lines) > 0
+        assert len(tool._lines) > 1
         tool.detach()
         assert tool._lines == []
+
+    def test_stages_null_means_no_stage_lines(self):
+        from dac.modules.drivetrain.interactions import FreqLinesTimeTool
+
+        container, fig, ax, gb, speed_pch, _ = self._setup()
+        ctx = InteractionContext(fig, container)
+        tool = FreqLinesTimeTool(
+            ctx, gearbox=gb, speed_channel=speed_pch, stages=None, fmt_lines=[]
+        )
+        tool.attach()
+        assert tool._bits() == 0
+        tool.on_press(_Event(inaxes=ax, xdata=5.0, button=1))
+        # only the reference click line remains (no stage / custom lines)
+        assert len(tool._lines) == 1
+        tool.detach()
 
     def test_time_tool_unconfigured_needs_config(self):
         from dac.modules.drivetrain.interactions import FreqLinesTimeTool
@@ -799,7 +816,9 @@ class TestDrivetrainTools:
         ax.plot(t_axis, y_axis)
 
         ctx = InteractionContext(fig, container)
-        tool = FreqLinesTimeTool(ctx, gearbox=gb, speed_channel=ch)
+        tool = FreqLinesTimeTool(
+            ctx, gearbox=gb, speed_channel=ch, stages=[1]
+        )
         tool.attach()
         moment = base + np.timedelta64(5, "s")
         xnum = float(mdates.date2num(moment.astype("datetime64[ms]").astype(object)))
@@ -816,7 +835,9 @@ class TestDrivetrainTools:
         container, fig, ax, gb, _, speed_td = self._setup()
         ctx = InteractionContext(fig, container)
         assert FreqLinesSpectrumTool.available(ctx)
-        tool = FreqLinesSpectrumTool(ctx, gearbox=gb, speed_channel=speed_td)
+        tool = FreqLinesSpectrumTool(
+            ctx, gearbox=gb, speed_channel=speed_td, stages=[1]
+        )
         assert tool.is_ready()
         tool.attach()
         assert len(tool._lines) > 0

@@ -118,7 +118,7 @@ class InteractionButton(QtWidgets.QToolButton):
         self.setText(caption)
         self.setCheckable(True)
         self.setAutoRaise(True)
-        self.setToolTip(f"{caption} — click: edit, double/right-click: toggle")
+        self.setToolTip("click: edit, double/right-click: toggle")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton:
@@ -573,8 +573,6 @@ class MainWindow(MainWindowBase):
                 )
             btn = InteractionButton(entry.name, entry.caption, toolbar)
             btn.setChecked(entry.active)
-            if not entry.available:
-                btn.setToolTip("Not available in the current context (checked on activation)")
             btn.viewRequested.connect(self._on_interaction_view)
             btn.toggleRequested.connect(self._on_interaction_toggle)
             self._interaction_buttons[entry.name] = btn

@@ -79,7 +79,6 @@ def nearest_sample(channel, moment):
 
 
 class _FreqLinesBase(ToolBase):
-    _DEFAULT_STAGES = [1, 2]
     _DEFAULT_FMT_LINES = ["{f_1}", "{f_2}-{f_1}"]
 
     def __init__(
@@ -110,8 +109,6 @@ class _FreqLinesBase(ToolBase):
 
     def attach(self) -> None:
         self._lines = []
-        if self.stages is None:
-            self.stages = list(self._DEFAULT_STAGES)
         if self.fmt_lines is None:
             self.fmt_lines = list(self._DEFAULT_FMT_LINES)
         self.notify(self._HINT)
@@ -147,8 +144,9 @@ class _FreqLinesBase(ToolBase):
         return speed
 
     def _bits(self) -> int:
+        """Bit mask of selected stages; ``stages: null`` means no stage lines."""
         bits = 0
-        for stage_num in self.stages:
+        for stage_num in self.stages or []:
             bits |= 1 << (stage_num - 1)
         return bits
 
