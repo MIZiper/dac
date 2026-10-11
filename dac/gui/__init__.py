@@ -34,6 +34,7 @@ from importlib.metadata import version
 from dac import APPNAME, PYPI_NAME
 from dac.core import GCK, ActionNode, Container, DataNode, NodeBase, ContextKeyNode, DataContext
 from dac.core.actions import PAB, VAB, TAB, ActionBase, Stat
+from dac.core.interact import InteractivePlotAction, InteractionEntry
 from dac.core.thread import ThreadWorker
 from dac.core.scenario import use_scenario
 from dac.gui.base import MainWindowBase
@@ -101,6 +102,50 @@ class TaskBase:
         pass
 
 
+class InteractionButton(QtWidgets.QToolButton):
+    """Toolbar button for one interaction.
+
+    Left single click requests to view/edit its config; double click or
+    right click requests toggling it active/inactive.
+    """
+
+    viewRequested = QtCore.pyqtSignal(str)
+    toggleRequested = QtCore.pyqtSignal(str)
+
+    def __init__(self, name: str, caption: str, parent=None):
+        super().__init__(parent)
+        self._interaction_name = name
+        self.setText(caption)
+        self.setCheckable(True)
+        self.setAutoRaise(True)
+        self.setToolTip("click: edit, double/right-click: toggle")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton:
+            self.setDown(False)
+            self.toggleRequested.emit(self._interaction_name)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            # don't call super(): it would auto-toggle the check state
+            self.setDown(False)
+            self.viewRequested.emit(self._interaction_name)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.setDown(False)
+            self.toggleRequested.emit(self._interaction_name)
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+
 class MainWindow(MainWindowBase):
     APPTITLE = APPNAME
     APPSETTING = QtCore.QSettings(APPNAME, "Main")
@@ -149,8 +194,15 @@ class MainWindow(MainWindowBase):
         )
         canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
+        self.interaction_toolbar = QtWidgets.QToolBar("Interactions", self)
+        self.interaction_toolbar.setMovable(False)
+        self.interaction_toolbar.setVisible(False)
+        self._interaction_manager = None
+        self._interaction_buttons = {}
+
         center_widget = QtWidgets.QWidget(self)
         vlayout = QtWidgets.QVBoxLayout(center_widget)
+        vlayout.addWidget(self.interaction_toolbar)
         vlayout.addWidget(canvas)
         vlayout.addWidget(navibar)
 
@@ -306,6 +358,9 @@ class MainWindow(MainWindowBase):
         )
         self.node_editor.sig_return_node.connect(
             self.action_list_widget.action_apply_node_config
+        )
+        self.node_editor.sig_return_tool_config.connect(
+            self.action_list_widget.action_apply_tool_config
         )
         self.sig_files_dropped.connect(self._on_files_dropped)
 
@@ -483,6 +538,85 @@ class MainWindow(MainWindowBase):
         layout.addWidget(table)
         dlg.resize(600, 400)
         dlg.show()
+
+    # -- interaction host protocol (see dac.core.interact) ----------------
+
+    supports_dialogs = True
+
+    def install_interactions(self, manager, entries):
+        """Populate the interaction toolbar from a ``PlotInteractionManager``.
+
+        *entries* is a list of :class:`~dac.core.interact.InteractionEntry`.
+
+        Each interaction gets a button: **single click** loads its config
+        into the editor, **double click / right click** toggles it on or
+        off.  Buttons are never disabled; availability is checked when the
+        interaction is actually activated.
+        """
+        self._interaction_manager = manager
+        toolbar = self.interaction_toolbar
+        toolbar.clear()
+        self._interaction_buttons = {}
+        if not entries:
+            toolbar.setVisible(False)
+            return
+
+        # keep the button check state in sync with the manager
+        manager.add_observer(self._on_interaction_changed)
+
+        for entry in entries:
+            if not isinstance(entry, InteractionEntry):
+                name, caption, group_name, active, available = entry[:5]
+                requires_dialog = entry[5] if len(entry) > 5 else False
+                entry = InteractionEntry(
+                    name, caption, group_name, active, available, requires_dialog
+                )
+            btn = InteractionButton(entry.name, entry.caption, toolbar)
+            btn.setChecked(entry.active)
+            btn.viewRequested.connect(self._on_interaction_view)
+            btn.toggleRequested.connect(self._on_interaction_toggle)
+            self._interaction_buttons[entry.name] = btn
+            toolbar.addWidget(btn)
+
+        toolbar.setVisible(True)
+
+    def _on_interaction_view(self, name: str):
+        """Single click: push the interaction's live config to the editor."""
+        manager = self._interaction_manager
+        host = getattr(manager.ctx, "host_action", None) if manager is not None else None
+        if host is None:
+            return
+        self.node_editor.edit_tool(host, name)
+
+    def _on_interaction_toggle(self, name: str):
+        """Double / right click: activate or deactivate the interaction."""
+        manager = self._interaction_manager
+        if manager is None:
+            return
+        it = manager.get(name)
+        if it is None:
+            return
+        if it.GROUP == "tool":
+            manager.set_tool(None if manager.active_tool == name else name)
+        else:
+            manager.toggle(name)
+
+    def _on_interaction_changed(self, name: str, active: bool):
+        """Manager observer: reflect activation state on the buttons."""
+        btn = getattr(self, "_interaction_buttons", {}).get(name)
+        if btn is not None:
+            btn.blockSignals(True)
+            btn.setChecked(active)
+            btn.blockSignals(False)
+
+    def clear_interactions(self):
+        """Empty the interaction toolbar (called when the plot is replaced)."""
+        self._interaction_manager = None
+        self._interaction_buttons = {}
+        toolbar = getattr(self, "interaction_toolbar", None)
+        if toolbar is not None:
+            toolbar.clear()
+            toolbar.setVisible(False)
 
     def use_scenario(self, setting_fpath: str, clean: bool = True):
         use_scenario(setting_fpath, clean, dac_win=self)
@@ -1140,6 +1274,9 @@ class ActionListWidget(QTreeWidget):
         action.container = container
         self.dac_win.message(f"[{action.name}]")
 
+        if isinstance(action, InteractivePlotAction):
+            action.ui_host = self.dac_win
+
         if isinstance(action, VAB):
             action.figure = self.dac_win.figure
 
@@ -1457,9 +1594,29 @@ class ActionListWidget(QTreeWidget):
         else:
             self.refresh()
 
+    def action_apply_tool_config(
+        self, host_action, name: str, config: dict, fire: bool = False
+    ):
+        """Apply an editor config to a live interaction.
+
+        ``fire=False`` (✔) applies temporarily; ``fire=True`` (🔥) also
+        writes the config back into the action config.
+        """
+        try:
+            ok = host_action.apply_tool_config(name, config, persist=fire)
+        except Exception as e:
+            self.dac_win.message(f"Failed to apply '{name}': {e}")
+            return
+        if ok:
+            # reflect the (possibly auto-bound) live values back to the editor
+            self.dac_win.node_editor.edit_tool(host_action, name)
+            verb = "saved" if fire else "applied"
+            self.dac_win.message(f"Tool '{name}' {verb}")
+
 
 class NodeEditorWidget(QWidget):
     sig_return_node = QtCore.pyqtSignal(NodeBase, dict, bool)
+    sig_return_tool_config = QtCore.pyqtSignal(object, str, dict, bool)
 
     def __init__(self, parent: MainWindow):
         super().__init__(parent)
@@ -1496,21 +1653,42 @@ class NodeEditorWidget(QWidget):
         vlayout.addLayout(btn_layout)
 
         self._current_node = None
+        self._current_tool = None  # (host_action, interaction_name)
 
     def edit_node(self, node: NodeBase):
         s = yaml.dump(node.get_construct_config(), allow_unicode=True, sort_keys=False)
         self.editor.setText(s + "\n# " + type(node).__name__)
         self._current_node = node
+        self._current_tool = None
+
+    def edit_tool(self, host_action, name: str):
+        """Load an interaction's live config (auto-pushed on tool switch)."""
+        try:
+            cfg = host_action.get_tool_construct_config(name)
+        except Exception as e:
+            parent = self.window()
+            if hasattr(parent, "message"):
+                parent.message(f"Failed to read '{name}': {e}")
+            return
+        s = yaml.dump(cfg, allow_unicode=True, sort_keys=False)
+        self.editor.setText(s + f"\n# Tool: {name}")
+        self._current_node = None
+        self._current_tool = (host_action, name)
 
     def action_apply(self, fire=True):
-        if self._current_node is None:
-            return
         try:
             config = yaml.load(StringIO(self.editor.text()), Loader=yaml.FullLoader)
         except yaml.YAMLError as e:
             parent = self.window()
             if hasattr(parent, "message"):
                 parent.message(f"Invalid YAML: {e}")
+            return
+
+        if self._current_tool is not None:
+            host_action, name = self._current_tool
+            self.sig_return_tool_config.emit(host_action, name, config or {}, fire)
+            return
+        if self._current_node is None:
             return
         self.sig_return_node.emit(self._current_node, config, fire)
 

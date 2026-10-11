@@ -57,6 +57,9 @@ class VisualizeActionBase(ActionBase):
         # when a figure assigned to visualization, need to clean the previous events and widgets (that have events)
         canvas = fig.canvas
         self._figure = fig
+        # detach any live interaction layers before the figure is cleared
+        from dac.core.interact import teardown_manager
+        teardown_manager(fig)
         if hasattr(canvas, "_cids"):
             for cid in canvas._cids:
                 canvas.mpl_disconnect(cid)
