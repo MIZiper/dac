@@ -583,6 +583,8 @@ class RangeSelectTool(ToolBase):
 class PlotInteractionManager:
     """Owns the interactions of one figure and routes mouse events."""
 
+    MIDDLE_CLICK_CYCLES_TOOLS = True
+
     def __init__(self, ctx: InteractionContext) -> None:
         self.ctx = ctx
         self._interactions: dict[str, PlotInteraction] = {}
@@ -687,6 +689,34 @@ class PlotInteractionManager:
     def active_tool(self) -> str | None:
         return self._active_tool
 
+    def cycle_tool(self, step: int = 1) -> None:
+        """Switch to the next activatable tool (round-robin).
+
+        Scans the registered tools in registration order, wrapping around,
+        skipping the currently active one and any tool that is not available
+        or not ready.  Leaves the current tool untouched (with a message)
+        when no other tool can be activated.
+        """
+        names = [n for n in self._order if self._interactions[n].GROUP == "tool"]
+        if not names:
+            return
+
+        start = names.index(self._active_tool) if self._active_tool in names else -1
+        for offset in range(1, len(names) + 1):
+            cand = names[(start + offset * step) % len(names)]
+            if cand == self._active_tool:
+                continue
+            it = self._interactions[cand]
+            try:
+                ok = bool(type(it).available(self.ctx)) and bool(it.is_ready())
+            except Exception:
+                ok = False
+            if ok:
+                self.set_tool(cand)
+                return
+
+        self._message("No other tool available to switch to.")
+
     @property
     def current_name(self) -> str | None:
         """Name of the last activated interaction (tool or overlay)."""
@@ -753,6 +783,13 @@ class PlotInteractionManager:
         return self._interactions.get(self._active_tool)
 
     def _dispatch_press(self, event) -> None:
+        if (
+            self.MIDDLE_CLICK_CYCLES_TOOLS
+            and getattr(event, "button", None) == 2
+            and not self.ctx.figure.canvas.widgetlock.locked()
+        ):
+            self.cycle_tool()
+            return
         tool = self._active_tool_interaction()
         if tool is not None:
             tool.on_press(event)

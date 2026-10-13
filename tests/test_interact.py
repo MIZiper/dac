@@ -105,6 +105,17 @@ class _DummyTool(ToolBase):
         self.presses += 1
 
 
+class _DummyTool2(_DummyTool):
+    CAPTION = "Dummy tool 2"
+
+
+class _UnreadyTool(_DummyTool):
+    CAPTION = "Unready tool"
+
+    def is_ready(self):
+        return False
+
+
 class _DummyUnrelated(PAB):
     def __call__(self):
         return None
@@ -180,6 +191,53 @@ class TestManager:
         manager.set_tool("_DummyTool")
         manager._dispatch_press(_Event())
         assert tool.presses == 1
+
+    def _make_with_tools(self, tool_classes, ui=None):
+        container = Container()
+        fig = _new_figure()
+        fig.add_subplot(111)
+        ctx = InteractionContext(fig, container, ui=ui)
+        manager = PlotInteractionManager(ctx)
+        manager.add(_DummyOverlay(ctx), active=True)
+        for cls in tool_classes:
+            manager.add(cls(ctx))
+        return manager
+
+    def test_middle_click_cycles_tools(self):
+        manager = self._make_with_tools([_DummyTool, _DummyTool2])
+        manager._dispatch_press(_Event(button=2))
+        assert manager.active_tool == "_DummyTool"
+        manager._dispatch_press(_Event(button=2))
+        assert manager.active_tool == "_DummyTool2"
+        manager._dispatch_press(_Event(button=2))
+        assert manager.active_tool == "_DummyTool"
+
+    def test_middle_click_keeps_overlay_active(self):
+        manager = self._make_with_tools([_DummyTool, _DummyTool2])
+        manager._dispatch_press(_Event(button=2))
+        assert manager.is_active("_DummyOverlay")
+
+    def test_middle_click_not_forwarded_to_tool(self):
+        manager = self._make_with_tools([_DummyTool])
+        manager.set_tool("_DummyTool")
+        tool = manager.get("_DummyTool")
+        manager._dispatch_press(_Event(button=2))
+        assert tool.presses == 0
+        assert manager.active_tool == "_DummyTool"
+
+    def test_middle_click_skips_unready_tool(self):
+        manager = self._make_with_tools([_DummyTool, _UnreadyTool, _DummyTool2])
+        manager.set_tool("_DummyTool")
+        manager._dispatch_press(_Event(button=2))
+        assert manager.active_tool == "_DummyTool2"
+
+    def test_middle_click_without_other_tool_reports_message(self):
+        ui = _UIStub()
+        manager = self._make_with_tools([_DummyTool], ui=ui)
+        manager.set_tool("_DummyTool")
+        manager._dispatch_press(_Event(button=2))
+        assert manager.active_tool == "_DummyTool"
+        assert ui.messages
 
     def test_clear_removes_everything_and_notifies_host(self):
         ui = _UIStub()
