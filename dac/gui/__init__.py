@@ -63,6 +63,31 @@ def quick_action_flags(mode):
     return mode != CREATE, mode is True, False
 
 
+def stat_to_tsv(stats: Stat) -> str:
+    """Serialize a `Stat` to tab-separated text, including row/col headers.
+
+    The first line holds the column headers (with an empty corner cell), and
+    each following line is prefixed with its row header. Values are stringified
+    and stripped of tabs/newlines so they cannot break the grid. Suitable for
+    pasting into spreadsheets.
+    """
+    headers = stats.get("headers") or {}
+    cols = headers.get("col") or []
+    rows = headers.get("row") or []
+    data = stats.get("data") or []
+
+    def clean(value) -> str:
+        return str(value).replace("\t", " ").replace("\r", " ").replace("\n", " ")
+
+    lines = []
+    if cols:
+        lines.append("\t".join([""] + [clean(c) for c in cols]))
+    for i, row in enumerate(data):
+        label = clean(rows[i]) if i < len(rows) else ""
+        lines.append("\t".join([label] + [clean(v) for v in row]))
+    return "\n".join(lines)
+
+
 class _RemoteBridgeHandler(QtCore.QObject):
     """Thread-safe wrapper: bridge callbacks arrive from daemon threads
     (stdout reader) but must update PyQt widgets on the main thread."""
@@ -534,8 +559,23 @@ class MainWindow(MainWindowBase):
                 item = QtWidgets.QTableWidgetItem(str(val))
                 table.setItem(r, c, item)
 
+        def copy():
+            QtWidgets.QApplication.clipboard().setText(stat_to_tsv(stats))
+
+        copy_btn = QtWidgets.QPushButton("Copy", dlg)
+        copy_btn.clicked.connect(copy)
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_row.addStretch(1)
+        btn_row.addWidget(copy_btn)
+
         layout = QtWidgets.QVBoxLayout(dlg)
         layout.addWidget(table)
+        layout.addLayout(btn_row)
+
+        # QTableWidget has no built-in copy, so handle Ctrl+C at the dialog level
+        dlg._copy_shortcut = QtWidgets.QShortcut(QtGui.QKeySequence.Copy, dlg)
+        dlg._copy_shortcut.activated.connect(copy)
+
         dlg.resize(600, 400)
         dlg.show()
 
